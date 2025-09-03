@@ -1,0 +1,18 @@
+services:
+  jetson-ml-app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    image: jetson-ml-app:latest
+    container_name: jetson-ml-app
+    working_dir: /workspace
+    volumes:
+      - ../src:/workspace/src:ro
+      - ../data:/workspace/data:rw
+      - ../output:/workspace/output:rw
+    environment:
+      - PYTHONPATH=/workspace/src
+    runtime: nvidia
+    stdin_open: true
+    tty: true
+    restart: no

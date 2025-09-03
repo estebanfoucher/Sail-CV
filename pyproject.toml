@@ -1,0 +1,5 @@
+[project]
+name = "jetson-ml-inference"
+version = "0.1.0"
+description = "ML video inference app on Jetson"
+requires-python = ">=3.8"

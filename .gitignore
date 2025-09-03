@@ -1,0 +1,20 @@
+*
+!.gitignore
+!Readme.md
+
+!src/
+!src/**
+
+# ignore all pycache folders and files
+*.pyc
+
+!docker/
+!docker/**
+
+!pyproject.toml
+
+!launch.sh
+
+!uv.lock*
+
+!build.sh
