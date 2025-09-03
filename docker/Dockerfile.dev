@@ -8,19 +8,31 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
 # Install ffmpeg
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
+# Install VPI via apt (NVIDIA's Vision Programming Interface)
+RUN apt-key adv --fetch-key https://repo.download.nvidia.com/jetson/jetson-ota-public.asc && \
+    add-apt-repository "deb https://repo.download.nvidia.com/jetson/common r36.4 main" && \
+    apt-get update && apt-get install -y --no-install-recommends \
+      libegl1-mesa \
+      libnvvpi3 vpi3-dev vpi3-samples python3.10-vpi3 && \
+    add-apt-repository -r "deb https://repo.download.nvidia.com/jetson/common r36.4 main" && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
+
 # Set working directory
 WORKDIR /workspace
 
 # Copy pyproject.toml first
 COPY pyproject.toml ./
 
-# Install additional Python dependencies via uv (only what's not already included)
-RUN uv venv && \
-    uv pip install pyyaml && \
-    uv lock
+# Install Python dependencies directly to system Python (no venv)
+RUN uv pip install ultralytics
 
 # Copy source files
 COPY src/ ./src/
+
+# Create output directory
+RUN mkdir -p output
 
 # Set PYTHONPATH for src folder
 ENV PYTHONPATH=/workspace/src
