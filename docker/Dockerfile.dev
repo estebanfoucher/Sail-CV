@@ -1,0 +1,29 @@
+# docker/Dockerfile.dev
+FROM dustynv/l4t-pytorch:r36.4.0
+
+# Install uv package manager (latest version via official installer)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mv /root/.local/bin/uv /usr/local/bin/uv
+
+# Install ffmpeg
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy pyproject.toml first
+COPY pyproject.toml ./
+
+# Install additional Python dependencies via uv (only what's not already included)
+RUN uv venv && \
+    uv pip install pyyaml && \
+    uv lock
+
+# Copy source files
+COPY src/ ./src/
+
+# Set PYTHONPATH for src folder
+ENV PYTHONPATH=/workspace/src
+
+# Default entrypoint
+CMD ["python3", "src/main.py"]
