@@ -12,6 +12,7 @@ class FFmpegVideoWriter:
         self.process = subprocess.Popen([
             'ffmpeg',
             '-y',  # overwrite
+            '-loglevel', 'error',  # only show error messages
             '-f', 'rawvideo',
             '-vcodec', 'rawvideo',
             '-pix_fmt', 'bgr24',

@@ -8,13 +8,11 @@
 # ignore all pycache folders and files
 *.pyc
 
+*__pycache__*
+
 !docker/
 !docker/**
 
 !pyproject.toml
 
 !launch.sh
-
-!uv.lock*
-
-!build.sh
