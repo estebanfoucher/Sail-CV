@@ -26,7 +26,7 @@ WORKDIR /workspace
 COPY pyproject.toml ./
 
 # Install Python dependencies directly to system Python (no venv)
-RUN uv pip install ultralytics
+RUN uv pip install --system ultralytics tqdm
 
 # Copy source files
 COPY src/ ./src/
