@@ -16,3 +16,5 @@
 !pyproject.toml
 
 !launch.sh
+
+!config.json

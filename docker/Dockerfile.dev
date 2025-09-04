@@ -26,10 +26,13 @@ WORKDIR /workspace
 COPY pyproject.toml ./
 
 # Install Python dependencies directly to system Python (no venv)
-RUN uv pip install --system ultralytics tqdm
+RUN uv pip install --system ultralytics loguru pupil-apriltags
 
 # Copy source files
 COPY src/ ./src/
+
+# Copy config file
+COPY config.json ./
 
 # Create output directory
 RUN mkdir -p output
