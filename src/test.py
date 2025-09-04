@@ -63,11 +63,45 @@ def test_sam():
     writer.release()
     reader.release()
     print("Test sam passed")
+
+def test_tell_tale_detector(model_path, architecture):
+    from video import VideoReader, FFmpegVideoWriter
+    from unitaries.tell_tale_detector import TellTaleDetector
+
+    video_path = "/workspace/data/calibration_intrinsics_1/camera_1/GH010815.MP4"
+    OUTPUT_FOLDER = "/workspace/output"
+    output_name = f"output_test_tell_tale_detector_{architecture}.mp4"
+    reader = VideoReader(video_path)
+    output_path = os.path.join(OUTPUT_FOLDER, output_name)   
+    writer = FFmpegVideoWriter(output_path, reader.fps, reader.frame_size)
+    
+    frame_count = 10
+    detector = TellTaleDetector(model_path=model_path, architecture=architecture)
+    
+    def process_frame(frame):
+        result = detector.predict(frame, conf=0.1)
+        frame = detector.render_result(frame, result)
+        return frame
+    
+    
+    for _ in range(frame_count):
+        ret, frame = reader.read()
+        if not ret:
+            break
+        frame = process_frame(frame)
+        writer.write(frame)
+    
+    writer.release()
+    reader.release()
+    print("Test tell_tale_detector passed")
+
     
 
 def test_all():
     test_video_reader_and_writer()
     test_sam()
+    test_tell_tale_detector(model_path="models/rt-detr.pt", architecture="rt-detr")
+    test_tell_tale_detector(model_path="models/yolos.pt", architecture="yolo")
     print("All tests passed")
 
 if __name__ == "__main__":

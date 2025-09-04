@@ -10,6 +10,7 @@ services:
       - ../src:/workspace/src:ro
       - ../data:/workspace/data:rw
       - ../output:/workspace/output:rw
+      - ../models:/workspace/models:ro
     environment:
       - PYTHONPATH=/workspace/src
     runtime: nvidia
