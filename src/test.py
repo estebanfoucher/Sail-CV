@@ -1,4 +1,5 @@
 import os
+import torch
 
 
 def test_video_reader_and_writer():
@@ -139,7 +140,7 @@ def test_stereo_video_reader():
     writer = FFmpegVideoWriter(output_path, stereo_video_reader.video_1.fps, combined_frame_size)
     writer.write(test_combined_frame)  # Write the first frame
     
-    for i in range(start_frame + 1, start_frame + frame_count):  # Start from 1 since we already processed frame 0
+    for i in range(start_frame + 1, start_frame + frame_count): 
         ret, ret_2, frame_1, frame_2 = stereo_video_reader.read()
         if not ret or not ret_2:
             break
@@ -150,14 +151,71 @@ def test_stereo_video_reader():
     stereo_video_reader.release()
     print("Test stereo video reader passed")
 
+def test_lightglue_feature_matcher():
+    """Test LightGlue feature matching on multiple synchronized stereo video frames."""
+
+    from unitaries.lightglue import LightGlueFeatureMatcher
+    from video import StereoVideoReader, FFmpegVideoWriter
+    from mv_utils import Scene, load_stereo_data_folder_structure
+    
+    # Initialize the feature matcher
+    matcher = LightGlueFeatureMatcher(
+        feature_extractor="superpoint",
+        max_num_keypoints=1024,
+        device="cuda" if torch.cuda.is_available() else "cpu"
+    )
+    
+    stereo_data_folder_structure = load_stereo_data_folder_structure()
+    scene_names = stereo_data_folder_structure.get_scene_folders()
+    scene_name = "scene_3"
+    assert scene_name in scene_names, f"Scene {scene_name} is not in the list of scene names"
+    
+    scene = Scene(scene_name)
+    video_paths = scene.get_video_paths()
+    sync_frame_offset = scene.sync_frame_offset
+    start_frame = 1300
+    stereo_video_reader = StereoVideoReader(video_paths["camera_1"], video_paths["camera_2"], start_video_1_frame=start_frame, start_video_2_frame=start_frame - sync_frame_offset)
+    frame_count = 10
+    OUTPUT_FOLDER = "/workspace/output"
+    output_name = f"output_test_lightglue_feature_matcher.mp4"
+    output_path = os.path.join(OUTPUT_FOLDER, output_name)   
+    # Read first frame to get the combined frame size
+    ret, ret_2, frame_1, frame_2 = stereo_video_reader.read()
+    if not ret or not ret_2:
+        print("Failed to read first frame")
+        return
+    
+    matches_result = matcher.match_images(frame_1, frame_2)
+    
+    # Create a test combined frame to get the correct dimensions by infering on the two pairs with light glue vizualisation
+    test_combined_frame = matcher.visualize_matches(frame_1, frame_2, matches_result, max_matches=100)
+    combined_height, combined_width = test_combined_frame.shape[:2]
+    combined_frame_size = (combined_width, combined_height)
+    
+    writer = FFmpegVideoWriter(output_path, stereo_video_reader.video_1.fps, combined_frame_size)
+    writer.write(test_combined_frame)  # Write the first frame
+    
+    for i in range(start_frame + 1, start_frame + frame_count): 
+        ret, ret_2, frame_1, frame_2 = stereo_video_reader.read()
+        if not ret or not ret_2:
+            break
+        matches_result = matcher.match_images(frame_1, frame_2)
+        frame = matcher.visualize_matches(frame_1, frame_2, matches_result, max_matches=100)
+        writer.write(frame)
+        print(f"Lightglue feature matcher rendered frame {i}/{start_frame + frame_count}")
+    writer.release()
+    stereo_video_reader.release()
+    print("Test lightglue feature matcher passed")
+
 
 def test_all():
     #test_video_reader_and_writer()
     #test_sam()
     #test_mv_utils()
-    test_stereo_video_reader()
+    #test_stereo_video_reader()
     #test_tell_tale_detector(model_path="models/rt-detr.pt", architecture="rt-detr")
     #test_tell_tale_detector(model_path="models/yolos.pt", architecture="yolo")
+    test_lightglue_feature_matcher()
     print("All tests passed")
 
 if __name__ == "__main__":

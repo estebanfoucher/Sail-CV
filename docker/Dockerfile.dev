@@ -22,11 +22,13 @@ RUN apt-key adv --fetch-key https://repo.download.nvidia.com/jetson/jetson-ota-p
 # Set working directory
 WORKDIR /workspace
 
-# Copy pyproject.toml first
-COPY pyproject.toml ./
-
 # Install Python dependencies directly to system Python (no venv)
 RUN uv pip install --system ultralytics loguru pupil-apriltags
+
+# Install LightGlue and its dependencies
+RUN git clone https://github.com/cvg/LightGlue.git /workspace/LightGlue && \
+    cd /workspace/LightGlue && \
+    uv pip install --system -e .
 
 # Copy source files
 COPY src/ ./src/
