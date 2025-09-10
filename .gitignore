@@ -18,3 +18,7 @@
 !launch.sh
 
 !config.json
+
+# ignore all files in src/cameras/test_assets/camera_pyramids/
+src/cameras/test_assets/camera_pyramids/**
+
