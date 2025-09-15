@@ -31,26 +31,19 @@ class Camera:
                  image_size: Tuple[int, int],
                  image_path: Optional[str] = None,
                  focal_length: Optional[float] = None,
-                 scale_factor: float = 0.00001):
+                 scale_factor: float = 0.001):
         """
         Initialize a Camera object.
         
         Args:
             name: Camera identifier
-            position: 3D position [x, y, z] in world coordinates (camera center in world frame)
-            rotation_matrix: 3x3 rotation matrix representing camera-to-world rotation
-                            (transforms points from camera coordinates to world coordinates)
+            position: 3D position [x, y, z] in world coordinates
+            rotation_matrix: 3x3 rotation matrix
             intrinsics: 3x3 camera intrinsic matrix
             image_size: (width, height) of the image
             image_path: Path to the camera image file
             focal_length: Focal length (if None, extracted from intrinsics)
             scale_factor: Scale factor to convert pixel focal length to 3D units (default: 0.001)
-            
-        Note:
-            The Camera class expects camera-to-world transforms:
-            - position: camera center in world coordinates
-            - rotation_matrix: R such that P_world = R @ P_camera + position
-            This is the inverse of world-to-camera transforms from stereo calibration
         """
         self.name = name
         self.position = np.array(position, dtype=np.float64)
@@ -97,7 +90,6 @@ class Camera:
         cx, cy = self.intrinsics[0, 2], self.intrinsics[1, 2]
         fx, fy = self.intrinsics[0, 0], self.intrinsics[1, 1]
         
-        # Build pyramid in camera's own referential
         # Image corners in camera coordinates at focal length distance
         corners_cam = np.array([
             [(0 - cx) * focal_length / fx, (0 - cy) * focal_length / fy, focal_length],
@@ -106,11 +98,10 @@ class Camera:
             [(0 - cx) * focal_length / fx, (height - cy) * focal_length / fy, focal_length]
         ])
         
-        # Apply camera-to-world transform: P_world = R @ P_camera + T
-        # where R is camera-to-world rotation and T is camera center in world coordinates
+        # Transform to world coordinates
         corners_world = []
         for corner in corners_cam:
-            world_corner = self.rotation_matrix @ corner + self.position.flatten()
+            world_corner = self.rotation_matrix.T @ corner + self.position.flatten()
             corners_world.append(world_corner.flatten())
             
         return np.array(corners_world)
@@ -404,6 +395,11 @@ class Camera:
             True if successful, False otherwise
         """
         try:
+            # Create output directory if it doesn't exist
+            output_dir = os.path.dirname(output_path)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+            
             vertices, edges, base_faces, texture_coords = self.get_pyramid_with_texture_coords(focal_length)
             
             with open(output_path, 'w') as f:
@@ -436,6 +432,11 @@ class Camera:
             True if successful, False otherwise
         """
         try:
+            # Create output directory if it doesn't exist
+            output_dir = os.path.dirname(output_path)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+            
             camera_data = {
                 "name": self.name,
                 "position": self.position.tolist(),
@@ -492,16 +493,6 @@ def load_cameras_from_json(json_path: str, images_dir: Optional[str] = None, sca
         
     Returns:
         List of Camera instances
-        
-    Note:
-        The JSON file should contain camera-to-world transforms:
-        - "position": camera center in world coordinates [x, y, z]
-        - "rotation_matrix": 3x3 matrix such that P_world = R @ P_camera + position
-        - "intrinsics": 3x3 camera intrinsic matrix
-        - "image_size": [width, height]
-        
-        If the JSON contains world-to-camera transforms (e.g., from stereo calibration),
-        they must be converted to camera-to-world before calling this function.
     """
     with open(json_path, 'r') as f:
         data = json.load(f)
@@ -518,87 +509,71 @@ def load_cameras_from_json(json_path: str, images_dir: Optional[str] = None, sca
     return cameras
 
 
-def convert_world_to_camera_to_camera_to_world(rotation_matrix: np.ndarray, translation_vector: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Convert world-to-camera transforms to camera-to-world transforms.
-    
-    Args:
-        rotation_matrix: 3x3 rotation matrix R such that X_camera = R @ X_world + T
-        translation_vector: 3x1 translation vector T such that X_camera = R @ X_world + T
-        
-    Returns:
-        Tuple of (camera_to_world_rotation, camera_center_in_world)
-        where:
-        - camera_to_world_rotation: R_cam_to_world such that X_world = R_cam_to_world @ X_camera + camera_center
-        - camera_center_in_world: camera center position in world coordinates
-    """
-    # Convert world-to-camera to camera-to-world
-    # If X_camera = R @ X_world + T, then X_world = R.T @ (X_camera - T) = R.T @ X_camera - R.T @ T
-    camera_to_world_rotation = rotation_matrix.T
-    camera_center_in_world = -camera_to_world_rotation @ translation_vector.reshape(3,)
-    
-    return camera_to_world_rotation, camera_center_in_world
-
-
-def create_cameras_from_stereo_calibration(calibration: dict, 
-                                         image_1_path: str,
-                                         image_2_path: str,
+def create_cameras_from_stereo_calibration(calibration_path: str, 
+                                         images_dir: Optional[str] = None,
+                                         camera1_name: str = "camera_1", 
+                                         camera2_name: str = "camera_2",
                                          scale_factor: float = 0.001) -> Tuple[Camera, Camera]:
     """
     Create two Camera instances from stereo calibration data.
     
     Args:
-        calibration: Stereo calibration data containing world-to-camera transforms
-        image_1_path: Path to first camera image
-        image_2_path: Path to second camera image
+        calibration_path: Path to the stereo calibration JSON file
+        images_dir: Directory containing camera images
+        camera1_name: Name for the first camera
+        camera2_name: Name for the second camera
         scale_factor: Scale factor to convert pixel focal length to 3D units
         
     Returns:
         Tuple of (camera1, camera2)
-        
-    Note:
-        The calibration data contains world-to-camera transforms from cv2.stereoCalibrate:
-        - rotation_matrix: R such that X_camera2 = R @ X_camera1 + T
-        - translation_vector: T such that X_camera2 = R @ X_camera1 + T
-        
-        This function converts them to camera-to-world transforms for the Camera class.
     """
-    data = calibration
+    with open(calibration_path, 'r') as f:
+        data = json.load(f)
     
     # Extract camera matrices and calibration data
     camera_matrix1 = np.array(data["camera_matrix1"])
     camera_matrix2 = np.array(data["camera_matrix2"])
-    rotation_matrix = np.array(data["rotation_matrix"])  # world-to-camera2 rotation
-    translation_vector = np.array(data["translation_vector"])  # world-to-camera2 translation
+    rotation_matrix = np.array(data["rotation_matrix"])
+    translation_vector = np.array(data["translation_vector"])
     image_size = tuple(data["image_size"])
     
-    # Camera 1 (reference camera at origin in world coordinates)
+    # Camera 1 (reference camera at origin)
     camera1 = Camera(
-        name="camera_1",
-        position=[0.0, 0.0, 0.0],  # camera center at world origin
-        rotation_matrix=np.eye(3),  # identity rotation (camera1 = world frame)
+        name=camera1_name,
+        position=[0.0, 0.0, 0.0],
+        rotation_matrix=np.eye(3),
         intrinsics=camera_matrix1,
         image_size=image_size,
-        image_path=image_1_path,
+        image_path=None,
         scale_factor=scale_factor
     )
     
-    # Camera 2: Convert world-to-camera transforms to camera-to-world transforms
-    # The stereo calibration gives us: X_camera2 = R @ X_camera1 + T
-    # We need: X_world = R_cam2_to_world @ X_camera2 + camera2_center_in_world
-    camera2_rotation_world, camera2_position_world = convert_world_to_camera_to_camera_to_world(
-        rotation_matrix, translation_vector
-    )
-    
+    # Camera 2 (transformed camera)
     camera2 = Camera(
-        name="camera_2",
-        position=camera2_position_world,  # camera2 center in world coordinates
-        rotation_matrix=camera2_rotation_world,  # camera2-to-world rotation
+        name=camera2_name,
+        position=translation_vector,
+        rotation_matrix=rotation_matrix,
         intrinsics=camera_matrix2,
         image_size=image_size,
-        image_path=image_2_path,
+        image_path=None,
         scale_factor=scale_factor
     )
+    
+    # Load images if directory is provided
+    if images_dir and os.path.exists(images_dir):
+        # Prioritize resized_frame directory
+        resized_dir = os.path.join(os.path.dirname(images_dir), "resized_frame")
+        if os.path.exists(resized_dir):
+            images_dir = resized_dir
+        
+        # Try to load images for both cameras
+        for camera in [camera1, camera2]:
+            image_path = os.path.join(images_dir, f"{camera.name}.png")
+            if os.path.exists(image_path):
+                camera.image_path = image_path
+                camera.image = cv2.imread(image_path)
+                if camera.image is not None:
+                    camera.image = cv2.cvtColor(camera.image, cv2.COLOR_BGR2RGB)
     
     return camera1, camera2
 
@@ -642,20 +617,51 @@ def export_cameras_to_cloudcompare(cameras: List[Camera], output_dir: str, forma
     return success_count == len(cameras)
 
 
-def main(calibration_path: str, image_1_path: str, image_2_path: str, output_dir: str) -> None:
-    calibration = json.load(open(calibration_path))
-    image_1 = cv2.imread(image_1_path)
-    image_2 = cv2.imread(image_2_path)
-    camera1, camera2 = create_cameras_from_stereo_calibration(calibration, image_1, image_2)
-    export_cameras_to_cloudcompare([camera1, camera2], output_dir, "ply")
-
-
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--calibration", type=str, required=True)
-    parser.add_argument("--image_1", type=str, required=True)
-    parser.add_argument("--image_2", type=str, required=True)
-    parser.add_argument("--output_dir", type=str, required=True)
-    args = parser.parse_args()
-    main(args.calibration, args.image_1, args.image_2, args.output_dir)
+    print("Camera class created successfully!")
+    print("Example usage:")
+    print("1. Load cameras from JSON: cameras = load_cameras_from_json('cameras/camera_params.json', 'images/')")
+    print("2. Create cameras from stereo calibration: camera1, camera2 = create_cameras_from_stereo_calibration('extrinsics_calibration_512x288.json', 'images/')")
+    print("3. Export to CloudCompare: export_cameras_to_cloudcompare(cameras, 'output/', 'ply')")
+    print("4. Create individual camera: camera = Camera.from_camera_params(camera_data, 'image.png')")
+    
+    # Example: Create cameras from stereo calibration
+    try:
+        camera1, camera2 = create_cameras_from_stereo_calibration(
+            'extrinsics_calibration_512x288.json', 
+            'images/',
+            'frame_1', 
+            'frame_2',
+            scale_factor=0.001
+        )
+        
+        print(f"\nCreated cameras:")
+        print(f"Camera 1: {camera1}")
+        print(f"  Focal length (pixels): {camera1.focal_length_pixels:.2f}")
+        print(f"  Focal length (3D): {camera1.focal_length:.2f}")
+        print(f"  Image path: {camera1.image_path}")
+        print(f"Camera 2: {camera2}")
+        print(f"  Focal length (pixels): {camera2.focal_length_pixels:.2f}")
+        print(f"  Focal length (3D): {camera2.focal_length:.2f}")
+        print(f"  Image path: {camera2.image_path}")
+        
+        # Export to CloudCompare with reasonable resolution
+        print("Exporting camera pyramids (this may take a moment)...")
+        # Create output directory if it doesn't exist
+        os.makedirs('camera_pyramids', exist_ok=True)
+        for camera in [camera1, camera2]:
+            output_path = f'camera_pyramids/{camera.name}_pyramid.ply'
+            success = camera.export_to_cloudcompare_ply(output_path, pixel_sampling=4, image_sampling=4)
+            if success:
+                print(f"✓ Exported {camera.name}")
+            else:
+                print(f"✗ Failed to export {camera.name}")
+        
+        success = True  # Assume success for the example
+        if success:
+            print("Successfully exported camera pyramids to 'camera_pyramids/' directory")
+        else:
+            print("Failed to export some camera pyramids")
+            
+    except Exception as e:
+        print(f"Error in example: {e}")

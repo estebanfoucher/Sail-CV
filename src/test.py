@@ -152,6 +152,39 @@ def test_stereo_video_reader():
     stereo_video_reader.release()
     print("Test stereo video reader passed")
 
+
+def test_stereo_image_saver():
+    from video import StereoVideoReader, FFmpegVideoWriter
+    from mv_utils import Scene, load_stereo_data_folder_structure
+    stereo_data_folder_structure = load_stereo_data_folder_structure()
+    scene_names = stereo_data_folder_structure.get_scene_folders()
+    scene_name = "scene_8"
+    assert scene_name in scene_names, f"Scene {scene_name} is not in the list of scene names"
+    
+    scene = Scene(scene_name)
+    video_paths = scene.get_video_paths()
+    sync_frame_offset = scene.sync_frame_offset
+    frame_to_save_number_list = [4900,4910,4920,4930,4940,4950,4960]
+    # save frame 1 and frame 2 to the output folder
+    output_folder = "/workspace/output/pairs"
+    output_name_1 = f"frame_1.png"
+    output_name_2 = f"frame_2.png"
+    
+    os.makedirs(output_folder, exist_ok=True)
+    for frame_to_save_number in frame_to_save_number_list:
+        stereo_video_reader = StereoVideoReader(video_paths["camera_1"], video_paths["camera_2"], start_video_1_frame=frame_to_save_number, start_video_2_frame=frame_to_save_number - sync_frame_offset)
+        ret_1, ret_2, frame_1, frame_2 = stereo_video_reader.read()
+        output_name_1 = f"frame_1_{frame_to_save_number}.png"
+        output_name_2 = f"frame_2_{frame_to_save_number}.png"
+        output_path_1 = os.path.join(output_folder, f"{frame_to_save_number}", output_name_1)
+        output_path_2 = os.path.join(output_folder, f"{frame_to_save_number}", output_name_2)
+        os.makedirs(os.path.join(output_folder, f"{frame_to_save_number}"), exist_ok=True)
+        cv2.imwrite(output_path_1, frame_1)
+        cv2.imwrite(output_path_2, frame_2)
+        stereo_video_reader.release()
+        
+    
+
 def test_lightglue_feature_matcher():
     """Test LightGlue feature matching on multiple synchronized stereo video frames."""
 
@@ -209,33 +242,6 @@ def test_lightglue_feature_matcher():
     print("Test lightglue feature matcher passed")
 
 
-
-def test_stereo_image_saver():
-    from video import StereoVideoReader, FFmpegVideoWriter
-    from mv_utils import Scene, load_stereo_data_folder_structure
-    stereo_data_folder_structure = load_stereo_data_folder_structure()
-    scene_names = stereo_data_folder_structure.get_scene_folders()
-    scene_name = "scene_8"
-    assert scene_name in scene_names, f"Scene {scene_name} is not in the list of scene names"
-    
-    scene = Scene(scene_name)
-    video_paths = scene.get_video_paths()
-    sync_frame_offset = scene.sync_frame_offset
-    frame_to_save_number = 620
-    stereo_video_reader = StereoVideoReader(video_paths["camera_1"], video_paths["camera_2"], start_video_1_frame=frame_to_save_number, start_video_2_frame=frame_to_save_number - sync_frame_offset)
-    
-    ret_1, ret_2, frame_1, frame_2 = stereo_video_reader.read()
-    
-    # save frame 1 and frame 2 to the output folder
-    output_folder = "/workspace/output"
-    output_name_1 = f"frame_1.png"
-    output_name_2 = f"frame_2.png"
-    output_path_1 = os.path.join(output_folder, output_name_1)
-    output_path_2 = os.path.join(output_folder, output_name_2)
-    cv2.imwrite(output_path_1, frame_1)
-    cv2.imwrite(output_path_2, frame_2)
-    print("Test stereo image saver passed")
-    stereo_video_reader.release()
 
 def test_all():
     #test_video_reader_and_writer()

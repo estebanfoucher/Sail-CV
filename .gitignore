@@ -22,3 +22,20 @@
 # ignore all files in src/cameras/test_assets/camera_pyramids/
 src/cameras/test_assets/camera_pyramids/**
 
+# MAST3R Docker files - track source code but exclude large binaries
+!mast3r/
+!mast3r/docker/
+!mast3r/docker/files/
+!mast3r/docker/files/*.py
+!mast3r/docker/files/*.Dockerfile
+!mast3r/docker/files/*.yml
+!mast3r/docker/files/*.sh
+!mast3r/docker/files/*.json
+!mast3r/docker/files/*.md
+!mast3r/docker/files/*.txt
+
+# Exclude large model files and checkpoints
+mast3r/docker/files/checkpoints/
+mast3r/docker/files/*.pth
+mast3r/docker/files/*.ckpt
+mast3r/docker/files/*.bin

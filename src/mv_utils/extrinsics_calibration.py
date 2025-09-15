@@ -35,6 +35,11 @@ def calibrate_stereo_many(
 
     flags = cv2.CALIB_FIX_INTRINSIC
 
+    # cv2.stereoCalibrate returns R and T such that:
+    # X_camera2 = R @ X_camera1 + T
+    # where X_camera1 is a 3D point in camera1's coordinate system
+    # and X_camera2 is the same point in camera2's coordinate system
+    # This is a world-to-camera transform if camera1 is considered "world"
     ret, camera_matrix1_cal, dist_coeffs1_cal, camera_matrix2_cal, dist_coeffs2_cal, \
     R, T, E, F = cv2.stereoCalibrate(
         object_points_list,

@@ -1,135 +1,152 @@
+"""
+Test file for camera visualization with coherent coordinate transformations.
+
+This file tests the stereo calibration format using extrinsics_calibration_512x288.json.
+The stereo calibration format uses world-to-camera transforms that are automatically converted
+to camera-to-world transforms for proper visualization.
+
+Coordinate System Conventions:
+- Stereo calibration: X_camera2 = R @ X_camera1 + T (world-to-camera)
+- Camera class: P_world = R @ P_camera + T (camera-to-world)
+- The conversion function handles the transformation between these conventions.
+"""
+
 import json
-from cameras import create_cameras_from_stereo_calibration, export_cameras_to_cloudcompare
+import numpy as np
+from cameras import Camera, export_cameras_to_cloudcompare, create_cameras_from_stereo_calibration, convert_world_to_camera_to_camera_to_world
 
-def test_normal():
-    extrinsics_calibration_path = "test_assets/extrinsics_calibration.json"
-    image_1_path = "test_assets/images/frame_1.png"
-    image_2_path = "test_assets/images/frame_2.png"
-    output_dir = "test_assets/camera_pyramids/normal"
+def load_cameras_from_stereo_calibration(calibration_path: str, image_1_path: str, image_2_path: str):
+    """
+    Load cameras from stereo calibration JSON format.
     
-    # Load calibration data from JSON file
-    with open(extrinsics_calibration_path, 'r') as f:
+    Args:
+        calibration_path: Path to stereo calibration JSON file (e.g., extrinsics_calibration_512x288.json)
+        image_1_path: Path to first camera image
+        image_2_path: Path to second camera image
+        
+    Returns:
+        Tuple of (camera1, camera2) Camera objects
+    """
+    with open(calibration_path, 'r') as f:
         calibration_data = json.load(f)
     
-    # Create cameras from calibration data
-    camera1, camera2 = create_cameras_from_stereo_calibration(calibration_data, image_1_path, image_2_path)
-    export_cameras_to_cloudcompare([camera1, camera2], output_dir, "ply")
-    
-def test_1m_translation_z():
-    extrinsics_calibration_path = "test_assets/extrinsics_calibration.json"
-    image_1_path = "test_assets/images/frame_1.png"
-    image_2_path = "test_assets/images/frame_2.png"
-    output_dir = "test_assets/camera_pyramids/1m_translation_z"
-    
-    # Load calibration data from JSON file
-    with open(extrinsics_calibration_path, 'r') as f:
-        calibration_data = json.load(f)
-    
-    calibration_data["translation_vector"] = [0, 0, 1]
-    calibration_data["rotation_matrix"] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    return create_cameras_from_stereo_calibration(calibration_data, image_1_path, image_2_path)
 
-    # Create cameras from calibration data
-    camera1, camera2 = create_cameras_from_stereo_calibration(calibration_data, image_1_path, image_2_path)
-    export_cameras_to_cloudcompare([camera1, camera2], output_dir, "ply")
 
-def test_1m_translation_y():
-    extrinsics_calibration_path = "test_assets/extrinsics_calibration.json"
-    image_1_path = "test_assets/images/frame_1.png"
-    image_2_path = "test_assets/images/frame_2.png"
-    output_dir = "test_assets/camera_pyramids/1m_translation_y"
-    
-    with open(extrinsics_calibration_path, 'r') as f:
-        calibration_data = json.load(f)
-    
-    calibration_data["translation_vector"] = [0, 1, 0]
-    calibration_data["rotation_matrix"] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-    camera1, camera2 = create_cameras_from_stereo_calibration(calibration_data, image_1_path, image_2_path)
-    export_cameras_to_cloudcompare([camera1, camera2], output_dir, "ply")
-    
-def test_1m_translation_x():
-    extrinsics_calibration_path = "test_assets/extrinsics_calibration.json"
-    image_1_path = "test_assets/images/frame_1.png"
-    image_2_path = "test_assets/images/frame_2.png"
-    output_dir = "test_assets/camera_pyramids/1m_translation_x"
-    
-    with open(extrinsics_calibration_path, 'r') as f:
-        calibration_data = json.load(f)
-    
-    calibration_data["translation_vector"] = [1, 0, 0]
-    calibration_data["rotation_matrix"] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-    camera1, camera2 = create_cameras_from_stereo_calibration(calibration_data, image_1_path, image_2_path)
-    export_cameras_to_cloudcompare([camera1, camera2], output_dir, "ply")
 
-def test_90_rotation_y():
-    extrinsics_calibration_path = "test_assets/extrinsics_calibration.json"
-    image_1_path = "test_assets/images/frame_1.png"
-    image_2_path = "test_assets/images/frame_2.png"
-    output_dir = "test_assets/camera_pyramids/90_rotation_y"
+def create_modified_cameras_from_stereo_calibration(calibration_path: str, image_1_path: str, image_2_path: str, 
+                                                   translation_vector=None, rotation_matrix=None):
+    """
+    Create cameras with modified translation and rotation from stereo calibration data.
     
-    with open(extrinsics_calibration_path, 'r') as f:
+    Args:
+        calibration_path: Path to stereo calibration JSON file
+        image_1_path: Path to first camera image
+        image_2_path: Path to second camera image
+        translation_vector: New translation vector for camera2 (if None, uses original from calibration)
+        rotation_matrix: New rotation matrix for camera2 (if None, uses original from calibration)
+        
+    Returns:
+        Tuple of (camera1, camera2) Camera objects
+    """
+    with open(calibration_path, 'r') as f:
         calibration_data = json.load(f)
     
-    # translation to 0, 0, 0
-    calibration_data["translation_vector"] = [0, 0, 0]
-    calibration_data["rotation_matrix"] = [[0, 0, 1], [0, 1, 0], [-1, 0, 0]]
-    camera1, camera2 = create_cameras_from_stereo_calibration(calibration_data, image_1_path, image_2_path)
-    export_cameras_to_cloudcompare([camera1, camera2], output_dir, "ply")
+    # Extract original calibration data
+    camera_matrix1 = np.array(calibration_data["camera_matrix1"])
+    camera_matrix2 = np.array(calibration_data["camera_matrix2"])
+    original_rotation_matrix = np.array(calibration_data["rotation_matrix"])
+    original_translation_vector = np.array(calibration_data["translation_vector"])
+    image_size = tuple(calibration_data["image_size"])
+    
+    # Use provided values or defaults
+    if rotation_matrix is not None:
+        rotation_matrix = np.array(rotation_matrix)
+    else:
+        rotation_matrix = original_rotation_matrix
+        
+    if translation_vector is not None:
+        translation_vector = np.array(translation_vector).reshape(3, 1)
+    else:
+        translation_vector = original_translation_vector
+    
+    # Create camera1 (reference camera at origin)
+    camera1 = Camera(
+        name="camera_1",
+        position=[0.0, 0.0, 0.0],
+        rotation_matrix=np.eye(3),
+        intrinsics=camera_matrix1,
+        image_size=image_size,
+        image_path=image_1_path
+    )
+    
+    # Create camera2 with modified transforms
+    # Convert world-to-camera transforms to camera-to-world transforms
+    camera2_rotation_world, camera2_position_world = convert_world_to_camera_to_camera_to_world(
+        rotation_matrix, translation_vector
+    )
+    
+    camera2 = Camera(
+        name="camera_2",
+        position=camera2_position_world,
+        rotation_matrix=camera2_rotation_world,
+        intrinsics=camera_matrix2,
+        image_size=image_size,
+        image_path=image_2_path
+    )
+    
+    return camera1, camera2
 
-def test_90_rotation_x():
-    extrinsics_calibration_path = "test_assets/extrinsics_calibration.json"
-    image_1_path = "test_assets/images/frame_1.png"
-    image_2_path = "test_assets/images/frame_2.png"
-    output_dir = "test_assets/camera_pyramids/90_rotation_x"
-    
-    with open(extrinsics_calibration_path, 'r') as f:
-        calibration_data = json.load(f)
-    
-    calibration_data["translation_vector"] = [0, 0, 0]
-    calibration_data["rotation_matrix"] = [[1, 0, 0], [0, 0, -1], [0, 1, 0]]
-    camera1, camera2 = create_cameras_from_stereo_calibration(calibration_data, image_1_path, image_2_path)
-    export_cameras_to_cloudcompare([camera1, camera2], output_dir, "ply")
 
-def test_90_rotation_z():
-    extrinsics_calibration_path = "test_assets/extrinsics_calibration.json"
+
+
+def test_stereo_calibration_normal():
+    """Test using the actual stereo calibration data from extrinsics_calibration_512x288.json"""
+    calibration_path = "extrinsics_calibration_512x288.json"
     image_1_path = "test_assets/images/frame_1.png"
     image_2_path = "test_assets/images/frame_2.png"
-    output_dir = "test_assets/camera_pyramids/90_rotation_z"
+    output_dir = "test_assets/camera_pyramids/stereo_calibration_normal"
     
-    with open(extrinsics_calibration_path, 'r') as f:
-        calibration_data = json.load(f)
-    
-    calibration_data["translation_vector"] = [0, 0, 0]
-    calibration_data["rotation_matrix"] = [[0, 1, 0], [-1, 0, 0], [0, 0, 1]]
-    camera1, camera2 = create_cameras_from_stereo_calibration(calibration_data, image_1_path, image_2_path)
+    # Load cameras from stereo calibration data
+    camera1, camera2 = load_cameras_from_stereo_calibration(calibration_path, image_1_path, image_2_path)
     export_cameras_to_cloudcompare([camera1, camera2], output_dir, "ply")
 
-def test_180_rotation_y():
-    extrinsics_calibration_path = "test_assets/extrinsics_calibration.json"
+def test_stereo_calibration_1m_translation_z():
+    """Test stereo calibration with 1m translation in Z direction"""
+    calibration_path = "extrinsics_calibration_512x288.json"
     image_1_path = "test_assets/images/frame_1.png"
     image_2_path = "test_assets/images/frame_2.png"
-    output_dir = "test_assets/camera_pyramids/180_rotation_y"
+    output_dir = "test_assets/camera_pyramids/stereo_calibration_1m_translation_z"
     
-    with open(extrinsics_calibration_path, 'r') as f:
-        calibration_data = json.load(f)
-    
-    calibration_data["translation_vector"] = [0, 0, 0]
-    calibration_data["rotation_matrix"] = [[-1, 0, 0], [0, 1, 0], [0, 0, -1]]
-    camera1, camera2 = create_cameras_from_stereo_calibration(calibration_data, image_1_path, image_2_path)
+    # Create cameras with modified translation (1m in Z direction)
+    camera1, camera2 = create_modified_cameras_from_stereo_calibration(
+        calibration_path, image_1_path, image_2_path,
+        translation_vector=[0, 0, 1],  # 1m in Z direction
+        rotation_matrix=[[1, 0, 0], [0, 1, 0], [0, 0, 1]]  # Identity rotation
+    )
     export_cameras_to_cloudcompare([camera1, camera2], output_dir, "ply")
 
-def test_90_rotation_x_and_1m_translation_z():
-    extrinsics_calibration_path = "test_assets/extrinsics_calibration.json"
+def test_stereo_calibration_90_rotation_y():
+    """Test stereo calibration with 90 degree rotation around Y axis"""
+    calibration_path = "extrinsics_calibration_512x288.json"
     image_1_path = "test_assets/images/frame_1.png"
     image_2_path = "test_assets/images/frame_2.png"
-    output_dir = "test_assets/camera_pyramids/90_rotation_x_and_1m_translation_z"
+    output_dir = "test_assets/camera_pyramids/stereo_calibration_90_rotation_y"
     
-    with open(extrinsics_calibration_path, 'r') as f:
-        calibration_data = json.load(f)
-    
-    calibration_data["translation_vector"] = [0, 0, 1]
-    calibration_data["rotation_matrix"] = [[1, 0, 0], [0, 0, -1], [0, 1, 0]]
-    camera1, camera2 = create_cameras_from_stereo_calibration(calibration_data, image_1_path, image_2_path)
+    # Create cameras with modified rotation (90 degrees around Y axis)
+    camera1, camera2 = create_modified_cameras_from_stereo_calibration(
+        calibration_path, image_1_path, image_2_path,
+        translation_vector=[0, 0, 0],  # No translation
+        rotation_matrix=[[0, 0, 1], [0, 1, 0], [-1, 0, 0]]  # 90 degree rotation around Y
+    )
     export_cameras_to_cloudcompare([camera1, camera2], output_dir, "ply")
+    
 
 if __name__ == "__main__":
-   test_normal()
+    # Test with stereo calibration format
+    print("Testing with stereo calibration format...")
+    test_stereo_calibration_normal()
+    test_stereo_calibration_1m_translation_z()
+    test_stereo_calibration_90_rotation_y()
+    
+    print("All tests completed!")
