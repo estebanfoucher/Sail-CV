@@ -174,6 +174,8 @@ class StereoTagDetector:
         
         return points_3d, points_2d_1, points_2d_2
     
+
+    
     def get_correspondences(self, img1: np.ndarray, img2: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Take two stereo images and return the extracted correspondences.
@@ -207,6 +209,12 @@ class StereoTagDetector:
             return None, None, None
         
         return points_3d, points_2d_1, points_2d_2
+    
+    def cleanup(self):
+        """Explicitly cleanup the AprilTag detector to avoid segmentation faults."""
+        if hasattr(self, 'detector') and self.detector is not None:
+            # Set detector to None to avoid garbage collection issues
+            self.detector = None
 
 
 def get_summary(results: Dict[str, Any]) -> str:
@@ -234,6 +242,7 @@ def get_summary(results: Dict[str, Any]) -> str:
     summary += f"\nComputed baseline distance: {baseline:.6f} m"
 
     return summary
+
 
 
 def _rotation_matrix_to_euler_angles(R: np.ndarray) -> Tuple[float, float, float]:

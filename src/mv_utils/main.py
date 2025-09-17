@@ -9,7 +9,7 @@ for scene_name in scene_names:
     
     scene = Scene(scene_name)
     print(f"Calibrating {scene_name}")
-    extrinsic_calibration = ExtrinsicCalibration(scene)
+    extrinsic_calibration = scene.create_extrinsic_calibration()
     try:
         extrinsics = extrinsic_calibration.load_extrinsics()
         print(f"Calibration loaded for {scene_name}")

@@ -12,6 +12,7 @@ from loguru import logger
 import cv2
 from typing import List, Tuple, Dict, Any   
 import json
+
 with open("config.json", "r") as f:
     config = json.load(f)
 TEMPORAL_CALIB_STEP_SEC = config["temporal_calib_step_sec"]
@@ -88,29 +89,59 @@ class Scene:
             video_paths[camera_name] = os.path.join(folder_path, video_name)
         return video_paths
     
+    def create_extrinsic_calibration(self) -> "ExtrinsicCalibration":
+        """Factory method to create ExtrinsicCalibration without circular back-reference."""
+        return ExtrinsicCalibration(
+            scene_name=self.scene_name,
+            scene_folder_structure=self.scene_folder_structure,
+            parameters=self.parameters,
+            sync_frame_offset=self.sync_frame_offset,
+        )
+    
 class ExtrinsicCalibration:
-    def __init__(self, scene: Scene):
-        self.scene = scene
-        video_paths = self.scene.get_video_paths()
-        
+    def __init__(self, scene_name: str, scene_folder_structure, parameters: Dict[str, Any], sync_frame_offset: int):
+        """Calibrate stereo extrinsics for a scene (no back-reference to Scene).
+
+        Args:
+            scene_name: Name of the scene (e.g. "scene_5")
+            scene_folder_structure: Folder structure object returned by load_scene_folder_structure
+            parameters: Parsed parameters.yml content for the scene
+            sync_frame_offset: Frame offset between the two cameras
+        """
+        self.scene_name = scene_name
+        self.scene_folder_structure = scene_folder_structure
+        self.parameters = parameters
+        self.sync_frame_offset = sync_frame_offset
+        self.cameras = ["camera_1", "camera_2"]
+
+        video_paths = self._get_video_paths()
+
         self.video_1 = Video(video_paths["camera_1"])
         self.video_2 = Video(video_paths["camera_2"])
-        self.save_path = os.path.join(self.scene.scene_folder_structure.folder_path, self.scene.scene_name, "extrinsics.json")
+        self.save_path = os.path.join(self.scene_folder_structure.folder_path, self.scene_name, "extrinsics.json")
         self.extrinsics_calibration_pattern_specs = self.get_extrinsics_calibration_pattern_specs()
-        self.sync_frame_offset = self.scene.sync_frame_offset
-        self.stereo_tag_detector = StereoTagDetector(config_path=os.path.join(self.scene.scene_folder_structure.folder_path, self.scene.scene_name, "extrinsics_calibration_pattern_specs.yml"))
+        self.stereo_tag_detector = StereoTagDetector(config_path=os.path.join(self.scene_folder_structure.folder_path, self.scene_name, "extrinsics_calibration_pattern_specs.yml"))
         self.image_numbers_list = self.get_image_numbers_list()
         self.check_video_fps()
+
+    def _get_video_paths(self) -> Dict[str, str]:
+        """Get the video paths for both cameras within this scene."""
+        video_paths: Dict[str, str] = {}
+        for camera_name in self.cameras:
+            folder_path = os.path.join(self.scene_folder_structure.folder_path, self.scene_name, camera_name)
+            video_name = get_unique_video_name(folder_path)
+            video_paths[camera_name] = os.path.join(folder_path, video_name)
+        return video_paths
         
     def get_extrinsics_calibration_pattern_specs(self):
-        return load_parameters(os.path.join(self.scene.scene_folder_structure.folder_path, self.scene.scene_name, "extrinsics_calibration_pattern_specs.yml"))
+        return load_parameters(os.path.join(self.scene_folder_structure.folder_path, self.scene_name, "extrinsics_calibration_pattern_specs.yml"))
     
     
     
     def get_image_numbers_list(self):
         # Convert fps to int for slice step
         step = int(self.video_1.get_fps()*TEMPORAL_CALIB_STEP_SEC)
-        camera_1_image_numbers_list = list(range(self.scene.parameters["camera_1"]["sync_calib_start_frame"], self.scene.parameters["camera_1"]["sync_calib_end_frame"], step))
+        camera_1_image_numbers_list = list(range(self.parameters["camera_1"]["sync_calib_start_frame"], self.parameters["camera_1"]["sync_calib_end_frame"], step))
         #for camera_2, substract the sync_frame_offset
         camera_2_image_numbers_list = [frame - self.sync_frame_offset for frame in camera_1_image_numbers_list]
         return camera_1_image_numbers_list, camera_2_image_numbers_list
@@ -126,7 +157,7 @@ class ExtrinsicCalibration:
     
     def get_intrinsics(self, force_recompute: bool = False):
         """Get the intrinsic calibration parameters for both cameras."""
-        intrinsics = self.scene.get_calibration_intrinsics(force_recompute=False)
+        intrinsics = self._get_calibration_intrinsics(force_recompute=force_recompute)
         
         # Convert from lists back to numpy arrays
         self.camera_matrix1 = np.array(intrinsics["camera_1"]["camera_matrix"])
@@ -185,12 +216,12 @@ class ExtrinsicCalibration:
         return results
     
     def load_extrinsics(self):
-        path = os.path.join(self.scene.scene_folder_structure.folder_path, self.scene.scene_name, "extrinsics_calibration.json")
+        path = os.path.join(self.scene_folder_structure.folder_path, self.scene_name, "extrinsics_calibration.json")
         with open(path, "r") as f:
             return json.load(f)
     
     def save_extrinsics(self, results: Dict[str, Any]):
-        path = os.path.join(self.scene.scene_folder_structure.folder_path, self.scene.scene_name, "extrinsics_calibration.json")
+        path = os.path.join(self.scene_folder_structure.folder_path, self.scene_name, "extrinsics_calibration.json")
         with open(path, "w") as f:
             json.dump(results, f, indent=2)
     
@@ -203,7 +234,7 @@ class ExtrinsicCalibration:
             camera_1_frames = self.video_1.get_frames([camera_1_image_number])
             camera_2_frames = self.video_2.get_frames([camera_2_image_number])
             # mkdir successful_pairs if not exists
-            path = os.path.join(self.scene.scene_folder_structure.folder_path, self.scene.scene_name, "successful_pairs")
+            path = os.path.join(self.scene_folder_structure.folder_path, self.scene_name, "successful_pairs")
             os.makedirs(path, exist_ok=True)
             if camera_1_frames and camera_2_frames:
                 camera_1_image = camera_1_frames[0]
@@ -221,8 +252,52 @@ class ExtrinsicCalibration:
         return get_summary(extrinsics)
     
     def save_extrinsics_summary(self):
-        measured_baseline = self.scene.parameters["measured_baseline_m"]
+        measured_baseline = self.parameters["measured_baseline_m"]
         summary = self.get_extrinsics_summary()
         summary += f"\nMeasured Baseline: {measured_baseline:.3f} meters"
-        with open(os.path.join(self.scene.scene_folder_structure.folder_path, self.scene.scene_name, "extrinsics_summary.txt"), "w") as f:
+        with open(os.path.join(self.scene_folder_structure.folder_path, self.scene_name, "extrinsics_summary.txt"), "w") as f:
             f.write(summary)
+    
+    def cleanup(self):
+        """Explicitly cleanup resources to avoid segmentation faults."""
+        if hasattr(self, 'stereo_tag_detector') and self.stereo_tag_detector is not None:
+            self.stereo_tag_detector.cleanup()
+            self.stereo_tag_detector = None
+        
+        if hasattr(self, 'video_1') and self.video_1 is not None:
+            self.video_1 = None
+        
+        if hasattr(self, 'video_2') and self.video_2 is not None:
+            self.video_2 = None
+
+    def _calibrate_intrinsics(self, camera_name: str):
+        """Run intrinsic calibration for a single camera and save results."""
+        calibration_folder_path = os.path.join(self.scene_folder_structure.folder_path, self.scene_folder_structure.get_calibration_intrinsics_folder_name())
+        calibration_camera_path = os.path.join(calibration_folder_path, camera_name)
+        checkerboard_specs_path = os.path.join(calibration_camera_path, "checkerboard_specs.yml")
+        video_name = get_unique_video_name(calibration_camera_path)
+        video_path = os.path.join(calibration_camera_path, video_name)
+        save_path = os.path.join(calibration_folder_path, camera_name, "intrinsics.json")
+        intrinsic_calibration = IntrinsicCalibration(video_path, checkerboard_specs_path, save_path)
+        camera_matrix, dist_coeffs, reprojection_error = intrinsic_calibration.calibrate(save_images=False)
+        intrinsics_dict = {
+            "camera_matrix": camera_matrix.tolist(),
+            "dist_coeffs": dist_coeffs.tolist(),
+            "reprojection_error": reprojection_error
+        }
+        with open(save_path, "w") as f:
+            json.dump(intrinsics_dict, f, indent=2)
+        return intrinsics_dict
+
+    def _get_calibration_intrinsics(self, force_recompute: bool = False) -> Dict[str, Any]:
+        """Load or compute intrinsics for both cameras."""
+        intrinsic_calibration: Dict[str, Any] = {}
+        calibration_folder_path = os.path.join(self.scene_folder_structure.folder_path, self.scene_folder_structure.get_calibration_intrinsics_folder_name())
+        for camera_name in self.cameras:
+            intrinsics_json_path = os.path.join(calibration_folder_path, camera_name, "intrinsics.json")
+            if os.path.exists(intrinsics_json_path) and not force_recompute:
+                with open(intrinsics_json_path, "r") as f:
+                    intrinsic_calibration[camera_name] = json.load(f)
+            else:
+                intrinsic_calibration[camera_name] = self._calibrate_intrinsics(camera_name)
+        return intrinsic_calibration

@@ -9,12 +9,14 @@ class SAM:
         Initialize FastSAM model
         
         Args:
-            model_path (str, optional): Path to FastSAM model. If None, uses default model.
+            model_path (str): Path to FastSAM model or model name (e.g., "FastSAM-x.pt").
+                             If model name is provided, it will be automatically downloaded.
         """
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
        
-        # Use default FastSAM model
-        self.model = FastSAM('FastSAM-s.pt')
+       
+        # Use FastSAM model - ultralytics will automatically download if needed
+        self.model = FastSAM(model_path)
         
         self.model.to(self.device)
         
@@ -85,15 +87,18 @@ class SAM:
         if mask is None:
             return image
         
+        
         # Create colored mask
         colored_mask = np.zeros_like(image)
         colored_mask[mask > 0] = [0, 255, 0]  # Green color for mask
 
         for point in points:
-            cv2.circle(colored_mask, point, 5, (0, 0, 255), -1)
+            cv2.circle(colored_mask, point, 5, (255, 0, 0), -1)
         
-        # Blend image and mask
+        # Blend image and mask only where mask is not 0
         result = image * 0.5 + colored_mask * 0.5
+        result[mask == 0] = image[mask == 0]
+    
         
         return result.astype(np.uint8)
 

@@ -1,19 +1,21 @@
 services:
-  jetson-ml-app:
+  mvs-app:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.dev
-    image: jetson-ml-app:latest
-    container_name: jetson-ml-app
-    working_dir: /workspace
-    volumes:
-      - ../src:/workspace/src:ro
-      - ../data:/workspace/data:rw
-      - ../output:/workspace/output:rw
-      - ../models:/workspace/models:ro
+      dockerfile: docker/jetson.Dockerfile 
+    ports:
+      - "7860:7860"
     environment:
-      - PYTHONPATH=/workspace/src
+      - DEVICE=cuda
+      - MODEL=${MODEL:-MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth}
+    volumes:
+      - ../models:/app/models:ro
+      - ../tmp:/app/tmp:rw
+      - ../data:/app/data:rw
+      - ../output:/app/output:rw
+      - ../src:/app/src:rw
+    cap_add:
+      - IPC_LOCK
+      - SYS_RESOURCE
     runtime: nvidia
-    stdin_open: true
-    tty: true
-    restart: no
+    user: "1000:1000"
