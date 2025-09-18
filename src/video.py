@@ -2,6 +2,7 @@ import cv2
 import subprocess
 import numpy as np
 import os
+from mv_utils.image_utils import apply_exif_transpose_to_frames
 
 
 class FFmpegVideoWriter:
@@ -54,7 +55,38 @@ class VideoReader:
             raise FileNotFoundError(f"Video file {self.video_path} does not exist")
     
     def read(self):
-        return self.cap.read()
+        ret, frame = self.cap.read()
+        if ret and frame is not None:
+            # Apply EXIF transpose and ensure landscape orientation
+            corrected_frame = self._ensure_landscape_orientation(frame)
+            return ret, corrected_frame
+        return ret, frame
+    
+    def _ensure_landscape_orientation(self, frame: np.ndarray) -> np.ndarray:
+        """
+        Ensure frame is in landscape orientation (width >= height).
+        
+        Args:
+            frame: OpenCV frame (BGR numpy array)
+            
+        Returns:
+            Frame in landscape orientation
+        """
+        # Apply EXIF transpose first
+        corrected_frame = apply_exif_transpose_to_frames([frame])[0]
+        
+        # Get current dimensions
+        height, width = corrected_frame.shape[:2]
+        
+        # If already landscape (width >= height), return as is
+        if width >= height:
+            return corrected_frame
+        
+        # If portrait (height > width), rotate 90 degrees clockwise
+        # This ensures landscape orientation
+        rotated_frame = cv2.rotate(corrected_frame, cv2.ROTATE_90_CLOCKWISE)
+        
+        return rotated_frame
     
     def release(self):
         self.cap.release()

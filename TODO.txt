@@ -1,0 +1,8 @@
+Refacto :
+    - etre capable de mesher le pointcloud et le texturer avec image HD
+    - update the whole Readme
+    - fuse video utils 
+    - test orientation issue
+    - crash after several docker up (memory issue, clear gpu, cpu RAM...)
+    - logs filter distance
+    - make an isolate calibrate file

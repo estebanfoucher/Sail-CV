@@ -541,16 +541,16 @@ def convert_world_to_camera_to_camera_to_world(rotation_matrix: np.ndarray, tran
 
 
 def create_cameras_from_stereo_calibration(calibration: dict, 
-                                         image_1_path: str,
-                                         image_2_path: str,
+                                         image_1: Union[str, np.ndarray],
+                                         image_2: Union[str, np.ndarray],
                                          scale_factor: float = 0.001) -> Tuple[Camera, Camera]:
     """
     Create two Camera instances from stereo calibration data.
     
     Args:
         calibration: Stereo calibration data containing world-to-camera transforms
-        image_1_path: Path to first camera image
-        image_2_path: Path to second camera image
+        image_1: Path to first camera image (str) or numpy array of image data
+        image_2: Path to second camera image (str) or numpy array of image data
         scale_factor: Scale factor to convert pixel focal length to 3D units
         
     Returns:
@@ -579,9 +579,13 @@ def create_cameras_from_stereo_calibration(calibration: dict,
         rotation_matrix=np.eye(3),  # identity rotation (camera1 = world frame)
         intrinsics=camera_matrix1,
         image_size=image_size,
-        image_path=image_1_path,
+        image_path=image_1 if isinstance(image_1, str) else None,
         scale_factor=scale_factor
     )
+    
+    # If image_1 is a numpy array, set it directly
+    if isinstance(image_1, np.ndarray):
+        camera1.image = image_1
     
     # Camera 2: Convert world-to-camera transforms to camera-to-world transforms
     # The stereo calibration gives us: X_camera2 = R @ X_camera1 + T
@@ -596,9 +600,13 @@ def create_cameras_from_stereo_calibration(calibration: dict,
         rotation_matrix=camera2_rotation_world,  # camera2-to-world rotation
         intrinsics=camera_matrix2,
         image_size=image_size,
-        image_path=image_2_path,
+        image_path=image_2 if isinstance(image_2, str) else None,
         scale_factor=scale_factor
     )
+    
+    # If image_2 is a numpy array, set it directly
+    if isinstance(image_2, np.ndarray):
+        camera2.image = image_2
     
     return camera1, camera2
 

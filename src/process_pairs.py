@@ -10,15 +10,17 @@ from stereo.triangulation import triangulate_points, extract_colors_from_image
 from unitaries.sam import SAM
 from stereo.saver import save_point_cloud_ply
 from stereo.convert_calibration import convert_calibration_parameters
+from cameras import create_cameras_from_stereo_calibration, export_cameras_to_cloudcompare
 
 
 MODEL_PATH = "/app/models/mast3r/checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth"
-SUBSAMPLE = 8
+SUBSAMPLE = 2
 INPUT_PAIR_FOLDER = "/app/tmp/pairs/scene_8/"
 INPUT_CALIBRATION_FOLDER = "/app/tmp/pairs/scene_8/"
 OUTPUT_FOLDER = "/app/output/scene_8"
+RENDER_CAMERAS = True
 
-def process_pair(mast3r_engine, sam, calibration_params, input_pair_folder_path, pair_name):
+def process_pair(mast3r_engine, sam, calibration_params, input_pair_folder_path, pair_name, render_cameras=False):
     logger.info(f"Processing pair: {pair_name}")
     
     # load images
@@ -34,13 +36,15 @@ def process_pair(mast3r_engine, sam, calibration_params, input_pair_folder_path,
     raw_data = mast3r_engine.extract_raw_data(output, subsample=SUBSAMPLE)
     
     # load image1
-    img1 = resize_image(f"{input_pair_folder_path}/frame_1.png", size=512)
+    img1_pil = resize_image(f"{input_pair_folder_path}/frame_1.png", size=512)
+    img1_pil.save(f"{OUTPUT_FOLDER}/{pair_name}_img1_resized.png")
     
-    # save img1
-    img1.save(f"{OUTPUT_FOLDER}/{pair_name}_img1_resized.png")
+    # save img2
+    img2_pil = resize_image(f"{input_pair_folder_path}/frame_2.png", size=512)
+    img2_pil.save(f"{OUTPUT_FOLDER}/{pair_name}_img2_resized.png")
     
     # convert PIL Image to numpy array for SAM
-    img1_array = np.array(img1)
+    img1_array = np.array(img1_pil)
     
     # infer with SAM and get mask
     mask_result = sam.predict(img1_array, point=(256, 144))
@@ -51,7 +55,12 @@ def process_pair(mast3r_engine, sam, calibration_params, input_pair_folder_path,
     rendered_image_brg = cv2.cvtColor(rendered_image, cv2.COLOR_RGB2BGR)
     cv2.imwrite(f"{OUTPUT_FOLDER}/{pair_name}_rendered_image.png", rendered_image_brg)
     
-    
+    if render_cameras:
+        
+        img2_array = np.array(img2_pil)
+        camera1, camera2 = create_cameras_from_stereo_calibration(calibration_params, img1_array, img2_array)
+        export_cameras_to_cloudcompare([camera1, camera2], f"{OUTPUT_FOLDER}/camera_pyramids_{pair_name}", "ply")
+
     # filter pairs with mask
     from stereo.triangulation import filter_pairs_with_mask
     matches_im0_filtered, matches_im1_filtered = filter_pairs_with_mask(
@@ -90,11 +99,14 @@ def main():
 
     calibration_params = convert_calibration_parameters(calib_data, original_size=(1920, 1080))
     
+    
+    
     pair_folders = [f for f in os.listdir(INPUT_PAIR_FOLDER) if os.path.isdir(os.path.join(INPUT_PAIR_FOLDER, f))]
     for pair_folder in pair_folders:
         pair_folder_path = os.path.join(INPUT_PAIR_FOLDER, pair_folder)
         pair_name = pair_folder
-        process_pair(mast3r_engine, sam, calibration_params, pair_folder_path, pair_name)
+        process_pair(mast3r_engine, sam, calibration_params, pair_folder_path, pair_name, render_cameras=True)
+        
     
     
 if __name__ == "__main__":

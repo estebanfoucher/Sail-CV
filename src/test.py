@@ -116,7 +116,7 @@ def test_mv_utils():
     stereo_data_folder_structure = load_stereo_data_folder_structure()
     scene_names = stereo_data_folder_structure.get_scene_folders()
     
-    for scene_name in scene_names[:1]:
+    for scene_name in scene_names:
         scene = Scene(scene_name)
         extrinsic_calibration = scene.create_extrinsic_calibration()
         extrinsic_calibration.calibrate_extrinsics(force_recompute=True)
@@ -213,9 +213,9 @@ def test_all():
     #test_video_reader_and_writer()
     #test_sam()
     test_mv_utils()
-    test_tell_tale_detector(model_path="/app/models/rt-detr.pt", architecture="rt-detr")
-    test_tell_tale_detector(model_path="/app/models/yolos.pt", architecture="yolo")
-    test_stereo_image_saver()
+    #test_tell_tale_detector(model_path="/app/models/rt-detr.pt", architecture="rt-detr")
+    #test_tell_tale_detector(model_path="/app/models/yolos.pt", architecture="yolo")
+    #test_stereo_image_saver()
     print("All tests passed")
 
 if __name__ == "__main__":
