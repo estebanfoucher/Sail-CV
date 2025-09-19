@@ -10,13 +10,13 @@ def test_video_reader_and_writer():
     video_path = "/app/data/calibration_intrinsics_1/camera_1/GH010815.MP4"
     OUTPUT_FOLDER = "/app/output/tests/video_reader_and_writer"
     output_name = "output_test_video_reader_and_writer.mp4"
-    reader = VideoReader(video_path)
+    reader = VideoReader.open_video_file(video_path)
     output_path = os.path.join(OUTPUT_FOLDER, output_name)
     
     # Create output directory if it doesn't exist
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
     
-    writer = FFmpegVideoWriter(output_path, reader.fps, reader.frame_size)
+    writer = FFmpegVideoWriter(output_path, reader.specs.fps, reader.specs.resolution)
     
     frame_count = 10
         
@@ -29,10 +29,10 @@ def test_video_reader_and_writer():
     writer.release()
     
     # check output video has same size and fps as input video fps upt to 0.1
-    reader_output = VideoReader(output_path)
-    assert abs(reader_output.fps - reader.fps) < 0.1, f"Output video fps {reader_output.fps} is not the same as input video fps {reader.fps}"
-    assert reader_output.frame_size == reader.frame_size, f"Output video frame size {reader_output.frame_size} is not the same as input video frame size {reader.frame_size}"
-    assert reader_output.frame_count == frame_count, f"Output video frame count {reader_output.frame_count} is not the same as input video frame count {frame_count}"
+    reader_output = VideoReader.open_video_file(output_path)
+    assert abs(reader_output.specs.fps - reader.specs.fps) < 0.1, f"Output video fps {reader_output.specs.fps} is not the same as input video fps {reader.specs.fps}"
+    assert reader_output.specs.resolution == reader.specs.resolution, f"Output video frame size {reader_output.specs.resolution} is not the same as input video frame size {reader.specs.resolution}"
+    assert reader_output.specs.frame_count == frame_count, f"Output video frame count {reader_output.specs.frame_count} is not the same as input video frame count {frame_count}"
     reader_output.release()
     
     reader.release()
@@ -46,13 +46,13 @@ def test_sam():
     video_path = "/app/data/calibration_intrinsics_1/camera_1/GH010815.MP4"
     OUTPUT_FOLDER = "/app/output/tests/sam"
     output_name = "output_test_sam.mp4"
-    reader = VideoReader(video_path)
+    reader = VideoReader.open_video_file(video_path)
     output_path = os.path.join(OUTPUT_FOLDER, output_name)
     
     # Create output directory if it doesn't exist
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
     
-    writer = FFmpegVideoWriter(output_path, reader.fps, reader.frame_size)
+    writer = FFmpegVideoWriter(output_path, reader.specs.fps, reader.specs.resolution)
     
     frame_count = 10
     sam = SAM("FastSAM-x.pt")
@@ -82,13 +82,13 @@ def test_tell_tale_detector(model_path, architecture):
     video_path = "/app/data/calibration_intrinsics_1/camera_1/GH010815.MP4"
     OUTPUT_FOLDER = "/app/output/tests/tell_tale_detector"
     output_name = f"output_test_tell_tale_detector_{architecture}.mp4"
-    reader = VideoReader(video_path)
+    reader = VideoReader.open_video_file(video_path)
     output_path = os.path.join(OUTPUT_FOLDER, output_name)
     
     # Create output directory if it doesn't exist
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
     
-    writer = FFmpegVideoWriter(output_path, reader.fps, reader.frame_size)
+    writer = FFmpegVideoWriter(output_path, reader.specs.fps, reader.specs.resolution)
     
     frame_count = 10
     detector = TellTaleDetector(model_path=model_path, architecture=architecture)
@@ -110,25 +110,25 @@ def test_tell_tale_detector(model_path, architecture):
     reader.release()
     print("Test tell_tale_detector passed")
 
-def test_mv_utils():
-    from mv_utils import Scene, load_stereo_data_folder_structure
+
+def test_calibrate_intrinsics_scene():
+    from mv_utils import Scene, load_scene_folder_structure, IntrinsicCalibration, get_unique_video_name
+    scene_name = "scene_3"
+    stereo_data_folder_path = "../data/"
+    scene_folder_structure = load_scene_folder_structure(scene_name, stereo_data_folder_path)
+    calibration_folder_path = os.path.join(scene_folder_structure.folder_path, scene_folder_structure.get_calibration_intrinsics_folder_name())
     
-    stereo_data_folder_structure = load_stereo_data_folder_structure()
-    scene_names = stereo_data_folder_structure.get_scene_folders()
-    
-    for scene_name in scene_names:
-        scene = Scene(scene_name)
-        extrinsic_calibration = scene.create_extrinsic_calibration()
-        extrinsic_calibration.calibrate_extrinsics(force_recompute=True)
-        extrinsic_calibration.save_extrinsics_summary()
+    for camera_name in ["camera_1", "camera_2"]:
+        calibration_camera_path = os.path.join(calibration_folder_path, camera_name)
+        checkerboard_specs_path = os.path.join(calibration_camera_path, "checkerboard_specs.yml")
+        video_name = get_unique_video_name(calibration_camera_path)
+        video_path = os.path.join(calibration_camera_path, video_name)
+        save_path = os.path.join(calibration_folder_path, camera_name, f"intrinsics.json")
+        intrinsic_calibration = IntrinsicCalibration(video_path, checkerboard_specs_path, save_path)
+        intrinsic_calibration.calibrate(save_images=True)
+        print(f"Intrinsic calibration saved to {save_path}")
         
-        # Add explicit cleanup
-        extrinsic_calibration.cleanup()
-        
-        print(f"Scene {scene_name} passed")
-        
-    
-    
+
 
 def test_stereo_video_reader():
     from video import StereoVideoReader, FFmpegVideoWriter
@@ -162,7 +162,7 @@ def test_stereo_video_reader():
     combined_height, combined_width = test_combined_frame.shape[:2]
     combined_frame_size = (combined_width, combined_height)
     
-    writer = FFmpegVideoWriter(output_path, stereo_video_reader.video_1.fps, combined_frame_size)
+    writer = FFmpegVideoWriter(output_path, stereo_video_reader.video_1.specs.fps, combined_frame_size)
     writer.write(test_combined_frame)  # Write the first frame
     
     for i in range(start_frame + 1, start_frame + frame_count): 

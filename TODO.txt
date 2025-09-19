@@ -1,8 +1,21 @@
 Refacto :
-    - etre capable de mesher le pointcloud et le texturer avec image HD
-    - update the whole Readme
-    - fuse video utils 
-    - test orientation issue
-    - crash after several docker up (memory issue, clear gpu, cpu RAM...)
+
+    - fuse video utils & test orientation issue
+    
     - logs filter distance
+
     - make an isolate calibrate file
+
+    - pydantic BaseModel refactor input-outputs de modeles et de la calibration
+    - mettre des log debug dans loguru et mettre le level par defaut a info
+    
+    - mettre un .env qui est load dans le docker
+    - mettre un pyporject.toml
+    - commit master et mount
+    
+    - crash after several docker up (memory issue, clear gpu, cpu RAM...)
+    - integrate ruff
+
+    - update the whole Readme
+    - mask SAM on 2 images and take I
+    - web app

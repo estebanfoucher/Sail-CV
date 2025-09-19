@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import yaml
+import cv2
 from typing import Dict
 
 def load_parameters(specs_file: str) -> Dict:

@@ -139,27 +139,14 @@ class SceneFolderStructure(StereoDataFolderStructure):
             parameters = yaml.safe_load(f)
         return parameters["calibration_intrinsics_folder_name"]
            
-def load_stereo_data_folder_structure() -> StereoDataFolderStructure:
+def load_stereo_data_folder_structure(stereo_data_folder_path: str = None) -> StereoDataFolderStructure:
     """
     Load the stereo data folder structure from the config.json file.
     """
-    with open("config.json", "r") as f:
-        config = json.load(f)
-    STEREO_DATA_FOLDER_NAME = config["stereo_data_folder_name"]
-    stereo_data_folder_structure = StereoDataFolderStructure(STEREO_DATA_FOLDER_NAME)
+    stereo_data_folder_structure = StereoDataFolderStructure(stereo_data_folder_path)
     return stereo_data_folder_structure
 
-def load_scene_folder_structure(scene_name: str = None) -> SceneFolderStructure:
-    """
-    Load the scene folder structure from the config.json file.
-    """
-    with open("config.json", "r") as f:
-        config = json.load(f)
-    STEREO_DATA_FOLDER_NAME = config["stereo_data_folder_name"]
-    scene_folder_structure = SceneFolderStructure(STEREO_DATA_FOLDER_NAME, scene_name)
+def load_scene_folder_structure(scene_name: str = None, stereo_data_folder_path: str = None) -> SceneFolderStructure:
+    
+    scene_folder_structure = SceneFolderStructure(stereo_data_folder_path, scene_name)
     return scene_folder_structure
-
-if __name__ == "__main__":
-    with open("config.json", "r") as f:
-        scene_name = json.load(f)["scene_name"]
-    scene_folder_structure = load_scene_folder_structure(scene_name)

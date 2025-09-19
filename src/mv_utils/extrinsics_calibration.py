@@ -201,13 +201,14 @@ class StereoTagDetector:
             logger.debug("No matching tags found")
             return None, None, None
         
+        logger.debug(f"Found {len(matches)} matching tags")
         # Extract correspondences
         points_3d, points_2d_1, points_2d_2 = self.extract_correspondences(matches)
         
         if points_3d is None:
             logger.debug("No correspondences found")
             return None, None, None
-        
+
         return points_3d, points_2d_1, points_2d_2
     
     def cleanup(self):

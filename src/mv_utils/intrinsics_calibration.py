@@ -9,9 +9,7 @@ from loguru import logger
 import os
 from .utils import load_parameters
 import json
-with open("config.json", "r") as f:
-    config = json.load(f)
-TEMPORAL_CALIB_STEP_SEC = config["temporal_calib_step_sec"]
+
 
 def find_corners_in_images(image_numbers_list: List[int], video: Video, pattern_size: Tuple[int, int], 
                           square_size: float) -> Tuple[List, List, List]:
@@ -79,26 +77,35 @@ class IntrinsicCalibration:
         self.video_path = video_path
         self.checkerboard_specs_path = checkerboard_specs_path
         self.save_path = save_path
-        self.video = Video(video_path)
+        # Use VideoReader to load video specs and keep VideoReader for frame extraction
+        from video import VideoReader
+        self.video_reader = VideoReader.open_video_file(video_path)
+        self.video = self.video_reader.video
         self.checkerboard_specs = load_parameters(checkerboard_specs_path)
         logger.debug(f"Checkerboard specs: {self.checkerboard_specs}")
         self.image_numbers_list = self.get_image_numbers_list()
         logger.debug(f"Image numbers list: {self.image_numbers_list}")
     
+    
     def calibrate(self, save_images: bool = False):
-        object_points, image_points, successful_images = find_corners_in_images(self.image_numbers_list, self.video, (self.checkerboard_specs["inner_corners_x"], self.checkerboard_specs["inner_corners_y"]), self.checkerboard_specs["square_size_mm"])
-        camera_matrix, dist_coeffs, reprojection_error = calibrate_camera(object_points, image_points, self.video.get_resolution())
+        object_points, image_points, successful_images = find_corners_in_images(self.image_numbers_list, self.video_reader, (self.checkerboard_specs["inner_corners_x"], self.checkerboard_specs["inner_corners_y"]), self.checkerboard_specs["square_size_mm"])
+        camera_matrix, dist_coeffs, reprojection_error = calibrate_camera(object_points, image_points, self.video.resolution)
         self.save_calibration(camera_matrix, dist_coeffs, reprojection_error, successful_images, save_images)
         logger.debug(f"Calibration results saved to {self.save_path}")
         return camera_matrix, dist_coeffs, reprojection_error
 
+    def cleanup(self):
+        """Release video reader resources"""
+        if hasattr(self, 'video_reader') and self.video_reader is not None:
+            self.video_reader.release()
+            self.video_reader = None
     
-    def get_image_numbers_list(self) -> List[int]:
+    def get_image_numbers_list(self, temporal_calib_step_sec: float = 1) -> List[int]:
         """Get the list of image numbers from the video."""
-        fps = self.video.get_fps()
+        fps = self.video.fps
         # Convert FPS to integer step value for sampling frames
-        step = int(fps*TEMPORAL_CALIB_STEP_SEC) if fps > 0 else 1
-        return list(range(self.video.get_frame_count()))[::step]
+        step = int(fps*temporal_calib_step_sec) if fps > 0 else 1
+        return list(range(self.video.frame_count))[::step]
     
     def save_calibration(self, camera_matrix: np.ndarray, dist_coeffs: np.ndarray, reprojection_error: float, successful_images: List[int], save_images: bool = False):
         """Save the calibration results to a file."""
@@ -136,24 +143,3 @@ class IntrinsicCalibration:
             
         print(f"Successfully saved {len(successful_images)} images to {save_dir}")
             
-def test_calibrate_intrinsics_scene():
-    with open("config.json", "r") as f:
-        scene_name = json.load(f)["scene_name"]
-    scene_folder_structure = load_scene_folder_structure(scene_name)
-    calibration_folder_path = os.path.join(scene_folder_structure.folder_path, scene_folder_structure.get_calibration_intrinsics_folder_name())
-    
-    for camera_name in ["camera_1", "camera_2"]:
-        calibration_camera_path = os.path.join(calibration_folder_path, camera_name)
-        checkerboard_specs_path = os.path.join(calibration_camera_path, "checkerboard_specs.yml")
-        video_name = get_unique_video_name(calibration_camera_path)
-        video_path = os.path.join(calibration_camera_path, video_name)
-        save_path = os.path.join(calibration_folder_path, camera_name, f"intrinsics.json")
-        intrinsic_calibration = IntrinsicCalibration(video_path, checkerboard_specs_path, save_path)
-        intrinsic_calibration.calibrate(save_images=True)
-        print(f"Intrinsic calibration saved to {save_path}")
-    
-def main():
-    test_calibrate_intrinsics_scene()
-    
-if __name__ == "__main__":
-    main()
