@@ -1,21 +1,21 @@
 Refacto :
 
-    - fuse video utils & test orientation issue
-    
-    - logs filter distance
-
-    - make an isolate calibrate file
-
-    - pydantic BaseModel refactor input-outputs de modeles et de la calibration
-    - mettre des log debug dans loguru et mettre le level par defaut a info
-    
     - mettre un .env qui est load dans le docker
     - mettre un pyporject.toml
-    - commit master et mount
-    
-    - crash after several docker up (memory issue, clear gpu, cpu RAM...)
+
+    - logs filter distance
+
     - integrate ruff
 
-    - update the whole Readme
+    - pydantic BaseModel refactor input-outputs de modeles et de la calibration
+
+    - test image orientation issue test camera matrix convention test rgb image
+
+    - mettre des log debug dans loguru et mettre le level par defaut a info
+
+    - crash after several docker up (memory issue, clear gpu, cpu RAM...)
+
     - mask SAM on 2 images and take I
     - web app
+
+    - update the whole Readme

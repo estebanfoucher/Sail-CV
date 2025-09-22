@@ -1,0 +1,22 @@
+{
+  "summary": {
+    "num_matches": 391,
+    "camera_validation": true,
+    "point_cloud_1_shape": [
+      512,
+      336,
+      3
+    ],
+    "point_cloud_2_shape": [
+      272,
+      512,
+      3
+    ]
+  },
+  "files_generated": {
+    "point_cloud_1_ply": "point_clouds/point_cloud_1.ply",
+    "point_cloud_2_ply": "point_clouds/point_cloud_2.ply",
+    "camera_params_json": "camera_params.json",
+    "pixel_pairs_json": "matches/pixel_pairs.json"
+  }
+}

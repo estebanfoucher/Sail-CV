@@ -19,46 +19,55 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 RUN mkdir -p /app/checkpoints /app/tmp/mast3r_test /app/tmp/mast3r_output
 
-# Clone MASt3R repository to /app/mast3r for dependencies
-RUN git clone --recursive https://github.com/naver/mast3r /app/mast3r
+# Copy project files for dependency installation
+COPY pyproject.toml uv.lock* README.md /app/
+COPY mast3r/ /app/mast3r/
+COPY src/ /app/src/
+
+# Install mast3r dependencies first
+WORKDIR /app/mast3r
+RUN uv pip install --system -r requirements.txt
+
+# Install dust3r dependencies (includes PyTorch)
 WORKDIR /app/mast3r/dust3r
 RUN uv pip install --system -r requirements.txt
+
+# Install main project dependencies
+WORKDIR /app
+RUN uv pip install --system -e .
+
+# Install setuptools explicitly for building extensions
+RUN uv pip install --system setuptools
+
+# Build crope extension
+WORKDIR /app/mast3r/dust3r/croco/models/curope/
+RUN python3 setup.py build_ext --inplace
 
 # Install ffmpeg
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
 # Install VPI via apt (NVIDIA's Vision Programming Interface)
-RUN apt-key adv --fetch-key https://repo.download.nvidia.com/jetson/jetson-ota-public.asc && \
-    add-apt-repository "deb https://repo.download.nvidia.com/jetson/common r36.4 main" && \
-    apt-get update && apt-get install -y --no-install-recommends \
-      libegl1-mesa \
-      libnvvpi3 vpi3-dev vpi3-samples python3.10-vpi3 && \
-    add-apt-repository -r "deb https://repo.download.nvidia.com/jetson/common r36.4 main" && \
-    rm -rf /var/lib/apt/lists/* && \
-    apt-get clean
+# RUN apt-key adv --fetch-key https://repo.download.nvidia.com/jetson/jetson-ota-public.asc && \
+#    add-apt-repository "deb https://repo.download.nvidia.com/jetson/common r36.4 main" && \
+#        apt-get update && apt-get install -y --no-install-recommends \
+#      libegl1-mesa \
+#      libnvvpi3 vpi3-dev vpi3-samples python3.10-vpi3 && \
+#    add-apt-repository -r "deb https://repo.download.nvidia.com/jetson/common r36.4 main" && \
+#    rm -rf /var/lib/apt/lists/* && \
+#    apt-get clean
 
-# Skip requirements_optional.txt - not needed for basic inference
-RUN uv pip install --system opencv-python==4.8.0.74 pupil-apriltags loguru ultralytics
 
-WORKDIR /app/mast3r/dust3r/croco/models/curope/
-RUN python3 setup.py build_ext --inplace
-
-WORKDIR /app/mast3r
-RUN uv pip install --system -r requirements.txt
-
-# Download model checkpoint
-RUN wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth -P /app/checkpoints/
+# copy checkpoint folder
+COPY --chown=app_user:app_user ../checkpoints /app/checkpoints/
 
 # Create non-root user for better security and file management
 RUN useradd -m -u 1000 app_user && \
     usermod -aG sudo app_user
 
-# Change ownership of directories before copying files
-RUN chown app_user:app_user /app/checkpoints && \
-    chown app_user:app_user /app/tmp
-
-# Copy the refactored source code
-COPY --chown=app_user:app_user src/ /app/src/
+# Change ownership of directories
+RUN chown -R app_user:app_user /app/checkpoints && \
+    chown -R app_user:app_user /app/tmp && \
+    chown -R app_user:app_user /app/src
 
 # Set working directory to src
 WORKDIR /app/src

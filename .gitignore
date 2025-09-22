@@ -1,37 +1,197 @@
+# Restrictive approach: ignore everything by default, then explicitly allow
 *
 !.gitignore
-!Readme.md
+!README.md
+!DEVELOPMENT.md
 
+# Source code
 !src/
 !src/**
 
-# ignore all pycache folders and files
-*.pyc
-
-*__pycache__*
-
+# Docker configuration
 !docker/
 !docker/**
 
+# Project configuration
 !pyproject.toml
+!uv.lock
+!requirements-dev.txt
+!Makefile
 
+# Development scripts
+!scripts/
+!scripts/**
+
+# Documentation and project files
+!TODO.txt
 !launch.sh
-
 !config.json
 
-# ignore all files in src/cameras/test_assets/camera_pyramids/
+# External dependencies (MASt3R)
+!mast3r/
+!mast3r/**
+
+# Pre-commit configuration
+!.pre-commit-config.yaml
+
+# ===========================================
+# EXCLUSIONS - Files/directories to ignore
+# ===========================================
+
+# Model files and checkpoints (large binary files)
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+*.h5
+*.pkl
+*.pickle
+*.joblib
+checkpoints/
+models/
+weights/
+
+# Data directories (input data, not tracked)
+data/
+datasets/
+raw_data/
+
+# Output directories (generated content)
+output/
+results/
+logs/
+tmp/
+temp/
+.tmp/
+
+# Python cache and compiled files
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+.venv
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# MyPy cache
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Ruff cache
+.ruff_cache/
+
+# Pre-commit cache
+.pre-commit-cache/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Large media files (images, videos, audio)
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.wmv
+*.flv
+*.webm
+*.m4v
+*.3gp
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.svg
+*.webp
+*.heic
+*.heif
+*.raw
+*.cr2
+*.nef
+*.arw
+*.dng
+
+# Archive files
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+*.bz2
+*.xz
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files
+*.log
+*.out
+*.err
+
+# Specific exclusions for test assets
 src/cameras/test_assets/camera_pyramids/**
 
-# MAST3R Docker files - track source code but exclude large binaries
-!mast3r/
-!docker_mast3r/
-!docker_mast3r/src/
-!docker_mast3r/src/*.py
+# Docker volumes and data
+docker/data/
+docker/volumes/
 
-!docker_mast3r/*.Dockerfile
-!docker_mast3r/*.yml
+# Environment-specific files
+.env.local
+.env.development
+.env.production
+.env.test
 
-# all .pt files
-*.pt
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
 
-!TODO.txt
+# Temporary files
+*.tmp
+*.temp
+.cache/

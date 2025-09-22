@@ -6,17 +6,25 @@ with existing code while the main video functionality has been moved to video.py
 """
 
 # Re-export main video classes for backward compatibility
-import sys
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from video import Video, VideoReader, StereoVideoReader, FFmpegVideoWriter, FrameExtractor, get_unique_video_name
+from video import (
+    FFmpegVideoWriter,
+    FrameExtractor,
+    StereoVideoReader,
+    Video,
+    VideoReader,
+    get_unique_video_name,
+)
 
 # Keep the module clean - all functionality is now in video.py
 __all__ = [
-    "Video",
-    "VideoReader", 
-    "StereoVideoReader",
     "FFmpegVideoWriter",
     "FrameExtractor",
-    "get_unique_video_name"
+    "StereoVideoReader",
+    "Video",
+    "VideoReader",
+    "get_unique_video_name",
 ]

@@ -43,4 +43,3 @@ The application will:
 ## Output
 - Extracted frames saved as JPEG images
 - Files persist in the `output/` directory after container stops
-
