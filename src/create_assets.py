@@ -30,7 +30,7 @@ def save_asset(save_asset_dict):
         scene = Scene(scene_name, stereo_data_folder_path)
         video_paths = scene.get_video_paths()
         sync_frame_offset = scene.sync_frame_offset
-        
+
         stereo_video_reader = StereoVideoReader(
             video_paths["camera_1"],
             video_paths["camera_2"],
@@ -38,16 +38,15 @@ def save_asset(save_asset_dict):
             start_video_2_frame=scene_data["camera_1_start_frame_number"]
             - sync_frame_offset,
         )
-        
+
         resolution_1 = stereo_video_reader.video_1.specs.resolution
         if resolution_1[0] < resolution_1[1]:
             resolution_1 = (resolution_1[1], resolution_1[0])
-        
+
         resolution_2 = stereo_video_reader.video_2.specs.resolution
         if resolution_2[0] < resolution_2[1]:
             resolution_2 = (resolution_2[1], resolution_2[0])
-        
-        
+
         os.makedirs(
             os.path.join(assets_folder_path, scene_name, "camera_1"), exist_ok=True
         )
