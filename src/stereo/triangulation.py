@@ -1,17 +1,3 @@
-#!/usr/bin/env python3
-"""
-Triangulation script for MAST3R matches using OpenCV triangulatePoints.
-
-This script reads the matches from MAST3R output and the converted calibration
-parameters to triangulate 3D points and export them as a PLY file.
-
-Usage:
-    python triangulate_matches.py <matches_file> <calibration_file> <output_ply> [d]
-    python triangulate_matches.py /mast3r/tmp/mast3r_output/matches /mast3r/tmp/mast3r_output/extrinsics_calibration_512x288.json /mast3r/tmp/mast3r_output/triangulated_points.ply 5.0
-    # Alternatively, set env TRIANGULATE_D to apply bounds filtering on x,y,z in [-d, d]
-    # Default: d=10.0 if not provided
-"""
-
 import json
 
 import cv2

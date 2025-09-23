@@ -52,7 +52,7 @@ def save_point_cloud_ply(
             )
 
     logger.debug(
-        f"Point cloud saved to {filename} with {len(points_valid)} points (filtered by distance > {bound_distance})"
+        f"Point cloud saved to {filename} with {len(points_valid)} points (filtered by distance < {bound_distance})"
     )
 
 
