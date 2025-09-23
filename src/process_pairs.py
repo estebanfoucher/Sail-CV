@@ -26,7 +26,7 @@ INPUT_PAIR_FOLDER = PROJECT_ROOT / "tmp" / "pairs" / "scene_8"
 INPUT_CALIBRATION_FOLDER = PROJECT_ROOT / "tmp" / "pairs" / "scene_8"
 OUTPUT_FOLDER = PROJECT_ROOT / "output" / "scene_8"
 RENDER_CAMERAS = True
-SUBSAMPLE = 4
+SUBSAMPLE = 8
 
 
 def process_pair(

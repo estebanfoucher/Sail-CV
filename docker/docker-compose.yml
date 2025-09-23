@@ -8,14 +8,27 @@ services:
     environment:
       - DEVICE=cuda
       - MODEL=${MODEL:-MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth}
+      - CUDA_MEMORY_FRACTION=0.8
     volumes:
-      - ../models:/app/models:ro
       - ../tmp:/app/tmp:rw
       - ../data:/app/data:rw
       - ../output:/app/output:rw
+      - ../checkpoints:/app/checkpoints:ro
       - ../src:/app/src:rw
     cap_add:
       - IPC_LOCK
       - SYS_RESOURCE
     runtime: nvidia
     user: "1000:1000"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+              options:
+                memory: 2048

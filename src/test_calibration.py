@@ -13,18 +13,33 @@ def test_calibrate_intrinsics_scene():
     # Create scene and calibrate intrinsics for both cameras
     scene = Scene(scene_name, stereo_data_folder_path)
 
-    # Calibrate intrinsics for both cameras
-    scene.calibrate_all_intrinsics()
+    # Create calibration object and compute intrinsics for both cameras
+    scene.create_calibration()
 
-    # Verify that intrinsics files were created
-    for camera_name in ["camera_1", "camera_2"]:
-        intrinsics_path = (
-            Path(scene.scene_folder_structure.folder_path)
-            / scene.scene_folder_structure.get_calibration_intrinsics_folder_name()
-            / camera_name
-            / "intrinsics.json"
-        )
-        assert intrinsics_path.exists(), f"Intrinsics file not found for {camera_name}"
-        print(f"Intrinsic calibration saved to {intrinsics_path}")
+    # Create output directories
+    output_dir = project_root / "output" / "tests" / "compute_intrinsics"
+    (output_dir / "camera_1").mkdir(parents=True, exist_ok=True)
+    (output_dir / "camera_2").mkdir(parents=True, exist_ok=True)
+
+    scene.calibration._compute_intrinsics(
+        "camera_1",
+        save_path=str(output_dir / "camera_1" / "intrinsics.json"),
+        temporal_calib_step_sec=10,
+    )
+    scene.calibration._compute_intrinsics(
+        "camera_2",
+        save_path=str(output_dir / "camera_2" / "intrinsics.json"),
+        temporal_calib_step_sec=10,
+    )
+
+    assert (output_dir / "camera_1" / "intrinsics.json").exists(), (
+        "Intrinsics file not found for camera 1"
+    )
+    assert (output_dir / "camera_2" / "intrinsics.json").exists(), (
+        "Intrinsics file not found for camera 2"
+    )
+
+    # Cleanup resources
+    scene.cleanup()
 
     print("Intrinsic calibration test passed")

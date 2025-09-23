@@ -1,6 +1,7 @@
 import os
 
 import yaml
+from loguru import logger
 
 
 class StereoDataFolderStructure:
@@ -157,7 +158,6 @@ class StereoDataFolderStructure:
                 )
             else:
                 raise ValueError(f"Subfolder {subfolder} has an invalid name")
-        print(f"{name} folder structure valid")
 
 
 class SceneFolderStructure(StereoDataFolderStructure):
@@ -173,6 +173,7 @@ class SceneFolderStructure(StereoDataFolderStructure):
             scene_name,
             self.get_calibration_intrinsics_folder_name(),
         ]
+        logger.debug(f"{self.scene_name} folder structure loaded")
 
     def get_calibration_intrinsics_folder_name(self):
         with open(

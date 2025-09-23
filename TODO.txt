@@ -1,13 +1,10 @@
 Refacto :
 
-    - mettre un .env qui est load dans le docker
-    - mettre un pyporject.toml
+    - to run : tests out and in docker + in docker 3 scripts
 
     - logs filter distance
 
-    - integrate ruff
-
-    - pydantic BaseModel refactor input-outputs de modeles et de la calibration
+    - option : pydantic BaseModel refactor input-outputs de modeles et de la calibration
 
     - test image orientation issue test camera matrix convention test rgb image
 
@@ -16,6 +13,9 @@ Refacto :
     - crash after several docker up (memory issue, clear gpu, cpu RAM...)
 
     - mask SAM on 2 images and take I
+
     - web app
 
     - update the whole Readme
+
+    - create minimal assets

@@ -17,12 +17,10 @@ RUN apt-get update && apt-get install -y \
 
 # Create app directory structure
 WORKDIR /app
-RUN mkdir -p /app/checkpoints /app/tmp/mast3r_test /app/tmp/mast3r_output
 
 # Copy project files for dependency installation
 COPY pyproject.toml uv.lock* README.md /app/
 COPY mast3r/ /app/mast3r/
-COPY src/ /app/src/
 
 # Install mast3r dependencies first
 WORKDIR /app/mast3r
@@ -56,24 +54,25 @@ RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 #    rm -rf /var/lib/apt/lists/* && \
 #    apt-get clean
 
-
-# copy checkpoint folder
-COPY --chown=app_user:app_user ../checkpoints /app/checkpoints/
-
 # Create non-root user for better security and file management
 RUN useradd -m -u 1000 app_user && \
     usermod -aG sudo app_user
 
-# Change ownership of directories
-RUN chown -R app_user:app_user /app/checkpoints && \
-    chown -R app_user:app_user /app/tmp && \
-    chown -R app_user:app_user /app/src
+# Create directories first
+RUN mkdir -p /app/tmp /app/output
+
+# Copy source files
+COPY src/ /app/src/
+
+# Set proper ownership and permissions for all directories
+RUN chown -R app_user:app_user /app/tmp /app/src /app/output && \
+    chmod -R 755 /app/tmp /app/output
 
 # Set working directory to src
 WORKDIR /app/src
 
-# Add mast3r to Python path
-ENV PYTHONPATH="/app/mast3r:$PYTHONPATH"
+# Add mast3r and dust3r to Python path
+ENV PYTHONPATH="/app/mast3r:/app/mast3r/dust3r:$PYTHONPATH"
 
 # Set Ultralytics config directory to avoid warnings
 ENV YOLO_CONFIG_DIR="/app/"

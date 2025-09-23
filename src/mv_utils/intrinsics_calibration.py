@@ -83,9 +83,15 @@ def calibrate_camera(
 
 
 class IntrinsicCalibration:
-    def __init__(self, video_path: str, checkerboard_specs_path: str, save_path: str):
+    def __init__(
+        self,
+        video_path: str,
+        checkerboard_specs_path: str,
+        save_path: str,
+        temporal_calib_step_sec: float = 1,
+    ):
         logger.debug(
-            f"Initializing IntrinsicCalibration with video_path: {video_path}, checkerboard_specs_path: {checkerboard_specs_path}, save_path: {save_path}"
+            f"Initializing IntrinsicCalibration with video_path: {video_path}, checkerboard_specs_path: {checkerboard_specs_path}, save_path: {save_path}, temporal_calib_step_sec: {temporal_calib_step_sec}"
         )
         self.video_path = video_path
         self.checkerboard_specs_path = checkerboard_specs_path
@@ -97,7 +103,7 @@ class IntrinsicCalibration:
         self.video = self.video_reader.video
         self.checkerboard_specs = load_parameters(checkerboard_specs_path)
         logger.debug(f"Checkerboard specs: {self.checkerboard_specs}")
-        self.image_numbers_list = self.get_image_numbers_list()
+        self.image_numbers_list = self.get_image_numbers_list(temporal_calib_step_sec)
         logger.debug(f"Image numbers list: {self.image_numbers_list}")
 
     def calibrate(self, save_images: bool = False):
@@ -144,7 +150,7 @@ class IntrinsicCalibration:
             self.video_reader.release()
             self.video_reader = None
 
-    def get_image_numbers_list(self, temporal_calib_step_sec: float = 1) -> list[int]:
+    def get_image_numbers_list(self, temporal_calib_step_sec: float) -> list[int]:
         """Get the list of image numbers from the video."""
         fps = self.video.fps
         # Convert FPS to integer step value for sampling frames

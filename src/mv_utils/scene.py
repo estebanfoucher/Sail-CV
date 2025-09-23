@@ -73,6 +73,7 @@ class Scene:
             parameters=self.parameters,
             sync_frame_offset=self.sync_frame_offset,
         )
+        return self.calibration
 
     def cleanup(self):
         """Explicitly cleanup resources to avoid segmentation faults."""
@@ -326,7 +327,12 @@ class Calibration:
             self.video_reader_2.release()
             self.video_reader_2 = None
 
-    def _compute_intrinsics(self, camera_name: str):
+    def _compute_intrinsics(
+        self,
+        camera_name: str,
+        save_path: str | None = None,
+        temporal_calib_step_sec: float = 1,
+    ):
         """Run intrinsic calibration for a single camera and save results."""
         calibration_folder_path = os.path.join(
             self.scene_folder_structure.folder_path,
@@ -338,12 +344,17 @@ class Calibration:
         )
         video_name = get_unique_video_name(calibration_camera_path)
         video_path = os.path.join(calibration_camera_path, video_name)
-        save_path = os.path.join(
-            calibration_folder_path, camera_name, "intrinsics.json"
-        )
+
+        if save_path is None:
+            save_path = os.path.join(
+                calibration_folder_path, camera_name, "intrinsics.json"
+            )
+        # If save_path is provided, ensure it's a file path, not a directory
+        elif os.path.isdir(save_path) or not save_path.endswith(".json"):
+            save_path = os.path.join(save_path, "intrinsics.json")
 
         intrinsic_calibration = IntrinsicCalibration(
-            video_path, checkerboard_specs_path, save_path
+            video_path, checkerboard_specs_path, save_path, temporal_calib_step_sec
         )
         camera_matrix, dist_coeffs, reprojection_error = (
             intrinsic_calibration.calibrate(save_images=False)

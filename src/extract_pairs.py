@@ -35,7 +35,7 @@ def apply_exif_transpose_cv2(frame):
     corrected_pil = exif_transpose(pil_image)
 
     # Convert back to RGB numpy array
-    corrected_rgb = np.array(corrected_pil)
+    corrected_rgb = np.asarray(corrected_pil)
 
     # Convert RGB back to BGR for OpenCV
     corrected_bgr = cv2.cvtColor(corrected_rgb, cv2.COLOR_RGB2BGR)
@@ -48,6 +48,8 @@ def extract_pairs(scene_name, frame_to_save_number_list, output_folder):
     video_paths = scene.get_video_paths()
     sync_frame_offset = scene.sync_frame_offset
 
+    # Ensure the output folder exists
+    os.makedirs(output_folder, exist_ok=True)
     os.makedirs(os.path.join(output_folder, f"{scene_name}"), exist_ok=True)
 
     # Create StereoVideoReader once and reuse it for all frames
@@ -85,8 +87,8 @@ def extract_pairs(scene_name, frame_to_save_number_list, output_folder):
     # Release the video reader once at the end
     stereo_video_reader.release()
 
-    calibration_instance = scene.create_calibration()
-    calibration = calibration_instance.load_calibration()
+    scene.create_calibration()
+    calibration = scene.calibration.load_calibration()
 
     with open(
         os.path.join(output_folder, f"{scene_name}", "calibration.json"), "w"
