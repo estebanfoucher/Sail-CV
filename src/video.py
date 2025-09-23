@@ -162,7 +162,7 @@ class VideoReader:
             # Apply EXIF transpose and ensure landscape orientation
             corrected_frame = self._ensure_landscape_orientation(frame)
             return ret, corrected_frame
-        return ret, frame
+        return ret, corrected_frame
 
     def _ensure_landscape_orientation(self, frame: np.ndarray) -> np.ndarray:
         """Ensure frame is in landscape orientation (width >= height)"""
@@ -194,7 +194,6 @@ class VideoReader:
             ret, frame = self.read(frame_number)
             if not ret:
                 break
-            frame = self._ensure_landscape_orientation(frame)
 
             frames.append(frame)
 

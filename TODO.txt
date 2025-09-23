@@ -1,18 +1,15 @@
 Refacto :
 
-    - get sam from checkpoints/
-
-    - mask SAM on 2 images and take I
-
     - create minimal assets
+
+
+    - crash docker (memory issues...) # will be resolved by -> fp16 model + FastSAM-s.pt
 
     - test image orientation issue test camera matrix convention test rgb image
 
-    - mettre des log debug dans loguru et mettre le level par defaut a info
-
-    - crash docker (memory issues...)
-
     - web app
+
+    - mettre des log debug dans loguru et mettre le level par defaut a info via .env
 
     - update the whole Readme
 

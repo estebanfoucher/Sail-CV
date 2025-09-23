@@ -31,6 +31,9 @@
 !mast3r/
 !mast3r/**
 
+!assets/
+!assets/**
+
 # Pre-commit configuration
 !.pre-commit-config.yaml
 
@@ -125,7 +128,8 @@ ehthumbs.db
 Thumbs.db
 
 # Large media files (images, videos, audio)
-*.mp4
+*.mp4 # except those in assets/
+!assets/**/*.mp4
 *.avi
 *.mov
 *.mkv
