@@ -59,14 +59,14 @@ RUN useradd -m -u 1000 app_user && \
     usermod -aG sudo app_user
 
 # Create directories first
-RUN mkdir -p /app/tmp /app/output
+RUN mkdir -p /app/output
 
 # Copy source files
 COPY src/ /app/src/
 
 # Set proper ownership and permissions for all directories
-RUN chown -R app_user:app_user /app/tmp /app/src /app/output && \
-    chmod -R 755 /app/tmp /app/output
+RUN chown -R app_user:app_user /app/src /app/output && \
+    chmod -R 755 /app/output
 
 # Set working directory to src
 WORKDIR /app/src

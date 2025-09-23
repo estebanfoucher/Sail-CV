@@ -12,7 +12,7 @@ from video import StereoVideoReader
 scene_name = "scene_8"
 stereo_data_folder_path = "../data/"
 frame_to_save_number_list = [4900, 4910, 4920, 4930, 4940, 4950, 4960]
-output_folder = "../tmp/pairs"
+output_folder = "../output/extracted_pairs"
 
 
 def apply_exif_transpose_cv2(frame):

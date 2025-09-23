@@ -61,9 +61,7 @@ raw_data/
 output/
 results/
 logs/
-tmp/
 temp/
-.tmp/
 
 # Python cache and compiled files
 *.pyc

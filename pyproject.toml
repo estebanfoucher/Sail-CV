@@ -99,7 +99,6 @@ exclude = [
     "mast3r",  # External dependency
     "checkpoints",  # Model files
     "output",  # Generated output
-    "tmp",  # Temporary files
 ]
 
 # Same as Black.

@@ -1,16 +1,14 @@
 Refacto :
 
-    - to run : tests out and in docker + in docker 3 scripts
+    - get sam from checkpoints/
 
     - logs filter distance
-
-    - option : pydantic BaseModel refactor input-outputs de modeles et de la calibration
 
     - test image orientation issue test camera matrix convention test rgb image
 
     - mettre des log debug dans loguru et mettre le level par defaut a info
 
-    - crash after several docker up (memory issue, clear gpu, cpu RAM...)
+    - crash docker (memory issues...)
 
     - mask SAM on 2 images and take I
 
@@ -19,3 +17,5 @@ Refacto :
     - update the whole Readme
 
     - create minimal assets
+
+    - option : pydantic BaseModel refactor input-outputs de modeles, images

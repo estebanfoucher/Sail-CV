@@ -22,8 +22,8 @@ MODEL_PATH = (
     / "checkpoints"
     / "MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth"
 )
-INPUT_PAIR_FOLDER = PROJECT_ROOT / "tmp" / "pairs" / "scene_8"
-INPUT_CALIBRATION_FOLDER = PROJECT_ROOT / "tmp" / "pairs" / "scene_8"
+INPUT_PAIR_FOLDER = PROJECT_ROOT / "output" / "extracted_pairs" / "scene_8"
+INPUT_CALIBRATION_FOLDER = PROJECT_ROOT / "output" / "extracted_pairs" / "scene_8"
 OUTPUT_FOLDER = PROJECT_ROOT / "output" / "scene_8"
 RENDER_CAMERAS = True
 SUBSAMPLE = 8

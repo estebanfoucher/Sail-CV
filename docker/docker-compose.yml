@@ -10,7 +10,6 @@ services:
       - MODEL=${MODEL:-MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth}
       - CUDA_MEMORY_FRACTION=0.8
     volumes:
-      - ../tmp:/app/tmp:rw
       - ../data:/app/data:rw
       - ../output:/app/output:rw
       - ../checkpoints:/app/checkpoints:ro
