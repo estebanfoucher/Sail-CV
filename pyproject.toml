@@ -13,12 +13,10 @@ dependencies = [
     "torch>=2.0.0",
     "torchvision>=0.15.0",
     "opencv-python==4.8.0.74",
-    "numpy<2.0.0",  # Compatibility with OpenCV and other packages
-
+    "numpy<2.0.0", # Compatibility with OpenCV and other packages
     # Logging and utilities
     "loguru>=0.7.0",
     "tqdm>=4.65.0",
-
     # Computer vision and 3D processing
     "ultralytics>=8.0.0",
     "scikit-learn>=1.3.0",
@@ -26,23 +24,20 @@ dependencies = [
     "matplotlib>=3.7.0",
     "trimesh>=3.23.0",
     "einops>=0.7.0",
-
     # MASt3R/Dust3R dependencies
     "roma>=1.0.0",
     "huggingface-hub[torch]>=0.22.0",
     "tensorboard>=2.13.0",
     "pyglet<2.0.0",
-
     # Web interface
     "gradio>=3.40.0",
-
     # Optional dependencies for advanced features
-    "pillow-heif>=0.10.0",  # HEIF/HEIC image support
+    "pillow-heif>=0.10.0", # HEIF/HEIC image support
     "numpy-quaternion>=2023.1.0",
-
     # Additional utilities
     "pupil-apriltags>=1.0.0",
-    "setuptools>=65.0.0",  # Required for building extensions
+    "setuptools>=65.0.0", # Required for building extensions
+    "pytest>=8.4.2",
 ]
 
 [tool.hatch.build.targets.wheel]

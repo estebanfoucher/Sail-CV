@@ -84,7 +84,9 @@ def test_sam():
     )
 
     frame_count = 10
-    sam = SAM("FastSAM-x.pt")
+    SAM_MODEL_PATH = project_root / "checkpoints" / "FastSAM-x.pt"
+    sam = SAM(SAM_MODEL_PATH)
+    sam = SAM()
 
     def process_frame(frame):
         point = (1400, 540)

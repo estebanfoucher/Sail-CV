@@ -151,7 +151,7 @@ def extract_colors_from_image(points1, image):
     return colors_array
 
 
-def filter_pairs_with_mask(points1, points2, mask):
+def filter_pairs_with_mask(points1, points2, mask, camera=1):
     """
     Filter point pairs based on segmentation mask.
 
@@ -159,6 +159,7 @@ def filter_pairs_with_mask(points1, points2, mask):
         points1: 2D points in image 1 (Nx2)
         points2: 2D points in image 2 (Nx2)
         mask: Segmentation mask (HxW) with values > 0 indicating valid regions
+        camera: Camera number (1 or 2) to determine which points to filter
 
     Returns:
         tuple: (filtered_points1, filtered_points2) containing only points inside mask
@@ -167,15 +168,23 @@ def filter_pairs_with_mask(points1, points2, mask):
         logger.warning("No mask provided, returning all points")
         return points1, points2
 
+    # Select which points to check based on camera argument
+    if camera == 1:
+        points_to_check = points1
+    elif camera == 2:
+        points_to_check = points2
+    else:
+        raise ValueError("Camera argument must be 1 or 2")
+
     # Convert points to integers
-    points1_int = points1.astype(int)
+    points_int = points_to_check.astype(int)
 
     # Ensure coordinates are within mask bounds
-    points1_int[:, 0] = np.clip(points1_int[:, 0], 0, mask.shape[1] - 1)
-    points1_int[:, 1] = np.clip(points1_int[:, 1], 0, mask.shape[0] - 1)
+    points_int[:, 0] = np.clip(points_int[:, 0], 0, mask.shape[1] - 1)
+    points_int[:, 1] = np.clip(points_int[:, 1], 0, mask.shape[0] - 1)
 
     # Check which points are inside the mask
-    mask_values = mask[points1_int[:, 1], points1_int[:, 0]]
+    mask_values = mask[points_int[:, 1], points_int[:, 0]]
     inside_mask = mask_values > 0
 
     # Filter both point sets
@@ -183,7 +192,7 @@ def filter_pairs_with_mask(points1, points2, mask):
     filtered_points2 = points2[inside_mask]
 
     logger.debug(
-        f"Filtered pairs: {len(filtered_points1)} out of {len(points1)} points inside mask"
+        f"Filtered pairs (camera {camera}): {len(filtered_points1)} out of {len(points1)} points inside mask"
     )
 
     return filtered_points1, filtered_points2

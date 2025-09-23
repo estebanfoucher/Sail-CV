@@ -2,7 +2,9 @@ Refacto :
 
     - get sam from checkpoints/
 
-    - logs filter distance
+    - mask SAM on 2 images and take I
+
+    - create minimal assets
 
     - test image orientation issue test camera matrix convention test rgb image
 
@@ -10,12 +12,8 @@ Refacto :
 
     - crash docker (memory issues...)
 
-    - mask SAM on 2 images and take I
-
     - web app
 
     - update the whole Readme
-
-    - create minimal assets
 
     - option : pydantic BaseModel refactor input-outputs de modeles, images

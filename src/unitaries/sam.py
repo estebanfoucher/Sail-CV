@@ -5,13 +5,12 @@ from ultralytics import FastSAM
 
 
 class SAM:
-    def __init__(self, model_path=None):
+    def __init__(self, model_path):
         """
         Initialize FastSAM model
 
         Args:
             model_path (str): Path to FastSAM model or model name (e.g., "FastSAM-x.pt").
-                             If model name is provided, it will be automatically downloaded.
         """
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
