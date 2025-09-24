@@ -1,16 +1,16 @@
 Refacto :
 
-    - create minimal assets
+    - add calibration asset + bind computation test
 
+    - update the whole Readme
+
+    - refactor so mast3r is docked to the codebase : create a class densepointmatchermodel.
+        - means need to change mast3r_engine to eat images without loading them
 
     - crash docker (memory issues...) # will be resolved by -> fp16 model + FastSAM-s.pt
-
-    - test image orientation issue test camera matrix convention test rgb image
 
     - web app
 
     - mettre des log debug dans loguru et mettre le level par defaut a info via .env
 
-    - update the whole Readme
-
-    - option : pydantic BaseModel refactor input-outputs de modeles, images
+    - option : pydantic BaseModel refactor input-outputs de modeles, images, to make a real webapp

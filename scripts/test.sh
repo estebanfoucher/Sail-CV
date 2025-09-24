@@ -7,6 +7,6 @@ echo "🧪 Running tests..."
 
 # Run pytest
 echo "Running pytest..."
-uv run pytest src/ -v
+uv run pytest tests/ -v
 
 echo "✅ Tests complete!"

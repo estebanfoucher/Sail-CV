@@ -365,6 +365,8 @@ class Calibration:
             "dist_coeffs": dist_coeffs.tolist(),
             "reprojection_error": reprojection_error,
         }
+        # Ensure parent directory exists
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
         with open(save_path, "w") as f:
             json.dump(intrinsics_dict, f, indent=2)
 

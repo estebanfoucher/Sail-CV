@@ -8,6 +8,10 @@
 !src/
 !src/**
 
+# Tests
+!tests/
+!tests/**
+
 # Docker configuration
 !docker/
 !docker/**

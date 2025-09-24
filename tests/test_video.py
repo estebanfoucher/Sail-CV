@@ -2,29 +2,25 @@ import subprocess
 from pathlib import Path
 
 import cv2
-import pytest
+import sys
 
 
-def _is_ffmpeg_available():
+def test_is_ffmpeg_available():
     """Check if ffmpeg is available in the system"""
-    try:
-        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
+    subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
 
 
-@pytest.mark.skipif(not _is_ffmpeg_available(), reason="ffmpeg not available")
 def test_video_reader_and_writer():
+    sys.path.append(str(Path(__file__).parent.parent / "src"))
     from video import FFmpegVideoWriter, VideoReader
 
     # Get project root (go up from src/ to project root)
     project_root = Path(__file__).parent.parent
 
     video_path = str(
-        project_root / "data" / "calibration_intrinsics_1" / "camera_1" / "GH010815.MP4"
+        project_root / "assets" / "scene_3" / "camera_1" / "camera_1.mp4"
     )
-    output_folder = project_root / "output" / "tests" / "video_reader_and_writer"
+    output_folder = project_root / "output_tests" / "video_reader_and_writer"
     output_name = "output_test_video_reader_and_writer.mp4"
     reader = VideoReader.open_video_file(video_path)
     output_path = output_folder / output_name
@@ -64,35 +60,27 @@ def test_video_reader_and_writer():
     print("Test video reader and writer passed")
 
 
-@pytest.mark.skipif(not _is_ffmpeg_available(), reason="ffmpeg not available")
 def test_stereo_video_reader():
-    from mv_utils import Scene, load_stereo_data_folder_structure
+    sys.path.append(str(Path(__file__).parent.parent / "src"))
     from video import FFmpegVideoWriter, StereoVideoReader
 
     # Get project root (go up from src/ to project root)
     project_root = Path(__file__).parent.parent
 
-    stereo_data_folder_structure = load_stereo_data_folder_structure(
-        str(project_root / "data")
-    )
-    scene_names = stereo_data_folder_structure.get_scene_folders()
-    scene_name = "scene_3"
-    assert scene_name in scene_names, (
-        f"Scene {scene_name} is not in the list of scene names"
-    )
+    video_1_path = str(project_root / "assets" / "scene_3" / "camera_1" / "camera_1.mp4")
+    video_2_path = str(project_root / "assets" / "scene_3" / "camera_2" / "camera_2.mp4")
 
-    scene = Scene(scene_name, str(project_root / "data"))
-    video_paths = scene.get_video_paths()
-    sync_frame_offset = scene.sync_frame_offset
-    start_frame = 900
+    sync_frame_offset = 0
+    start_frame = 0 # assets are already synced
+
     stereo_video_reader = StereoVideoReader(
-        video_paths["camera_1"],
-        video_paths["camera_2"],
+        video_1_path,
+        video_2_path,
         start_video_1_frame=start_frame,
         start_video_2_frame=start_frame - sync_frame_offset,
     )
-    frame_count = 100
-    output_folder = project_root / "output" / "tests" / "stereo_video_reader"
+    frame_count = 30
+    output_folder = project_root / "output_tests" / "stereo_video_reader"
     output_name = "output_test_stereo_video_reader.mp4"
     output_path = output_folder / output_name
 
@@ -128,33 +116,24 @@ def test_stereo_video_reader():
 
 
 def test_stereo_image_saver():
-    from mv_utils import Scene, load_stereo_data_folder_structure
+    sys.path.append(str(Path(__file__).parent.parent / "src"))
     from video import StereoVideoReader
 
     # Get project root (go up from src/ to project root)
     project_root = Path(__file__).parent.parent
 
-    stereo_data_folder_structure = load_stereo_data_folder_structure(
-        str(project_root / "data")
-    )
-    scene_names = stereo_data_folder_structure.get_scene_folders()
-    scene_name = "scene_8"
-    assert scene_name in scene_names, (
-        f"Scene {scene_name} is not in the list of scene names"
-    )
-
-    scene = Scene(scene_name, str(project_root / "data"))
-    video_paths = scene.get_video_paths()
-    sync_frame_offset = scene.sync_frame_offset
-    frame_to_save_number_list = [4900, 4910, 4920, 4930, 4940, 4950, 4960]
+    video_1_path = str(project_root / "assets" / "scene_8" / "camera_1" / "camera_1.mp4")
+    video_2_path = str(project_root / "assets" / "scene_8" / "camera_2" / "camera_2.mp4")
+    sync_frame_offset = 0
+    frame_to_save_number_list = [0, 10, 20, 30, 40, 50, 60]
     # save frame 1 and frame 2 to the output folder
-    output_folder = project_root / "output" / "tests" / "stereo_image_saver"
+    output_folder = project_root / "output_tests" / "stereo_image_saver"
 
     output_folder.mkdir(parents=True, exist_ok=True)
     for frame_to_save_number in frame_to_save_number_list:
         stereo_video_reader = StereoVideoReader(
-            video_paths["camera_1"],
-            video_paths["camera_2"],
+            video_1_path,
+            video_2_path,
             start_video_1_frame=frame_to_save_number,
             start_video_2_frame=frame_to_save_number - sync_frame_offset,
         )

@@ -1,20 +1,9 @@
-import subprocess
 from pathlib import Path
-
-import pytest
-
-
-def _is_ffmpeg_available():
-    """Check if ffmpeg is available in the system"""
-    try:
-        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
+import sys
 
 
-@pytest.mark.skipif(not _is_ffmpeg_available(), reason="ffmpeg not available")
-def test_tell_tale_detector(model_path=None, architecture="yolov8n"):
+def tell_tale_detector(model_path=None, architecture=None):
+    sys.path.append(str(Path(__file__).parent.parent.parent / "src"))
     from unitaries.tell_tale_detector import TellTaleDetector
     from video import FFmpegVideoWriter, VideoReader
 
@@ -22,9 +11,9 @@ def test_tell_tale_detector(model_path=None, architecture="yolov8n"):
     project_root = Path(__file__).parent.parent.parent
 
     video_path = str(
-        project_root / "data" / "calibration_intrinsics_1" / "camera_1" / "GH010815.MP4"
+        project_root / "assets" / "scene_3" / "camera_1" / "camera_1.mp4"
     )
-    output_folder = project_root / "output" / "tests" / "tell_tale_detector"
+    output_folder = project_root / "output_tests" / "tell_tale_detector"
     output_name = f"output_test_tell_tale_detector_{architecture}.mp4"
     reader = VideoReader.open_video_file(video_path)
     output_path = output_folder / output_name
@@ -37,10 +26,7 @@ def test_tell_tale_detector(model_path=None, architecture="yolov8n"):
     )
 
     frame_count = 10
-    if model_path is None:
-        # Skip test if no model path provided
-        print("Skipping test_tell_tale_detector - no model path provided")
-        return
+
     detector = TellTaleDetector(model_path=model_path, architecture=architecture)
 
     def process_frame(frame):
@@ -60,8 +46,20 @@ def test_tell_tale_detector(model_path=None, architecture="yolov8n"):
     print("Test tell_tale_detector passed")
 
 
-@pytest.mark.skipif(not _is_ffmpeg_available(), reason="ffmpeg not available")
-def test_sam():
+def test_tell_tale_detector_rt_detr():
+    rt_detr_model_path = (
+        Path(__file__).parent.parent.parent / "checkpoints" / "rt-detr.pt"
+    )
+    tell_tale_detector(model_path=rt_detr_model_path, architecture="rt-detr")
+
+
+def test_tell_tale_detector_yolo():
+    yolo_model_path = Path(__file__).parent.parent.parent / "checkpoints" / "yolos.pt"
+    tell_tale_detector(model_path=yolo_model_path, architecture="yolo")
+
+
+def sam(model_path=None):
+    sys.path.append(str(Path(__file__).parent.parent.parent / "src"))
     from unitaries.sam import SAM
     from video import FFmpegVideoWriter, VideoReader
 
@@ -69,9 +67,9 @@ def test_sam():
     project_root = Path(__file__).parent.parent.parent
 
     video_path = str(
-        project_root / "data" / "calibration_intrinsics_1" / "camera_1" / "GH010815.MP4"
+        project_root / "assets" / "scene_8" / "camera_1" / "camera_1.mp4"
     )
-    output_folder = project_root / "output" / "tests" / "sam"
+    output_folder = project_root / "output_tests" / "sam"
     output_name = "output_test_sam.mp4"
     reader = VideoReader.open_video_file(video_path)
     output_path = output_folder / output_name
@@ -84,9 +82,7 @@ def test_sam():
     )
 
     frame_count = 10
-    SAM_MODEL_PATH = project_root / "checkpoints" / "FastSAM-x.pt"
-    sam = SAM(SAM_MODEL_PATH)
-    sam = SAM()
+    sam = SAM(model_path)
 
     def process_frame(frame):
         point = (1400, 540)
@@ -104,3 +100,10 @@ def test_sam():
     writer.release()
     reader.release()
     print("Test sam passed")
+
+
+def test_sam():
+    sam_model_path = (
+        Path(__file__).parent.parent.parent / "checkpoints" / "FastSAM-x.pt"
+    )
+    sam(model_path=sam_model_path)

@@ -12,9 +12,12 @@ Coordinate System Conventions:
 """
 
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
+
+sys.path.append(str(Path(__file__).parent.parent.parent / "src"))
 
 from cameras import (
     Camera,
@@ -25,6 +28,10 @@ from cameras import (
 
 # Get the test assets directory relative to this test file
 TEST_ASSETS_DIR = Path(__file__).parent / "test_assets"
+ROOT_DIR = Path(__file__).parent.parent.parent
+
+OUTPUT_DIR = ROOT_DIR / "output_tests" / "cameras"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def load_cameras_from_stereo_calibration(
@@ -123,7 +130,7 @@ def test_stereo_calibration_normal():
     calibration_path = str(TEST_ASSETS_DIR / "extrinsics_calibration_512x288.json")
     image_1_path = str(TEST_ASSETS_DIR / "images" / "frame_1.png")
     image_2_path = str(TEST_ASSETS_DIR / "images" / "frame_2.png")
-    output_dir = str(TEST_ASSETS_DIR / "camera_pyramids" / "stereo_calibration_normal")
+    output_dir = str(OUTPUT_DIR / "stereo_calibration_normal")
 
     # Load cameras from stereo calibration data
     camera1, camera2 = load_cameras_from_stereo_calibration(
@@ -137,9 +144,7 @@ def test_stereo_calibration_1m_translation_z():
     calibration_path = str(TEST_ASSETS_DIR / "extrinsics_calibration_512x288.json")
     image_1_path = str(TEST_ASSETS_DIR / "images" / "frame_1.png")
     image_2_path = str(TEST_ASSETS_DIR / "images" / "frame_2.png")
-    output_dir = str(
-        TEST_ASSETS_DIR / "camera_pyramids" / "stereo_calibration_1m_translation_z"
-    )
+    output_dir = str(OUTPUT_DIR / "stereo_calibration_1m_translation_z")
 
     # Create cameras with modified translation (1m in Z direction)
     camera1, camera2 = create_modified_cameras_from_stereo_calibration(
@@ -157,9 +162,7 @@ def test_stereo_calibration_90_rotation_y():
     calibration_path = str(TEST_ASSETS_DIR / "extrinsics_calibration_512x288.json")
     image_1_path = str(TEST_ASSETS_DIR / "images" / "frame_1.png")
     image_2_path = str(TEST_ASSETS_DIR / "images" / "frame_2.png")
-    output_dir = str(
-        TEST_ASSETS_DIR / "camera_pyramids" / "stereo_calibration_90_rotation_y"
-    )
+    output_dir = str(OUTPUT_DIR / "stereo_calibration_90_rotation_y")
 
     # Create cameras with modified rotation (90 degrees around Y axis)
     camera1, camera2 = create_modified_cameras_from_stereo_calibration(

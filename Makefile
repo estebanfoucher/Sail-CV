@@ -19,21 +19,22 @@ install-all: ## Install all dependencies (main + dev)
 	@echo "📦 Installing all dependencies..."
 	uv sync
 
-format: ## Format code with ruff
+format: ## Format code with ruff src/ tests/
 	@echo "🎨 Formatting code..."
-	uv run ruff format src/
+	uv run ruff format src/ tests/
 
 lint: ## Lint code with ruff
 	@echo "🔍 Linting code..."
-	uv run ruff check src/ --fix
+	uv run ruff check src/ tests/ --fix
 
 typecheck: ## Run type checking with mypy
 	@echo "🔍 Type checking..."
 	uv run mypy --explicit-package-bases src/
 
 test: ## Run tests
-	@echo "🧪 Running tests..."
-	uv run pytest src/ -v
+	@echo "🧪 Running tests..." # clear output_tests directory
+	rm -rf output_tests
+	uv run pytest tests/ -v
 
 check: ## Run all checks (format + lint + typecheck + test)
 	@echo "🔍 Running all checks..."
