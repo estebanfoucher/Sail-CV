@@ -10,8 +10,10 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     # Core ML/AI dependencies
-    "torch>=2.0.0",
-    "torchvision>=0.15.0",
+    "torch>=2.0.0,<2.3.0; sys_platform == 'darwin'",  # macOS compatibility
+    "torch>=2.0.0; sys_platform == 'linux'",          # Linux/Jetson compatibility
+    "torchvision>=0.15.0,<0.18.0; sys_platform == 'darwin'",  # macOS compatibility
+    "torchvision>=0.15.0; sys_platform == 'linux'",          # Linux/Jetson compatibility
     "opencv-python==4.8.0.74",
     "numpy<2.0.0", # Compatibility with OpenCV and other packages
     # Logging and utilities
