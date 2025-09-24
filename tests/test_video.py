@@ -17,9 +17,7 @@ def test_video_reader_and_writer():
     # Get project root (go up from src/ to project root)
     project_root = Path(__file__).parent.parent
 
-    video_path = str(
-        project_root / "assets" / "scene_3" / "camera_1" / "camera_1.mp4"
-    )
+    video_path = str(project_root / "assets" / "scene_3" / "camera_1" / "camera_1.mp4")
     output_folder = project_root / "output_tests" / "video_reader_and_writer"
     output_name = "output_test_video_reader_and_writer.mp4"
     reader = VideoReader.open_video_file(video_path)
@@ -67,11 +65,15 @@ def test_stereo_video_reader():
     # Get project root (go up from src/ to project root)
     project_root = Path(__file__).parent.parent
 
-    video_1_path = str(project_root / "assets" / "scene_3" / "camera_1" / "camera_1.mp4")
-    video_2_path = str(project_root / "assets" / "scene_3" / "camera_2" / "camera_2.mp4")
+    video_1_path = str(
+        project_root / "assets" / "scene_3" / "camera_1" / "camera_1.mp4"
+    )
+    video_2_path = str(
+        project_root / "assets" / "scene_3" / "camera_2" / "camera_2.mp4"
+    )
 
     sync_frame_offset = 0
-    start_frame = 0 # assets are already synced
+    start_frame = 0  # assets are already synced
 
     stereo_video_reader = StereoVideoReader(
         video_1_path,
@@ -122,8 +124,12 @@ def test_stereo_image_saver():
     # Get project root (go up from src/ to project root)
     project_root = Path(__file__).parent.parent
 
-    video_1_path = str(project_root / "assets" / "scene_8" / "camera_1" / "camera_1.mp4")
-    video_2_path = str(project_root / "assets" / "scene_8" / "camera_2" / "camera_2.mp4")
+    video_1_path = str(
+        project_root / "assets" / "scene_8" / "camera_1" / "camera_1.mp4"
+    )
+    video_2_path = str(
+        project_root / "assets" / "scene_8" / "camera_2" / "camera_2.mp4"
+    )
     sync_frame_offset = 0
     frame_to_save_number_list = [0, 10, 20, 30, 40, 50, 60]
     # save frame 1 and frame 2 to the output folder

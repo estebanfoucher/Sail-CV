@@ -2,6 +2,7 @@ from pathlib import Path
 from mv_utils import Scene
 import pytest
 
+
 def _is_raw_data_available():
     try:
         # Get project root (go up from src/ to project root)
@@ -15,6 +16,7 @@ def _is_raw_data_available():
         return True
     except Exception as e:
         return False
+
 
 @pytest.mark.skipif(not _is_raw_data_available(), reason="Raw data not available")
 def test_calibrate_intrinsics_scene():

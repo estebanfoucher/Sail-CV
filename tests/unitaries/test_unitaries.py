@@ -10,9 +10,7 @@ def tell_tale_detector(model_path=None, architecture=None):
     # Get project root (go up from src/ to project root)
     project_root = Path(__file__).parent.parent.parent
 
-    video_path = str(
-        project_root / "assets" / "scene_3" / "camera_1" / "camera_1.mp4"
-    )
+    video_path = str(project_root / "assets" / "scene_3" / "camera_1" / "camera_1.mp4")
     output_folder = project_root / "output_tests" / "tell_tale_detector"
     output_name = f"output_test_tell_tale_detector_{architecture}.mp4"
     reader = VideoReader.open_video_file(video_path)
@@ -66,9 +64,7 @@ def sam(model_path=None):
     # Get project root (go up from src/ to project root)
     project_root = Path(__file__).parent.parent.parent
 
-    video_path = str(
-        project_root / "assets" / "scene_8" / "camera_1" / "camera_1.mp4"
-    )
+    video_path = str(project_root / "assets" / "scene_8" / "camera_1" / "camera_1.mp4")
     output_folder = project_root / "output_tests" / "sam"
     output_name = "output_test_sam.mp4"
     reader = VideoReader.open_video_file(video_path)
@@ -87,6 +83,7 @@ def sam(model_path=None):
     def process_frame(frame):
         point = (1400, 540)
         result = sam.predict(frame, point, 1)
+        assert result["mask"] is not None
         frame = sam.render_result(frame, result["mask"], [point])
         return frame
 
