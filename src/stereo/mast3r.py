@@ -9,8 +9,9 @@ import time
 
 import cv2
 import numpy as np
+from PIL.ImageOps import exif_transpose
 from dust3r.inference import inference
-from dust3r.utils.image import load_images
+from dust3r.utils.image import load_images, ImgNorm
 from loguru import logger
 from mast3r.fast_nn import fast_reciprocal_NNs
 from mast3r.model import AsymmetricMASt3R
@@ -35,13 +36,6 @@ class MASt3RInferenceEngine:
         logger.info(f"Loading model from: {self.model_path}")
         self.model = AsymmetricMASt3R.from_pretrained(self.model_path).to(self.device)
         return self.model
-
-    def load_images(self, image1_path, image2_path, size=None):
-        """Load and preprocess image pair for MASt3R inference."""
-        logger.debug(f"Loading images: {image1_path}, {image2_path}")
-        assert size is not None, "Size must be provided"
-        images = load_images([image1_path, image2_path], size=size)
-        return images
 
     def save_inference_images(self, images, output_dir):
         """Save preprocessed inference images to output directory."""

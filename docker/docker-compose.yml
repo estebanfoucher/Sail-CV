@@ -11,6 +11,7 @@ services:
       - CUDA_MEMORY_FRACTION=0.8
     volumes:
       - ../data:/app/data:rw
+      - ../assets:/app/assets:rw
       - ../output:/app/output:rw
       - ../checkpoints:/app/checkpoints:ro
       - ../src:/app/src:rw

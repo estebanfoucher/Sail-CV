@@ -3,19 +3,24 @@ import os
 
 import cv2
 
-from mv_utils import Scene
 from video import StereoVideoReader
 
-scene_name = "scene_8"
-stereo_data_folder_path = "../data/"
-frame_to_save_number_list = [4900, 4910, 4920, 4930, 4940, 4950, 4960]
-output_folder = "../output/extracted_pairs"
+
+STEREO_DATA_FOLDER_PATH = "../assets/"
+OUTPUT_FOLDER = "../output/extracted_pairs"
 
 
 def extract_pairs(scene_name, frame_to_save_number_list, output_folder):
-    scene = Scene(scene_name, stereo_data_folder_path)
-    video_paths = scene.get_video_paths()
-    sync_frame_offset = scene.sync_frame_offset
+    video_paths = {
+        "camera_1": os.path.join(
+            STEREO_DATA_FOLDER_PATH, scene_name, "camera_1", "camera_1.mp4"
+        ),
+        "camera_2": os.path.join(
+            STEREO_DATA_FOLDER_PATH, scene_name, "camera_2", "camera_2.mp4"
+        ),
+    }
+
+    sync_frame_offset = 0
 
     # Ensure the output folder exists
     os.makedirs(output_folder, exist_ok=True)
@@ -52,8 +57,10 @@ def extract_pairs(scene_name, frame_to_save_number_list, output_folder):
     # Release the video reader once at the end
     stereo_video_reader.release()
 
-    scene.create_calibration()
-    calibration = scene.calibration.load_calibration()
+    with open(
+        os.path.join(STEREO_DATA_FOLDER_PATH, scene_name, "calibration.json")
+    ) as f:
+        calibration = json.load(f)
 
     with open(
         os.path.join(output_folder, f"{scene_name}", "calibration.json"), "w"
@@ -62,4 +69,6 @@ def extract_pairs(scene_name, frame_to_save_number_list, output_folder):
 
 
 if __name__ == "__main__":
-    extract_pairs(scene_name, frame_to_save_number_list, output_folder)
+    extract_pairs("scene_3", range(0, 50, 10), OUTPUT_FOLDER)
+    extract_pairs("scene_7", range(0, 100, 10), OUTPUT_FOLDER)
+    extract_pairs("scene_8", range(0, 70, 10), OUTPUT_FOLDER)
