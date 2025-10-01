@@ -162,7 +162,10 @@ def process_scene(
         calib_data = json.load(f)
 
     calibration_params = convert_calibration_parameters(
-        calib_data, original_size=(1920, 1080)
+        calib_data, 
+        original_size=(1920, 1080),
+        target_size=512,
+        patch_size=16
     )
 
     pair_folders = [
