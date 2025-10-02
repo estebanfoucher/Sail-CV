@@ -16,7 +16,7 @@ from cameras import (
 from stereo.convert_calibration import convert_calibration_parameters
 from stereo.image import resize_image, load_image, preprocess_image
 from stereo.mast3r import MASt3RInferenceEngine
-from stereo.saver import save_point_cloud_ply
+from stereo.saver import save_point_cloud_ply, save_point_cloud_obj
 from stereo.triangulation import (
     extract_colors_from_image,
     filter_pairs_with_mask,
@@ -123,6 +123,10 @@ def process_pair(
     colors_for_points = extract_colors_from_image(matches_im0, img1_array)
     save_point_cloud_ply(
         point_cloud, colors_for_points, f"{output_folder}/point_cloud_{pair_name}.ply"
+    )
+    # Also save as OBJ format for better Gradio Model3D compatibility
+    save_point_cloud_obj(
+        point_cloud, colors_for_points, f"{output_folder}/point_cloud_{pair_name}.obj"
     )
 
     if render_cameras:

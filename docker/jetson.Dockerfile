@@ -64,9 +64,12 @@ RUN mkdir -p /app/output
 # Copy source files
 COPY src/ /app/src/
 
+# Copy web app files
+COPY web_app/ /app/web_app/
+
 # Set proper ownership and permissions for all directories
-RUN chown -R app_user:app_user /app/src /app/output && \
-    chmod -R 755 /app/output
+RUN chown -R app_user:app_user /app/src /app/output /app/web_app && \
+    chmod -R 755 /app/output /app/web_app
 
 # Set working directory to src
 WORKDIR /app/src
@@ -80,5 +83,12 @@ ENV YOLO_CONFIG_DIR="/app/"
 # Switch to non-root user
 USER app_user
 
-# Keep container running
+# Install web app dependencies
+RUN uv pip install --system -r /app/web_app/requirements.txt
+
+# Expose port for web app
+EXPOSE 7860
+
+# Launch the web app
+WORKDIR /app/web_app
 CMD ["tail", "-f", "/dev/null"]

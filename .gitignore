@@ -38,6 +38,9 @@
 !assets/
 !assets/**
 
+!web_app/
+!web_app/**
+
 # Pre-commit configuration
 !.pre-commit-config.yaml
 

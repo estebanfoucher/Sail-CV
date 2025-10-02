@@ -15,6 +15,7 @@ services:
       - ../output:/app/output:rw
       - ../checkpoints:/app/checkpoints:ro
       - ../src:/app/src:rw
+      - ../web_app:/app/web_app:rw
     cap_add:
       - IPC_LOCK
       - SYS_RESOURCE

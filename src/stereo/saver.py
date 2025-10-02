@@ -91,3 +91,50 @@ def save_pixel_pairs(
         )
 
     logger.debug(f"Pixel pairs saved to {filename}")
+
+
+def save_point_cloud_obj(
+    points: np.ndarray, colors: np.ndarray, filename: str, bound_distance: float = 20
+) -> None:
+    """
+    Save point cloud as OBJ file.
+
+    Args:
+        points: 3D points array of shape (H, W, 3) or (N, 3)
+        colors: Color array of shape (H, W, 3) or (N, 3) RGB [0, 255] range
+        filename: Output OBJ file path
+        bound_distance: Keep only points with distance < bound_distance from origin
+    """
+    # Flatten the points and colors
+    points_flat = points.reshape(-1, 3)
+    colors_flat = colors.reshape(-1, 3)
+
+    # Filter out invalid points (NaN, inf)
+    valid_mask = np.isfinite(points_flat).all(axis=1)
+
+    distance_mask = np.linalg.norm(points_flat, axis=1) < bound_distance
+    valid_mask = valid_mask & distance_mask
+
+    points_valid = points_flat[valid_mask]
+    colors_valid = colors_flat[valid_mask]
+
+    # Write OBJ file
+    with open(filename, "w") as f:
+        f.write("# OBJ file converted from point cloud\n")
+        f.write("# Point cloud representation\n")
+        f.write(f"# {len(points_valid)} points\n")
+        
+        # Write vertices with colors (OBJ format supports vertex colors)
+        for i, (point, color) in enumerate(zip(points_valid, colors_valid)):
+            # Normalize colors to [0, 1] range for OBJ format
+            color_normalized = color / 255.0
+            f.write(f"v {point[0]:.6f} {point[1]:.6f} {point[2]:.6f} "
+                   f"{color_normalized[0]:.3f} {color_normalized[1]:.3f} {color_normalized[2]:.3f}\n")
+        
+        # Write point references (each point as a vertex)
+        for i in range(len(points_valid)):
+            f.write(f"p {i+1}\n")
+
+    logger.debug(
+        f"Point cloud saved to {filename} with {len(points_valid)} points (filtered by distance < {bound_distance})"
+    )
