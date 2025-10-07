@@ -11,12 +11,12 @@ class ProcessingInterface:
     """Factory class for creating processing interface components"""
     
     @staticmethod
-    def create_processing_controls() -> Tuple[gr.Button, gr.File, gr.Textbox]:
+    def create_processing_controls() -> Tuple[gr.Button, gr.File, gr.Textbox, gr.Checkbox]:
         """
         Create processing control components
         
         Returns:
-            tuple: (process_pair_btn, download_ply, processing_status)
+            tuple: (process_pair_btn, download_ply, processing_status, render_camera_toggle)
         """
         with gr.Row():
             with gr.Column(scale=1):
@@ -52,5 +52,12 @@ class ProcessingInterface:
                     size="sm"
                 )
                 
+                # Render camera toggle
+                render_camera_toggle = gr.Checkbox(
+                    label="📷 Render Camera Pyramids",
+                    value=True,
+                    info="Toggle to include camera pyramids in 3D visualization"
+                )
+                
         
-        return process_pair_btn, download_ply, processing_status, update_status_btn
+        return process_pair_btn, download_ply, processing_status, update_status_btn, render_camera_toggle

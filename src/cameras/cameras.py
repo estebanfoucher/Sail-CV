@@ -180,6 +180,7 @@ class Camera:
         focal_length: float | None = None,
         pixel_sampling: int = 1,
         image_sampling: int = 1,
+        max_image_width: int = 100,
     ) -> tuple[
         np.ndarray, list[list[int]], list[list[int]], np.ndarray, list[list[int]]
     ]:
@@ -446,7 +447,7 @@ class Camera:
         self, output_path: str, focal_length: float | None = None
     ) -> bool:
         """
-        Export camera pyramid to OBJ format for CloudCompare with wireframe and transparent base.
+        Export camera pyramid to OBJ format for CloudCompare with wireframe and colored base.
 
         Args:
             output_path: Path to save the OBJ file
@@ -456,14 +457,32 @@ class Camera:
             True if successful, False otherwise
         """
         try:
-            vertices, edges, _base_faces, texture_coords = (
+            # Resize image to 100px width for faster processing while maintaining aspect ratio
+            if self.image is not None:
+                original_image = self.image.copy()
+                target_width = 100
+                aspect_ratio = self.image.shape[1] / self.image.shape[0]  # width/height
+                target_height = int(target_width / aspect_ratio)
+                self.image = cv2.resize(self.image, (target_width, target_height))
+            
+            vertices, edges, _base_faces, texture_coords, colors = (
                 self.get_pyramid_with_texture_coords(focal_length)
             )
+            
+            # Restore original image
+            if self.image is not None:
+                self.image = original_image
 
             with open(output_path, "w") as f:
-                # Write vertices
-                for vertex in vertices:
-                    f.write(f"v {vertex[0]:.6f} {vertex[1]:.6f} {vertex[2]:.6f}\n")
+                # Write vertices with colors
+                for i, vertex in enumerate(vertices):
+                    if i < len(colors) and len(colors[i]) >= 3:
+                        # Write vertex with RGB color
+                        r, g, b = colors[i][:3]
+                        f.write(f"v {vertex[0]:.6f} {vertex[1]:.6f} {vertex[2]:.6f} {r:.3f} {g:.3f} {b:.3f}\n")
+                    else:
+                        # Write vertex without color (fallback)
+                        f.write(f"v {vertex[0]:.6f} {vertex[1]:.6f} {vertex[2]:.6f}\n")
 
                 # Write texture coordinates
                 for tex_coord in texture_coords:

@@ -46,6 +46,8 @@ def process_pair(
     output_folder=None,
     point_prompt_1=None,
     point_prompt_2=None,
+    save_resized_frames=False,
+    save_obj_file=False,
 ):
     logger.info(f"Processing pair: {pair_name}")
     
@@ -61,11 +63,13 @@ def process_pair(
 
     # load image1
     img1_pil = resize_image(image_1, size=512)
-    img1_pil.save(f"{output_folder}/{pair_name}_img1_resized.png")
+    if save_resized_frames:
+        img1_pil.save(f"{output_folder}/{pair_name}_img1_resized.png")
 
     # save img2
     img2_pil = resize_image(image_2, size=512)
-    img2_pil.save(f"{output_folder}/{pair_name}_img2_resized.png")
+    if save_resized_frames:
+        img2_pil.save(f"{output_folder}/{pair_name}_img2_resized.png")
 
     matches_im0 = raw_data["matches_im0"]
     matches_im1 = raw_data["matches_im1"]
@@ -125,17 +129,35 @@ def process_pair(
         point_cloud, colors_for_points, f"{output_folder}/point_cloud_{pair_name}.ply"
     )
     # Also save as OBJ format for better Gradio Model3D compatibility
-    save_point_cloud_obj(
-        point_cloud, colors_for_points, f"{output_folder}/point_cloud_{pair_name}.obj"
-    )
+    if save_obj_file:
+        save_point_cloud_obj(
+            point_cloud, colors_for_points, f"{output_folder}/point_cloud_{pair_name}.obj"
+        )
 
     if render_cameras:
-        camera1, camera2 = create_cameras_from_stereo_calibration(
-            calibration_params, img1_array, img2_array
-        )
-        export_cameras_to_cloudcompare(
-            [camera1, camera2], f"{output_folder}/camera_pyramids_{pair_name}", "ply"
-        )
+        logger.info(f"Creating camera pyramids for pair: {pair_name}")
+        try:
+            camera1, camera2 = create_cameras_from_stereo_calibration(
+                calibration_params, img1_array, img2_array
+            )
+            logger.info(f"Cameras created successfully: {camera1.name}, {camera2.name}")
+            
+            # Export camera pyramids in both PLY and OBJ formats
+            logger.info(f"Exporting camera pyramids to PLY format...")
+            ply_success = export_cameras_to_cloudcompare(
+                [camera1, camera2], f"{output_folder}/camera_pyramids_{pair_name}", "ply"
+            )
+            logger.info(f"PLY export success: {ply_success}")
+            
+            if save_obj_file:
+                logger.info(f"Exporting camera pyramids to OBJ format...")
+                obj_success = export_cameras_to_cloudcompare(
+                    [camera1, camera2], f"{output_folder}/camera_pyramids_{pair_name}", "obj"
+                )
+                logger.info(f"OBJ export success: {obj_success}")
+            
+        except Exception as e:
+            logger.error(f"Error creating/exporting camera pyramids: {str(e)}", exc_info=True)
 
 
 def instantiate_sam() -> SAM:
@@ -193,6 +215,8 @@ def process_scene(
             output_folder=OUTPUT_FOLDER,
             point_prompt_1=point_prompt_1,
             point_prompt_2=point_prompt_2,
+            save_resized_frames=True,  # Save resized frames for scene processing
+            save_obj_file=True,  # Save obj files for scene processing
         )
 
 

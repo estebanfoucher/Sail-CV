@@ -64,5 +64,14 @@ UI_LABELS = {
     'video_status': 'Video Status',
     'upload_status': 'Upload Status',
     'calibration_file': 'Upload Calibration File',
-    'refresh_display': '🔄 Refresh Display'
+    'refresh_display': '🔄 Refresh Display',
+    'batch_processing_title': '🎬 Batch Processing',
+    'folder_name': 'Output Folder Name',
+    'start_frame': 'Start Frame',
+    'end_frame': 'End Frame',
+    'step': 'Step',
+    'process_all_btn': '🚀 Process All Frames',
+    'batch_progress': 'Processing Progress',
+    'batch_status': 'Batch Status',
+    'download_batch': '📥 Download Batch Results'
 }

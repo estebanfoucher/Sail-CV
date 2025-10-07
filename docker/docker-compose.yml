@@ -4,7 +4,7 @@ services:
       context: ..
       dockerfile: docker/jetson.Dockerfile
     ports:
-      - "7860:7860"
+      - "7861:7861"
     environment:
       - DEVICE=cuda
       - MODEL=${MODEL:-MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth}

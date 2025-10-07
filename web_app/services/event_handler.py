@@ -11,6 +11,7 @@ import numpy as np
 import gradio as gr
 from services.video_service import VideoService
 from services.processing_service import ProcessingService
+from services.batch_processing_service import BatchProcessingService
 from components.point_cloud_viz import PointCloudVisualizer
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ class EventHandler:
     def __init__(self):
         self.video_service = VideoService()
         self.processing_service = ProcessingService()
+        self.batch_processing_service = BatchProcessingService()
         self._status_file_path = "/tmp/mvs_model_status.txt"
         self._start_mast3r_loading()
     
@@ -180,7 +182,7 @@ class EventHandler:
             logger.error(f"Error in handle_select_frame_button: {str(e)}", exc_info=True)
             return None, None
     
-    def handle_status_check(self) -> Tuple[str, gr.Button]:
+    def handle_status_check(self) -> Tuple[str, gr.Button, gr.Button]:
         """Handle status check - reads status file and updates UI accordingly"""
         status_map = {
             "loaded": ("✅ MASt3R model loaded successfully! Ready to process pairs.", True),
@@ -192,17 +194,23 @@ class EventHandler:
         file_status = self._read_status()
         status, model_loaded = status_map.get(file_status, status_map["loading"])
         
-        button_update = gr.Button(
+        process_button_update = gr.Button(
             interactive=model_loaded,
             variant="primary" if model_loaded else "secondary"
         )
         
-        return status, button_update
+        batch_button_update = gr.Button(
+            interactive=model_loaded,
+            variant="primary" if model_loaded else "secondary"
+        )
+        
+        return status, process_button_update, batch_button_update
     
     def handle_process_pair(
         self, 
         frame_number: int, 
-        calibration_file_path: Optional[str]
+        calibration_file_path: Optional[str],
+        render_cameras: bool = True
     ) -> Tuple[str, gr.File, gr.Model3D, str]:
         """Handle stereo pair processing"""
         try:
@@ -235,15 +243,15 @@ class EventHandler:
                        gr.File(visible=False), gr.Model3D(visible=False), "No frame images available")
             
             # Process the stereo pair
-            success, status_msg, ply_file_path = self.processing_service.process_stereo_pair(
-                frame_1_image, frame_2_image, calibration_data, frame_number
+            success, status_msg, ply_file_path, download_file_path = self.processing_service.process_stereo_pair(
+                frame_1_image, frame_2_image, calibration_data, frame_number, render_cameras
             )
             
             if success and ply_file_path:
-                # Update download file component
-                download_file_update = gr.File(value=ply_file_path, visible=True)
+                # Update download file component (use download_file_path which may be a zip)
+                download_file_update = gr.File(value=download_file_path, visible=True)
                 
-                # Update 3D visualization
+                # Update 3D visualization (use original ply_file_path to find camera pyramids)
                 obj_file_path, viz_status = PointCloudVisualizer.update_point_cloud_display(ply_file_path)
                 
                 # Update Model3D component
@@ -261,6 +269,125 @@ class EventHandler:
             return (f"❌ Error processing pair: {str(e)}", 
                    gr.File(visible=False), gr.Model3D(visible=False), "Processing error")
     
+    def handle_batch_processing(
+        self,
+        folder_name: str,
+        start_frame: int,
+        end_frame: int,
+        step: int,
+        calibration_file_path: Optional[str],
+        render_cameras: bool = True
+    ) -> Tuple[str, str, gr.File]:
+        """Handle batch processing of all frames"""
+        try:
+            logger.info(f"Handling batch processing: folder={folder_name}, frames={start_frame}-{end_frame}, step={step}")
+            
+            # Check if model is loaded
+            if self.processing_service.mast3r_engine is None:
+                return ("⏳ MASt3R model is still loading... Please wait and try again.", 
+                       "Model not ready", gr.File(visible=False))
+            
+            if calibration_file_path is None:
+                return ("❌ No calibration file uploaded", 
+                       "No calibration file", gr.File(visible=False))
+            
+            # Validate frame range
+            if start_frame >= end_frame:
+                return ("❌ Start frame must be less than end frame", 
+                       "Invalid frame range", gr.File(visible=False))
+            
+            if step <= 0:
+                return ("❌ Step must be greater than 0", 
+                       "Invalid step value", gr.File(visible=False))
+            
+            # Read and parse calibration JSON file
+            try:
+                with open(calibration_file_path, 'r') as f:
+                    calibration_data = json.load(f)
+                logger.info(f"Calibration data loaded from: {calibration_file_path}")
+            except Exception as e:
+                logger.error(f"Error reading calibration file: {str(e)}")
+                return (f"❌ Error reading calibration file: {str(e)}", 
+                       "Calibration error", gr.File(visible=False))
+            
+            # Set up batch processing service with the same model
+            self.batch_processing_service.mast3r_engine = self.processing_service.mast3r_engine
+            
+            # Start batch processing in a separate thread
+            def batch_process_async():
+                try:
+                    success, status_msg, zip_path = self.batch_processing_service.process_all_frames(
+                        self.video_service,
+                        calibration_data,
+                        folder_name,
+                        int(start_frame),
+                        int(end_frame),
+                        int(step),
+                        render_cameras
+                    )
+                    
+                    # Update UI components after processing
+                    if success and zip_path:
+                        # This would need to be handled through a callback or queue system
+                        # For now, we'll return the result directly
+                        pass
+                        
+                except Exception as e:
+                    logger.error(f"Error in batch processing thread: {str(e)}", exc_info=True)
+            
+            # Start the batch processing thread
+            batch_thread = threading.Thread(target=batch_process_async, daemon=True)
+            batch_thread.start()
+            
+            # Return initial status
+            total_frames = len(range(int(start_frame), int(end_frame) + 1, int(step)))
+            initial_status = f"🚀 Starting batch processing of {total_frames} frames...\n"
+            initial_status += f"📁 Output folder: {folder_name}\n"
+            initial_status += f"🎬 Frame range: {start_frame} to {end_frame} (step: {step})\n"
+            initial_status += f"📷 Camera rendering: {'Enabled' if render_cameras else 'Disabled'}"
+            
+            return (initial_status, "Starting batch processing...", gr.File(visible=False))
+                
+        except Exception as e:
+            logger.error(f"Error in handle_batch_processing: {str(e)}", exc_info=True)
+            return (f"❌ Error starting batch processing: {str(e)}", 
+                   "Processing error", gr.File(visible=False))
+    
+    def handle_batch_progress_check(self) -> Tuple[str, str, gr.File]:
+        """Check batch processing progress and update UI"""
+        try:
+            if not self.batch_processing_service.is_processing:
+                # Processing completed, check for results
+                if self.batch_processing_service.output_dir:
+                    # Look for zip file
+                    zip_files = list(self.batch_processing_service.output_dir.glob("*.zip"))
+                    if zip_files:
+                        zip_path = zip_files[0]
+                        status_msg = f"✅ Batch processing completed!\n"
+                        status_msg += f"📦 Results ready for download: {zip_path.name}"
+                        
+                        return (status_msg, "Processing completed", gr.File(value=str(zip_path), visible=True))
+                    else:
+                        return ("❌ Batch processing completed but no results found", 
+                               "No results found", gr.File(visible=False))
+                else:
+                    return ("Ready to process frames...", 
+                           "Ready", gr.File(visible=False))
+            else:
+                # Still processing
+                current, total = self.batch_processing_service.get_progress()
+                progress_value = current / total if total > 0 else 0
+                
+                status_msg = f"🔄 Processing frame {current + 1} of {total}...\n"
+                status_msg += f"Progress: {progress_value:.1%}"
+                
+                return (status_msg, f"Progress: {progress_value:.1%}", gr.File(visible=False))
+                
+        except Exception as e:
+            logger.error(f"Error in handle_batch_progress_check: {str(e)}", exc_info=True)
+            return (f"❌ Error checking progress: {str(e)}", 
+                   "Error", gr.File(visible=False))
+    
     def setup_event_handlers(self, components: Dict[str, Any]) -> None:
         """Setup all event handlers for the UI components"""
         try:
@@ -276,7 +403,7 @@ class EventHandler:
                 ).then(
                     fn=self.handle_status_check,
                     inputs=[],
-                    outputs=[components['processing_status'], components['process_pair_btn']]
+                    outputs=[components['processing_status'], components['process_pair_btn'], components['process_all_btn']]
                 )
             
             # Calibration upload change
@@ -287,7 +414,7 @@ class EventHandler:
             ).then(
                 fn=self.handle_status_check,
                 inputs=[],
-                outputs=[components['processing_status'], components['process_pair_btn']]
+                outputs=[components['processing_status'], components['process_pair_btn'], components['process_all_btn']]
             )
             
             # Frame slider change
@@ -298,13 +425,13 @@ class EventHandler:
             ).then(
                 fn=self.handle_status_check,
                 inputs=[],
-                outputs=[components['processing_status'], components['process_pair_btn']]
+                outputs=[components['processing_status'], components['process_pair_btn'], components['process_all_btn']]
             )
             
             # Process pair button
             components['process_pair_btn'].click(
                 fn=self.handle_process_pair,
-                inputs=[components['frame_slider'], components['calibration_upload']],
+                inputs=[components['frame_slider'], components['calibration_upload'], components['render_camera_toggle']],
                 outputs=[components['processing_status'], components['download_ply'], 
                         components['model3d_viewer'], components['viz_status']]
             )
@@ -313,8 +440,24 @@ class EventHandler:
             components['update_status_btn'].click(
                 fn=self.handle_status_check,
                 inputs=[],
-                outputs=[components['processing_status'], components['process_pair_btn']]
+                outputs=[components['processing_status'], components['process_pair_btn'], components['process_all_btn']]
             )
+            
+            # Batch processing button
+            components['process_all_btn'].click(
+                fn=self.handle_batch_processing,
+                inputs=[components['folder_name'], components['start_frame'], components['end_frame'], 
+                       components['step'], components['calibration_upload'], components['render_camera_toggle']],
+                outputs=[components['batch_status'], components['batch_progress'], components['download_batch']]
+            )
+            
+            # Update batch status button
+            components['update_batch_status_btn'].click(
+                fn=self.handle_batch_progress_check,
+                inputs=[],
+                outputs=[components['batch_status'], components['batch_progress'], components['download_batch']]
+            )
+            
             
             logger.info("Event handlers setup completed successfully")
             

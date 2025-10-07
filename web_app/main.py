@@ -80,6 +80,7 @@ def create_mvs_app():
         with gr.Row():
             with gr.Column(scale=1):
                 components['process_pair_btn']
+                components['render_camera_toggle']
                 components['download_ply']
                 components['processing_status']
         
@@ -89,6 +90,18 @@ def create_mvs_app():
                 components['model3d_viewer']
             with gr.Column(scale=1):
                 components['viz_status']
+        
+        # Batch Processing Section
+        with gr.Row():
+            with gr.Column(scale=1):
+                components['folder_name']
+                components['start_frame']
+                components['end_frame']
+                components['step']
+                components['process_all_btn']
+                components['batch_progress']
+                components['batch_status']
+                components['download_batch']
         
         # Setup event handlers
         event_handler = EventHandler()

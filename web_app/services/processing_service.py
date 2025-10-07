@@ -57,8 +57,9 @@ class ProcessingService:
         image_1: np.ndarray, 
         image_2: np.ndarray, 
         calibration_data: dict,
-        frame_number: int
-    ) -> Tuple[bool, str, Optional[str]]:
+        frame_number: int,
+        render_cameras: bool = True
+    ) -> Tuple[bool, str, Optional[str], Optional[str]]:
         """
         Process a stereo pair with MASt3R
         
@@ -67,6 +68,7 @@ class ProcessingService:
             image_2: Second image as numpy array  
             calibration_data: Calibration parameters
             frame_number: Frame number for naming
+            render_cameras: Whether to render camera pyramids
             
         Returns:
             tuple: (success, status_message, ply_file_path)
@@ -98,6 +100,8 @@ class ProcessingService:
             # Process the pair (without SAM for now, as requested)
             pair_name = f"frame_{frame_number}"
             
+            logger.info(f"Processing pair with render_cameras={render_cameras}")
+            
             process_pair(
                 image_1_pil,
                 image_2_pil,
@@ -105,23 +109,53 @@ class ProcessingService:
                 sam=None,  # No SAM for now
                 calibration_params=calibration_params,
                 pair_name=pair_name,
-                render_cameras=False,
+                render_cameras=render_cameras,
                 output_folder=self.output_dir,
                 point_prompt_1=None,  # No point prompts for now
-                point_prompt_2=None
+                point_prompt_2=None,
+                save_resized_frames=True,  # Save resized frames for single frame processing
+                save_obj_file=True  # Save obj files for 3D rendering in single frame processing
             )
             
             # Check if PLY file was created
             ply_file_path = self.output_dir / f"point_cloud_{pair_name}.ply"
             if ply_file_path.exists():
                 logger.info(f"Point cloud generated successfully: {ply_file_path}")
-                return True, f"✅ Point cloud generated successfully for frame {frame_number}!", str(ply_file_path)
+                
+                # Collect all PLY files for download (point cloud + camera pyramids if enabled)
+                all_ply_files = [str(ply_file_path)]
+                if render_cameras:
+                    # Look for camera pyramid PLY files in the subdirectory
+                    camera_pyramid_dir = self.output_dir / f"camera_pyramids_{pair_name}"
+                    if camera_pyramid_dir.exists():
+                        for file in camera_pyramid_dir.glob("camera_*_pyramid.ply"):
+                            all_ply_files.append(str(file))
+                            logger.info(f"Found camera pyramid PLY file: {file}")
+                
+                # Create a zip file with all PLY files if there are multiple files
+                if len(all_ply_files) > 1:
+                    import zipfile
+                    zip_path = self.output_dir / f"point_cloud_and_cameras_{pair_name}.zip"
+                    with zipfile.ZipFile(zip_path, 'w') as zipf:
+                        for ply_file in all_ply_files:
+                            # Add file to zip with just the filename (not full path)
+                            zipf.write(ply_file, os.path.basename(ply_file))
+                    logger.info(f"Created zip file with all PLY files: {zip_path}")
+                    download_file_path = str(zip_path)
+                else:
+                    download_file_path = str(ply_file_path)
+                
+                status_msg = f"✅ Point cloud generated successfully for frame {frame_number}!"
+                if render_cameras and len(all_ply_files) > 1:
+                    status_msg += f" ({len(all_ply_files)-1} camera pyramids included)"
+                
+                return True, status_msg, str(ply_file_path), download_file_path
             else:
-                return False, "❌ Point cloud file was not generated", None
+                return False, "❌ Point cloud file was not generated", None, None
                 
         except Exception as e:
             logger.error(f"Error processing stereo pair: {str(e)}", exc_info=True)
-            return False, f"❌ Error processing stereo pair: {str(e)}", None
+            return False, f"❌ Error processing stereo pair: {str(e)}", None, None
     
     def cleanup_temp_files(self):
         """Clean up temporary files"""
