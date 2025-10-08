@@ -8,6 +8,7 @@ from constants import UI_LABELS, DEFAULT_VIDEO_HEIGHT, UPLOAD_WIDGET_HEIGHT, DEF
 from components.processing_interface import ProcessingInterface
 from components.batch_processing_interface import BatchProcessingInterface
 from components.point_cloud_viz import PointCloudVisualizer
+from components.sam_interface import SAMInterface
 
 
 class UIFactory:
@@ -170,7 +171,8 @@ class UIFactory:
         calibration_upload, upload_status = UIFactory.create_calibration_upload()
         frame_slider = UIFactory.create_frame_selector()
         selected_image_1, selected_image_2 = UIFactory.create_selected_images()
-        process_pair_btn, download_ply, processing_status, update_status_btn, render_camera_toggle = ProcessingInterface.create_processing_controls()
+        process_pair_btn, download_ply, processing_status, update_status_btn, render_camera_toggle, subsample_param = ProcessingInterface.create_processing_controls()
+        activate_sam_btn, deactivate_sam_btn, point_prompt_1, point_prompt_2, compute_masks_btn, sam_status = SAMInterface.create_sam_controls()
         model3d_viewer, viz_status = PointCloudVisualizer.create_point_cloud_viewer()
         folder_name, start_frame, end_frame, step, process_all_btn, batch_progress, batch_status, download_batch, update_batch_status_btn = BatchProcessingInterface.create_batch_processing_controls()
         
@@ -189,6 +191,13 @@ class UIFactory:
             'processing_status': processing_status,
             'update_status_btn': update_status_btn,
             'render_camera_toggle': render_camera_toggle,
+            'subsample_param': subsample_param,
+            'activate_sam_btn': activate_sam_btn,
+            'deactivate_sam_btn': deactivate_sam_btn,
+            'point_prompt_1': point_prompt_1,
+            'point_prompt_2': point_prompt_2,
+            'compute_masks_btn': compute_masks_btn,
+            'sam_status': sam_status,
             'model3d_viewer': model3d_viewer,
             'viz_status': viz_status,
             'folder_name': folder_name,

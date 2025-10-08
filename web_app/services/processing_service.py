@@ -58,7 +58,11 @@ class ProcessingService:
         image_2: np.ndarray, 
         calibration_data: dict,
         frame_number: int,
-        render_cameras: bool = True
+        render_cameras: bool = True,
+        subsample: int = 8,
+        sam_instance = None,
+        point_prompt_1 = None,
+        point_prompt_2 = None
     ) -> Tuple[bool, str, Optional[str], Optional[str]]:
         """
         Process a stereo pair with MASt3R
@@ -69,6 +73,10 @@ class ProcessingService:
             calibration_data: Calibration parameters
             frame_number: Frame number for naming
             render_cameras: Whether to render camera pyramids
+            subsample: Subsample parameter for point density control
+            sam_instance: SAM instance for filtering (optional)
+            point_prompt_1: Point prompt for image 1 (optional)
+            point_prompt_2: Point prompt for image 2 (optional)
             
         Returns:
             tuple: (success, status_message, ply_file_path)
@@ -97,24 +105,28 @@ class ProcessingService:
             else:
                 return False, "❌ No image 2 available", None
             
-            # Process the pair (without SAM for now, as requested)
+            # Process the pair with SAM if available
             pair_name = f"frame_{frame_number}"
             
             logger.info(f"Processing pair with render_cameras={render_cameras}")
+            
+            # Process the pair with SAM if available
+            logger.info(f"Processing with SAM: {sam_instance is not None}, Point prompts: {point_prompt_1}, {point_prompt_2}")
             
             process_pair(
                 image_1_pil,
                 image_2_pil,
                 self.mast3r_engine,
-                sam=None,  # No SAM for now
+                sam=sam_instance,
                 calibration_params=calibration_params,
                 pair_name=pair_name,
                 render_cameras=render_cameras,
                 output_folder=self.output_dir,
-                point_prompt_1=None,  # No point prompts for now
-                point_prompt_2=None,
+                point_prompt_1=point_prompt_1,
+                point_prompt_2=point_prompt_2,
                 save_resized_frames=True,  # Save resized frames for single frame processing
-                save_obj_file=True  # Save obj files for 3D rendering in single frame processing
+                save_obj_file=True,  # Save obj files for 3D rendering in single frame processing
+                subsample=subsample
             )
             
             # Check if PLY file was created

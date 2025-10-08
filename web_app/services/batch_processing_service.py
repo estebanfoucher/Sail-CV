@@ -53,7 +53,11 @@ class BatchProcessingService:
         start_frame: int,
         end_frame: int,
         step: int,
-        render_cameras: bool = True
+        render_cameras: bool = True,
+        subsample: int = 8,
+        sam_instance = None,
+        point_prompt_1 = None,
+        point_prompt_2 = None
     ) -> Tuple[bool, str, Optional[str]]:
         """
         Process all frames in the specified range
@@ -66,6 +70,10 @@ class BatchProcessingService:
             end_frame: Ending frame number
             step: Step size between frames
             render_cameras: Whether to render camera pyramids
+            subsample: Subsample parameter for point density control
+            sam_instance: SAM instance for filtering (optional)
+            point_prompt_1: Point prompt for image 1 (optional)
+            point_prompt_2: Point prompt for image 2 (optional)
             
         Returns:
             tuple: (success, status_message, zip_file_path)
@@ -96,7 +104,13 @@ class BatchProcessingService:
             frame_numbers = list(range(start_frame, end_frame + 1, step))
             total_frames = len(frame_numbers)
             
-            self._update_progress(0, total_frames, f"Starting batch processing of {total_frames} frames...")
+            # Log SAM filtering status
+            sam_status = "with SAM filtering" if sam_instance is not None else "without SAM filtering"
+            logger.info(f"Starting batch processing of {total_frames} frames {sam_status}")
+            if sam_instance is not None:
+                logger.info(f"SAM point prompts: Image 1: {point_prompt_1}, Image 2: {point_prompt_2}")
+            
+            self._update_progress(0, total_frames, f"Starting batch processing of {total_frames} frames {sam_status}...")
             
             # Convert calibration parameters
             calibration_params = convert_calibration_parameters(
@@ -135,14 +149,16 @@ class BatchProcessingService:
                         image_1_pil,
                         image_2_pil,
                         self.mast3r_engine,
-                        sam=None,  # No SAM for now
+                        sam=sam_instance,  # Use SAM if available
                         calibration_params=calibration_params,
                         pair_name=pair_name,
                         render_cameras=render_cameras,
                         output_folder=main_folder,  # Output directly to main folder
-                        point_prompt_1=None,  # No point prompts for now
-                        point_prompt_2=None
-                        # save_resized_frames=False and save_obj_file=False are now defaults
+                        point_prompt_1=point_prompt_1,  # Use point prompts if available
+                        point_prompt_2=point_prompt_2,
+                        save_resized_frames=False,  # Don't save resized frames for batch processing
+                        save_obj_file=False,  # Don't save obj files for batch processing
+                        subsample=subsample
                     )
                     
                     # Move and rename files according to structure

@@ -76,11 +76,22 @@ def create_mvs_app():
                 # Selected frames display
                 components['selected_image_2']
         
+        # SAM Filtering Section
+        with gr.Row():
+            with gr.Column(scale=1):
+                components['activate_sam_btn']
+                components['deactivate_sam_btn']
+                components['point_prompt_1']
+                components['point_prompt_2']
+                components['compute_masks_btn']
+                components['sam_status']
+        
         # Processing Section
         with gr.Row():
             with gr.Column(scale=1):
                 components['process_pair_btn']
                 components['render_camera_toggle']
+                components['subsample_param']
                 components['download_ply']
                 components['processing_status']
         

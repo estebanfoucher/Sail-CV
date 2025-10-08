@@ -8,10 +8,15 @@ from pathlib import Path
 import numpy as np
 import cv2
 
+# Import from src/ as requested
+import sys
+sys.path.append(str(Path(__file__).parent.parent.parent / "src"))
+
 from processing.video_processor import VideoProcessor
 from utils.validation import validate_video_file, validate_calibration_file, validate_video_compatibility
 from exceptions import ValidationError, VideoProcessingError, VideoCompatibilityError
 from constants import STATUS_MESSAGES, ERROR_MESSAGES, SUCCESS_MESSAGES
+from stereo.image import resize_image
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +176,7 @@ class VideoService:
     
     def extract_frames_for_selection(self, frame_number: int, sync_offset: int) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], str]:
         """
-        Extract frames for image selection (returns numpy arrays for display)
+        Extract frames for image selection (returns resized numpy arrays for display)
         
         Returns:
             tuple: (frame_1_image, frame_2_image, status_message)
@@ -197,8 +202,13 @@ class VideoService:
                 success, frame, msg = self.video_processor.read_frame(1, frame_number)
                 if success and frame is not None:
                     # Convert BGR to RGB for display
-                    frame_1_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    logger.debug(f"Video 1 frame {frame_number} extracted successfully")
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    # Convert to PIL Image and use proper resize_image function
+                    from PIL import Image
+                    frame_pil = Image.fromarray(frame_rgb)
+                    frame_resized = resize_image(frame_pil, size=512)
+                    frame_1_image = np.array(frame_resized)
+                    logger.debug(f"Video 1 frame {frame_number} extracted and resized successfully")
                 else:
                     logger.warning(f"Failed to extract Video 1 frame {frame_number}: {msg}")
             
@@ -206,8 +216,13 @@ class VideoService:
                 success, frame, msg = self.video_processor.read_frame(2, frame_number)
                 if success and frame is not None:
                     # Convert BGR to RGB for display
-                    frame_2_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    logger.debug(f"Video 2 frame {frame_number} extracted successfully")
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    # Convert to PIL Image and use proper resize_image function
+                    from PIL import Image
+                    frame_pil = Image.fromarray(frame_rgb)
+                    frame_resized = resize_image(frame_pil, size=512)
+                    frame_2_image = np.array(frame_resized)
+                    logger.debug(f"Video 2 frame {frame_number} extracted and resized successfully")
                 else:
                     logger.warning(f"Failed to extract Video 2 frame {frame_number}: {msg}")
             
@@ -218,7 +233,7 @@ class VideoService:
             if video_2_loaded:
                 loaded_videos.append("Video 2")
             
-            status_msg = f"Frames extracted: Video 1 frame {frame_number}, Video 2 frame {frame_number} | Loaded: {', '.join(loaded_videos)}"
+            status_msg = f"Frames extracted and resized (512px): Video 1 frame {frame_number}, Video 2 frame {frame_number} | Loaded: {', '.join(loaded_videos)}"
             return frame_1_image, frame_2_image, status_msg
                 
         except Exception as e:

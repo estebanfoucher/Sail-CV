@@ -12,6 +12,7 @@ import gradio as gr
 from services.video_service import VideoService
 from services.processing_service import ProcessingService
 from services.batch_processing_service import BatchProcessingService
+from services.sam_service import SAMService
 from components.point_cloud_viz import PointCloudVisualizer
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ class EventHandler:
         self.video_service = VideoService()
         self.processing_service = ProcessingService()
         self.batch_processing_service = BatchProcessingService()
+        self.sam_service = SAMService()
         self._status_file_path = "/tmp/mvs_model_status.txt"
         self._start_mast3r_loading()
     
@@ -210,7 +212,8 @@ class EventHandler:
         self, 
         frame_number: int, 
         calibration_file_path: Optional[str],
-        render_cameras: bool = True
+        render_cameras: bool = True,
+        subsample: int = 8
     ) -> Tuple[str, gr.File, gr.Model3D, str]:
         """Handle stereo pair processing"""
         try:
@@ -242,9 +245,13 @@ class EventHandler:
                 return ("❌ No frame images available", 
                        gr.File(visible=False), gr.Model3D(visible=False), "No frame images available")
             
-            # Process the stereo pair
+            # Process the stereo pair with SAM if available
+            sam_instance = self.sam_service.sam_instance if self.sam_service.sam_instance else None
+            point_prompt_1 = self.sam_service.point_prompt_1
+            point_prompt_2 = self.sam_service.point_prompt_2
+            
             success, status_msg, ply_file_path, download_file_path = self.processing_service.process_stereo_pair(
-                frame_1_image, frame_2_image, calibration_data, frame_number, render_cameras
+                frame_1_image, frame_2_image, calibration_data, frame_number, render_cameras, subsample, sam_instance, point_prompt_1, point_prompt_2
             )
             
             if success and ply_file_path:
@@ -276,7 +283,8 @@ class EventHandler:
         end_frame: int,
         step: int,
         calibration_file_path: Optional[str],
-        render_cameras: bool = True
+        render_cameras: bool = True,
+        subsample: int = 8
     ) -> Tuple[str, str, gr.File]:
         """Handle batch processing of all frames"""
         try:
@@ -313,6 +321,11 @@ class EventHandler:
             # Set up batch processing service with the same model
             self.batch_processing_service.mast3r_engine = self.processing_service.mast3r_engine
             
+            # Get SAM instance and point prompts if available
+            sam_instance = self.sam_service.sam_instance if self.sam_service.sam_instance else None
+            point_prompt_1 = self.sam_service.point_prompt_1
+            point_prompt_2 = self.sam_service.point_prompt_2
+            
             # Start batch processing in a separate thread
             def batch_process_async():
                 try:
@@ -323,7 +336,11 @@ class EventHandler:
                         int(start_frame),
                         int(end_frame),
                         int(step),
-                        render_cameras
+                        render_cameras,
+                        subsample,
+                        sam_instance,
+                        point_prompt_1,
+                        point_prompt_2
                     )
                     
                     # Update UI components after processing
@@ -388,6 +405,80 @@ class EventHandler:
             return (f"❌ Error checking progress: {str(e)}", 
                    "Error", gr.File(visible=False))
     
+    def handle_activate_sam(self) -> Tuple[str, gr.Button, gr.Button, gr.Textbox, gr.Textbox, gr.Button]:
+        """Handle SAM activation"""
+        try:
+            logger.info("Activating SAM model...")
+            success, status_msg = self.sam_service.activate_sam()
+            
+            if success:
+                # Update UI components
+                activate_btn = gr.Button(interactive=False)
+                deactivate_btn = gr.Button(interactive=True)
+                point_prompt_1 = gr.Textbox(interactive=True)
+                point_prompt_2 = gr.Textbox(interactive=True)
+                compute_masks_btn = gr.Button(interactive=True)
+            else:
+                # Keep current state on failure
+                activate_btn = gr.Button(interactive=True)
+                deactivate_btn = gr.Button(interactive=False)
+                point_prompt_1 = gr.Textbox(interactive=False)
+                point_prompt_2 = gr.Textbox(interactive=False)
+                compute_masks_btn = gr.Button(interactive=False)
+            
+            return status_msg, activate_btn, deactivate_btn, point_prompt_1, point_prompt_2, compute_masks_btn
+            
+        except Exception as e:
+            logger.error(f"Error activating SAM: {str(e)}", exc_info=True)
+            return f"❌ Error activating SAM: {str(e)}", gr.Button(), gr.Button(), gr.Textbox(), gr.Textbox(), gr.Button()
+    
+    def handle_deactivate_sam(self, frame_number: int) -> Tuple[str, gr.Button, gr.Button, gr.Textbox, gr.Textbox, gr.Button, Optional[np.ndarray], Optional[np.ndarray]]:
+        """Handle SAM deactivation and restore raw images"""
+        try:
+            logger.info("Deactivating SAM model...")
+            success, status_msg = self.sam_service.deactivate_sam()
+            
+            # Update UI components
+            activate_btn = gr.Button(interactive=True)
+            deactivate_btn = gr.Button(interactive=False)
+            point_prompt_1 = gr.Textbox(value="", interactive=False)
+            point_prompt_2 = gr.Textbox(value="", interactive=False)
+            compute_masks_btn = gr.Button(interactive=False)
+            
+            # Restore raw images (without SAM masks)
+            frame_1_image, frame_2_image, _ = self.video_service.extract_frames_for_selection(frame_number, 0)
+            
+            return status_msg, activate_btn, deactivate_btn, point_prompt_1, point_prompt_2, compute_masks_btn, frame_1_image, frame_2_image
+            
+        except Exception as e:
+            logger.error(f"Error deactivating SAM: {str(e)}", exc_info=True)
+            return f"❌ Error deactivating SAM: {str(e)}", gr.Button(), gr.Button(), gr.Textbox(), gr.Textbox(), gr.Button(), None, None
+    
+    def handle_compute_masks(self, frame_number: int, point_prompt_1: str, point_prompt_2: str) -> Tuple[str, Optional[np.ndarray], Optional[np.ndarray], str]:
+        """Handle mask computation"""
+        try:
+            logger.info(f"Computing masks for frame {frame_number}")
+            
+            # Set point prompts
+            success, status_msg = self.sam_service.set_point_prompts(point_prompt_1, point_prompt_2)
+            if not success:
+                return status_msg, None, None, self.sam_service.get_sam_status()
+            
+            # Get current frame images
+            frame_1_image, frame_2_image, _ = self.video_service.extract_frames_for_selection(frame_number, 0)
+            
+            if frame_1_image is None and frame_2_image is None:
+                return "❌ No frame images available", None, None, self.sam_service.get_sam_status()
+            
+            # Compute masks
+            success, status_msg, rendered_image_1, rendered_image_2 = self.sam_service.compute_masks(frame_1_image, frame_2_image)
+            
+            return status_msg, rendered_image_1, rendered_image_2, self.sam_service.get_sam_status()
+            
+        except Exception as e:
+            logger.error(f"Error computing masks: {str(e)}", exc_info=True)
+            return f"❌ Error computing masks: {str(e)}", None, None, self.sam_service.get_sam_status()
+    
     def setup_event_handlers(self, components: Dict[str, Any]) -> None:
         """Setup all event handlers for the UI components"""
         try:
@@ -431,7 +522,7 @@ class EventHandler:
             # Process pair button
             components['process_pair_btn'].click(
                 fn=self.handle_process_pair,
-                inputs=[components['frame_slider'], components['calibration_upload'], components['render_camera_toggle']],
+                inputs=[components['frame_slider'], components['calibration_upload'], components['render_camera_toggle'], components['subsample_param']],
                 outputs=[components['processing_status'], components['download_ply'], 
                         components['model3d_viewer'], components['viz_status']]
             )
@@ -447,7 +538,7 @@ class EventHandler:
             components['process_all_btn'].click(
                 fn=self.handle_batch_processing,
                 inputs=[components['folder_name'], components['start_frame'], components['end_frame'], 
-                       components['step'], components['calibration_upload'], components['render_camera_toggle']],
+                       components['step'], components['calibration_upload'], components['render_camera_toggle'], components['subsample_param']],
                 outputs=[components['batch_status'], components['batch_progress'], components['download_batch']]
             )
             
@@ -456,6 +547,30 @@ class EventHandler:
                 fn=self.handle_batch_progress_check,
                 inputs=[],
                 outputs=[components['batch_status'], components['batch_progress'], components['download_batch']]
+            )
+            
+            # SAM activation button
+            components['activate_sam_btn'].click(
+                fn=self.handle_activate_sam,
+                inputs=[],
+                outputs=[components['sam_status'], components['activate_sam_btn'], components['deactivate_sam_btn'], 
+                        components['point_prompt_1'], components['point_prompt_2'], components['compute_masks_btn']]
+            )
+            
+            # SAM deactivation button
+            components['deactivate_sam_btn'].click(
+                fn=self.handle_deactivate_sam,
+                inputs=[components['frame_slider']],
+                outputs=[components['sam_status'], components['activate_sam_btn'], components['deactivate_sam_btn'], 
+                        components['point_prompt_1'], components['point_prompt_2'], components['compute_masks_btn'],
+                        components['selected_image_1'], components['selected_image_2']]
+            )
+            
+            # Compute masks button
+            components['compute_masks_btn'].click(
+                fn=self.handle_compute_masks,
+                inputs=[components['frame_slider'], components['point_prompt_1'], components['point_prompt_2']],
+                outputs=[components['sam_status'], components['selected_image_1'], components['selected_image_2'], components['sam_status']]
             )
             
             

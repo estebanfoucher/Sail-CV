@@ -11,12 +11,12 @@ class ProcessingInterface:
     """Factory class for creating processing interface components"""
     
     @staticmethod
-    def create_processing_controls() -> Tuple[gr.Button, gr.File, gr.Textbox, gr.Checkbox]:
+    def create_processing_controls() -> Tuple[gr.Button, gr.File, gr.Textbox, gr.Checkbox, gr.Number]:
         """
         Create processing control components
         
         Returns:
-            tuple: (process_pair_btn, download_ply, processing_status, render_camera_toggle)
+            tuple: (process_pair_btn, download_ply, processing_status, render_camera_toggle, subsample_param)
         """
         with gr.Row():
             with gr.Column(scale=1):
@@ -59,5 +59,15 @@ class ProcessingInterface:
                     info="Toggle to include camera pyramids in 3D visualization"
                 )
                 
+                # Subsample parameter
+                subsample_param = gr.Number(
+                    label="🔢 Subsample Parameter",
+                    value=8,
+                    minimum=1,
+                    maximum=16,
+                    step=1,
+                    info="Controls point density in 3D reconstruction (1=highest density, 16=lowest density)"
+                )
+                
         
-        return process_pair_btn, download_ply, processing_status, update_status_btn, render_camera_toggle
+        return process_pair_btn, download_ply, processing_status, update_status_btn, render_camera_toggle, subsample_param

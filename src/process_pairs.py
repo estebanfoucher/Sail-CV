@@ -48,6 +48,7 @@ def process_pair(
     point_prompt_2=None,
     save_resized_frames=False,
     save_obj_file=False,
+    subsample=None,
 ):
     logger.info(f"Processing pair: {pair_name}")
     
@@ -58,8 +59,9 @@ def process_pair(
     
     # run inference
     output = mast3r_engine.run_inference(images)
-    # extract raw data
-    raw_data = mast3r_engine.extract_raw_data(output, subsample=SUBSAMPLE)
+    # extract raw data - use provided subsample or default
+    subsample_value = subsample if subsample is not None else SUBSAMPLE
+    raw_data = mast3r_engine.extract_raw_data(output, subsample=subsample_value)
 
     # load image1
     img1_pil = resize_image(image_1, size=512)
