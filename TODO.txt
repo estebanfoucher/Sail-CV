@@ -1,20 +1,11 @@
 Refacto :
 
-    - reorganize output folder
 
     - refactor so mast3r is docked to the codebase : create a class densepointmatchermodel.
         - means need to change mast3r_engine to eat images without loading them
 
-    - make a script that processes directly on a video and where the pipeline never save/lo
+    - fp16 model
 
-    - add calibration asset + bind computation test
-
-    - update the whole Readme
-
-    - crash docker (memory issues...) # will be resolved by -> fp16 model + FastSAM-s.pt, looks like the fast_reciprocal_NN makes it crash
-
-    - web app
-
-    - mettre des log debug dans loguru et mettre le level par defaut a info via .env
+    - clean les log debug dans loguru et mettre le level par defaut a info via .env
 
     - option : pydantic BaseModel refactor input-outputs de modeles, images, to make a real webapp

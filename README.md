@@ -1,45 +1,133 @@
-# Multiview Structure
+# Calibrated stereo-view 3D dense reconstruction
 
-A Docker-based application for processing multiview video data on Jetson devices.
+## Overview
 
-## Quick Start
+The present work aims to precisely reconstruct metric point clouds from calibrated stereo views. To do so, we leverage two main ingredients :
+   - the ability of recent 3D reconstruction AI models (in that case mast3r) to predict
+   **dense point matching** between two viewpoints of a same object
+   - the precise **calibration** of intrinsics and extrinsics of a general two-camera setup to make precise **triangulation**
+
+Below are two examples of results, applied to boatsail measurement.
+
+### Mainsail sheeting
+
+| Combined View (input)|
+|:-------------:|
+| ![Combined View](assets/scene_7/gifs/combined.gif) |
+
+| Front View |
+|:----------:|
+| <img src="assets/scene_7/gifs/render_front.gif" width="50%" alt="Front View"> |
+
+| Bottom View | Top View |
+|:-----------:|:--------:|
+| ![Bottom View](assets/scene_7/gifs/render_bot.gif) | ![Top View](assets/scene_7/gifs/render_top.gif) |
+
+### Jibsail tacking
+
+| Combined View (input)|
+|:-------------:|
+| ![Combined View](assets/scene_8/gifs/combined.gif) |
+
+| Front View |
+|:----------:|
+| <img src="assets/scene_8/gifs/render_front.gif" width="50%" alt="Front View"> |
+
+| Bottom View | Top View |
+|:-----------:|:--------:|
+| ![Bottom View](assets/scene_8/gifs/render_bot.gif) | ![Top View](assets/scene_8/gifs/render_top.gif) |
+
+## Get Started
 
 ### Prerequisites
-- Docker and Docker Compose
-- NVIDIA Jetson device (for GPU acceleration)
 
-### Setup
-1. Clone the repository
-2. Create output directory:
+- Python 3.10+
+- [uv](https://docs.astral.sh/uv/) package manager
+- ffmpeg
+- optional : CUDA-compatible GPU (recommended for optimal performance)
+
+### Installation
+
+1. **Clone the repository**
    ```bash
-   mkdir -p output
-   ```
-3. Build and run:
-   ```bash
-   cd docker
-   docker-compose build
-   docker-compose up
+   git clone https://github.com/estebanfoucher/MVS_app
+   cd MVS_app
    ```
 
-## Project Structure
+2. **Install dependencies**
+
+   set up python:
+   ```bash
+   make install-all
+   ```
+   install ffmpeg:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt update && sudo apt install ffmpeg
+
+   # MacOS
+   brew install ffmpeg
+   ```
+
+3. **Activate environment**
+   ```bash
+   source .venv/bin/activate
+   ```
+
+4. **Add external module to python environment**
+   ```bash
+   export PYTHONPATH="${PWD}/mast3r:${PWD}/mast3r/dust3r:${PYTHONPATH}"
+   ```
+   Note: Run this command from the project root directory
+
+5. **Download model to checkpoints/**
+
+The required model file should be placed in the checkpoints/ directory :
+```bash
+mkdir -p checkpoints/
+wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth -P checkpoints/
 ```
-multiviewstructure/
-├── src/           # Source code
-├── data/          # Input video files
-├── output/        # Extracted frames and results
-└── docker/        # Docker configuration
+
+### Quick Start
+
+**Web Interface (Recommended)**
+```bash
+cd web_app
+python main.py
+```
+Open your browser to `http://localhost:7862` to access the interactive web interface. The port is defined in web_app/config/settings.py
+
+### Docker (Alternative)
+
+For containerized deployment, especially on Jetson hardware (tested on jetson nano):
+
+```bash
+cd docker/
+docker compose -f docker-compose.yml --build
+docker compose -f docker-compose.yml up -d
+docker compose -f docker-compose.yml exec mvs-app bash
+cd app/web_app/
+python3 main.py
 ```
 
-## Usage
-The application will:
-- Process MP4 files from the data directory
-- Extract frames using ffmpeg
-- Save results to the output directory
+### Development Setup (optional)
 
-## Data Format
-- Place MP4 files in `data/scene_X/camera_Y/` directories
-- Supported formats: `.mp4`, `.MP4`
+```bash
+make dev          # Install dependencies and setup development environment
+make check         # Run all code quality checks
+make test          # Run test suite
+```
 
-## Output
-- Extracted frames saved as JPEG images
-- Files persist in the `output/` directory after container stops
+## Acknowledgments
+
+This project builds upon the excellent work of [MASt3R](https://github.com/naver/mast3r) (Grounding Image Matching in 3D with MASt3R) by Naver Labs. We are grateful to the authors for making their research and code publicly available.
+
+**MASt3R Citation:**
+```bibtex
+@misc{mast3r_eccv24,
+      title={Grounding Image Matching in 3D with MASt3R},
+      author={Vincent Leroy and Yohann Cabon and Jerome Revaud},
+      booktitle = {ECCV},
+      year = {2024}
+}
+```

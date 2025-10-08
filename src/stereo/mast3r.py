@@ -9,9 +9,7 @@ import time
 
 import cv2
 import numpy as np
-from PIL.ImageOps import exif_transpose
 from dust3r.inference import inference
-from dust3r.utils.image import load_images, ImgNorm
 from loguru import logger
 from mast3r.fast_nn import fast_reciprocal_NNs
 from mast3r.model import AsymmetricMASt3R

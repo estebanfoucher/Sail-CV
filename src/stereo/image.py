@@ -4,13 +4,12 @@ Image processing utilities for MASt3R
 Provides resizing functions based on dust3r.utils.image logic
 """
 
-import PIL.Image
-from dust3r.utils.image import _resize_pil_image
-from PIL.ImageOps import exif_transpose
-from loguru import logger
-import numpy as np
-from dust3r.utils.image import ImgNorm
 import cv2
+import numpy as np
+import PIL.Image
+from dust3r.utils.image import ImgNorm, _resize_pil_image
+from loguru import logger
+from PIL.ImageOps import exif_transpose
 
 
 def resize_image(img, size, square_ok=False, patch_size=16):
@@ -26,7 +25,7 @@ def resize_image(img, size, square_ok=False, patch_size=16):
     Returns:
         PIL.Image: Resized and cropped PIL image
     """
-    
+
     W1, H1 = img.size
 
     if size == 224:
@@ -59,15 +58,17 @@ def load_image(image_path, size=None):
     image = exif_transpose(PIL.Image.open(image_path)).convert("RGB")
     return image
 
-def convert_image(image : np.ndarray):
+
+def convert_image(image: np.ndarray):
     """Convert image output from VideoReader to PIL Image input of preprocess_image"""
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image_pil = PIL.Image.fromarray(image_rgb)
     return image_pil
 
+
 def preprocess_image(image, size=None, square_ok=False, patch_size=16, idx=0):
     """Preprocess image for MASt3R inference."""
-    
+
     # input image loaded as such img = exif_transpose(PIL.Image.open(os.path.join(root, path))).convert('RGB')
     W1, H1 = image.size
     if size == 224:
@@ -90,11 +91,11 @@ def preprocess_image(image, size=None, square_ok=False, patch_size=16, idx=0):
 
     W2, H2 = img.size
     logger.debug(f" - preprocessed {image} with resolution {W1}x{H1} --> {W2}x{H2}")
-    img = dict(
-        img=ImgNorm(img)[None],
-        true_shape=np.int32([img.size[::-1]]),
-        idx=idx,
-        instance=str(idx),
-    )
+    img = {
+        "img": ImgNorm(img)[None],
+        "true_shape": np.int32([img.size[::-1]]),
+        "idx": idx,
+        "instance": str(idx),
+    }
 
     return img

@@ -27,7 +27,7 @@ LOGGING_CONFIG = {
 APP_CONFIG = {
     'title': 'MVS Interactive Web Application',
     'theme': 'soft',
-    'server_port': 7861,
+    'server_port': 7862,
     'server_name': '0.0.0.0',
     'share': False,
     'debug': True

@@ -189,51 +189,53 @@ def test_different_sizes(test_images, size):
 def test_video_frame_reading_vs_save_and_load():
     """Test that direct video frame reading is equivalent to cv2.imwrite + load_image."""
     # Use a video file from the assets
-    video_path = "/home/estebanfoucher/Workspace/MVS_app/assets/scene_3/camera_1/camera_1.mp4"
-    
+    video_path = (
+        "/home/estebanfoucher/Workspace/MVS_app/assets/scene_3/camera_1/camera_1.mp4"
+    )
+
     # Verify video file exists
     assert os.path.exists(video_path), f"Test video not found: {video_path}"
-    
+
     # Import VideoReader from the video module
     sys.path.insert(0, os.path.join(project_root, "src"))
     from video import VideoReader
-    
+
     # Create a temporary directory for saving the frame
     with tempfile.TemporaryDirectory() as temp_dir:
         # Method 1: Direct frame reading from video
         video_reader = VideoReader.open_video_file(video_path)
         ret, direct_frame = video_reader.read(frame_number=0)  # Read first frame
         video_reader.release()
-        
+
         assert ret, "Failed to read frame from video"
         assert direct_frame is not None, "Direct frame is None"
-        
+
         # Method 2: Save frame with cv2.imwrite and load with load_image
         temp_image_path = os.path.join(temp_dir, "temp_frame.png")
         cv2.imwrite(temp_image_path, direct_frame)
-        
+
         # Load the saved image using load_image function
         loaded_image = load_image(temp_image_path, size=512)
-        
+
         # Convert direct frame to PIL Image for comparison
         direct_pil = convert_image(direct_frame)
-        
+
         # Compare the images
         # Both should be PIL Images in RGB format
         assert loaded_image.mode == direct_pil.mode, "Image modes should match"
         assert loaded_image.size == direct_pil.size, "Image sizes should match"
-        
+
         # Convert to numpy arrays for pixel comparison
         loaded_array = np.array(loaded_image)
         direct_array = np.array(direct_pil)
-        
+
         # Compare pixel values (should be identical)
         np.testing.assert_array_equal(
-            loaded_array, 
-            direct_array, 
-            "Pixel values should be identical between direct reading and save+load"
+            loaded_array,
+            direct_array,
+            "Pixel values should be identical between direct reading and save+load",
         )
-        
+
         print(f"✅ Video frame reading test passed:")
         print(f"   - Direct frame shape: {direct_frame.shape}")
         print(f"   - Loaded image size: {loaded_image.size}")

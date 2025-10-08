@@ -1,22 +1,21 @@
-import os
-from pathlib import Path
 import json
+import os
 import time
+from pathlib import Path
 
 import cv2
 import numpy as np
-from loguru import logger
-
 import torch
+from loguru import logger
 
 from cameras import (
     create_cameras_from_stereo_calibration,
     export_cameras_to_cloudcompare,
 )
 from stereo.convert_calibration import convert_calibration_parameters
-from stereo.image import resize_image, load_image, preprocess_image
+from stereo.image import load_image, preprocess_image, resize_image
 from stereo.mast3r import MASt3RInferenceEngine
-from stereo.saver import save_point_cloud_ply, save_point_cloud_obj
+from stereo.saver import save_point_cloud_obj, save_point_cloud_ply
 from stereo.triangulation import (
     extract_colors_from_image,
     filter_pairs_with_mask,
@@ -51,12 +50,12 @@ def process_pair(
     subsample=None,
 ):
     logger.info(f"Processing pair: {pair_name}")
-    
-    
-    images = [preprocess_image(image_1, size=512, idx=0), preprocess_image(image_2, size=512, idx=1)]
-    
-    
-    
+
+    images = [
+        preprocess_image(image_1, size=512, idx=0),
+        preprocess_image(image_2, size=512, idx=1),
+    ]
+
     # run inference
     output = mast3r_engine.run_inference(images)
     # extract raw data - use provided subsample or default
@@ -80,7 +79,7 @@ def process_pair(
     if point_prompt_1 is not None:
         logger.info(f"Applying point prompt 1: {point_prompt_1} for filtering")
         # convert PIL Images to numpy arrays for SAM
-        
+
         # infer with SAM and get masks for both images
         mask_result_img1 = sam.predict(img1_array, point=point_prompt_1)
 
@@ -133,7 +132,9 @@ def process_pair(
     # Also save as OBJ format for better Gradio Model3D compatibility
     if save_obj_file:
         save_point_cloud_obj(
-            point_cloud, colors_for_points, f"{output_folder}/point_cloud_{pair_name}.obj"
+            point_cloud,
+            colors_for_points,
+            f"{output_folder}/point_cloud_{pair_name}.obj",
         )
 
     if render_cameras:
@@ -143,23 +144,29 @@ def process_pair(
                 calibration_params, img1_array, img2_array
             )
             logger.info(f"Cameras created successfully: {camera1.name}, {camera2.name}")
-            
+
             # Export camera pyramids in both PLY and OBJ formats
-            logger.info(f"Exporting camera pyramids to PLY format...")
+            logger.info("Exporting camera pyramids to PLY format...")
             ply_success = export_cameras_to_cloudcompare(
-                [camera1, camera2], f"{output_folder}/camera_pyramids_{pair_name}", "ply"
+                [camera1, camera2],
+                f"{output_folder}/camera_pyramids_{pair_name}",
+                "ply",
             )
             logger.info(f"PLY export success: {ply_success}")
-            
+
             if save_obj_file:
-                logger.info(f"Exporting camera pyramids to OBJ format...")
+                logger.info("Exporting camera pyramids to OBJ format...")
                 obj_success = export_cameras_to_cloudcompare(
-                    [camera1, camera2], f"{output_folder}/camera_pyramids_{pair_name}", "obj"
+                    [camera1, camera2],
+                    f"{output_folder}/camera_pyramids_{pair_name}",
+                    "obj",
                 )
                 logger.info(f"OBJ export success: {obj_success}")
-            
+
         except Exception as e:
-            logger.error(f"Error creating/exporting camera pyramids: {str(e)}", exc_info=True)
+            logger.error(
+                f"Error creating/exporting camera pyramids: {e!s}", exc_info=True
+            )
 
 
 def instantiate_sam() -> SAM:
@@ -167,7 +174,8 @@ def instantiate_sam() -> SAM:
 
 
 def instantiate_mast3r_engine() -> MASt3RInferenceEngine:
-    mast3r_engine = MASt3RInferenceEngine(model_path=MODEL_PATH, device="cuda")
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    mast3r_engine = MASt3RInferenceEngine(model_path=MODEL_PATH, device=DEVICE)
     mast3r_engine.load_model()
     return mast3r_engine
 
@@ -190,10 +198,7 @@ def process_scene(
         calib_data = json.load(f)
 
     calibration_params = convert_calibration_parameters(
-        calib_data, 
-        original_size=(1920, 1080),
-        target_size=512,
-        patch_size=16
+        calib_data, original_size=(1920, 1080), target_size=512, patch_size=16
     )
 
     pair_folders = [
@@ -224,7 +229,7 @@ def process_scene(
 
 if __name__ == "__main__":
     torch.cuda.empty_cache()
-    #sam = instantiate_sam()
+    # sam = instantiate_sam()
     mast3r_engine = instantiate_mast3r_engine()
     # make a 1 second sleep
     time.sleep(1)

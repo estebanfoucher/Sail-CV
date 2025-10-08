@@ -123,17 +123,19 @@ def save_point_cloud_obj(
         f.write("# OBJ file converted from point cloud\n")
         f.write("# Point cloud representation\n")
         f.write(f"# {len(points_valid)} points\n")
-        
+
         # Write vertices with colors (OBJ format supports vertex colors)
-        for i, (point, color) in enumerate(zip(points_valid, colors_valid)):
+        for point, color in zip(points_valid, colors_valid, strict=False):
             # Normalize colors to [0, 1] range for OBJ format
             color_normalized = color / 255.0
-            f.write(f"v {point[0]:.6f} {point[1]:.6f} {point[2]:.6f} "
-                   f"{color_normalized[0]:.3f} {color_normalized[1]:.3f} {color_normalized[2]:.3f}\n")
-        
+            f.write(
+                f"v {point[0]:.6f} {point[1]:.6f} {point[2]:.6f} "
+                f"{color_normalized[0]:.3f} {color_normalized[1]:.3f} {color_normalized[2]:.3f}\n"
+            )
+
         # Write point references (each point as a vertex)
         for i in range(len(points_valid)):
-            f.write(f"p {i+1}\n")
+            f.write(f"p {i + 1}\n")
 
     logger.debug(
         f"Point cloud saved to {filename} with {len(points_valid)} points (filtered by distance < {bound_distance})"

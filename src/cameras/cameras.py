@@ -464,11 +464,11 @@ class Camera:
                 aspect_ratio = self.image.shape[1] / self.image.shape[0]  # width/height
                 target_height = int(target_width / aspect_ratio)
                 self.image = cv2.resize(self.image, (target_width, target_height))
-            
+
             vertices, edges, _base_faces, texture_coords, colors = (
                 self.get_pyramid_with_texture_coords(focal_length)
             )
-            
+
             # Restore original image
             if self.image is not None:
                 self.image = original_image
@@ -479,7 +479,9 @@ class Camera:
                     if i < len(colors) and len(colors[i]) >= 3:
                         # Write vertex with RGB color
                         r, g, b = colors[i][:3]
-                        f.write(f"v {vertex[0]:.6f} {vertex[1]:.6f} {vertex[2]:.6f} {r:.3f} {g:.3f} {b:.3f}\n")
+                        f.write(
+                            f"v {vertex[0]:.6f} {vertex[1]:.6f} {vertex[2]:.6f} {r:.3f} {g:.3f} {b:.3f}\n"
+                        )
                     else:
                         # Write vertex without color (fallback)
                         f.write(f"v {vertex[0]:.6f} {vertex[1]:.6f} {vertex[2]:.6f}\n")
