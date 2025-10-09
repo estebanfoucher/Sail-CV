@@ -1,4 +1,4 @@
-# Calibrated stereo-view 3D dense reconstruction
+# SailCV-3D-reconstruction : calibrated stereo-view 3D dense reconstruction
 
 ## Overview
 
@@ -9,7 +9,7 @@ The present work aims to precisely reconstruct metric point clouds from calibrat
 
 Below are two examples of results, applied to boatsail measurement.
 
-### Mainsail sheeting
+### Example : mainsail sheeting
 
 | Combined View (input)|
 |:-------------:|
@@ -23,7 +23,7 @@ Below are two examples of results, applied to boatsail measurement.
 |:-----------:|:--------:|
 | ![Bottom View](assets/scene_7/gifs/render_bot.gif) | ![Top View](assets/scene_7/gifs/render_top.gif) |
 
-### Jibsail tacking
+### Example : jibsail tacking
 
 | Combined View (input)|
 |:-------------:|
@@ -36,6 +36,20 @@ Below are two examples of results, applied to boatsail measurement.
 | Bottom View | Top View |
 |:-----------:|:--------:|
 | ![Bottom View](assets/scene_8/gifs/render_bot.gif) | ![Top View](assets/scene_8/gifs/render_top.gif) |
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Examples](#mainsail-sheeting)
+  - [Mainsail sheeting](#mainsail-sheeting)
+  - [Jibsail tacking](#jibsail-tacking)
+- [Get Started](#get-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Quick Start](#quick-start)
+  - [Docker (Alternative)](#docker-alternative)
+- [Development Setup (optional)](#development-setup-optional)
+- [Acknowledgments](#acknowledgments)
 
 ## Get Started
 
@@ -50,8 +64,8 @@ Below are two examples of results, applied to boatsail measurement.
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/estebanfoucher/MVS_app
-   cd MVS_app
+   git clone https://github.com/estebanfoucher/SailCV-3D-reconstruction
+   cd SailCV-3D-reconstruction
    ```
 
 2. **Install dependencies**
@@ -82,7 +96,6 @@ Below are two examples of results, applied to boatsail measurement.
 
 5. **Download model to checkpoints/**
 
-The required model file should be placed in the checkpoints/ directory :
 ```bash
 mkdir -p checkpoints/
 wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth -P checkpoints/
@@ -95,7 +108,7 @@ wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge
 cd web_app
 python main.py
 ```
-Open your browser to `http://localhost:7862` to access the interactive web interface. The port is defined in web_app/config/settings.py
+Open your browser to `http://localhost:{PORT}` to access the interactive web interface. The port is defined in the .env
 
 ### Docker (Alternative)
 
@@ -103,14 +116,14 @@ For containerized deployment, especially on Jetson hardware (tested on jetson na
 
 ```bash
 cd docker/
-docker compose -f docker-compose.yml --build
+docker compose build
 docker compose -f docker-compose.yml up -d
-docker compose -f docker-compose.yml exec mvs-app bash
+docker compose -f docker-compose.yml exec sailcv-3d-reconstruction bash
 cd app/web_app/
 python3 main.py
 ```
 
-### Development Setup (optional)
+## Development Setup (optional)
 
 ```bash
 make dev          # Install dependencies and setup development environment
@@ -120,14 +133,5 @@ make test          # Run test suite
 
 ## Acknowledgments
 
-This project builds upon the excellent work of [MASt3R](https://github.com/naver/mast3r) (Grounding Image Matching in 3D with MASt3R) by Naver Labs. We are grateful to the authors for making their research and code publicly available.
+This project builds upon the excellent work of [MASt3R](https://github.com/naver/mast3r) (Grounding Image Matching in 3D with MASt3R) by Naver Labs.
 
-**MASt3R Citation:**
-```bibtex
-@misc{mast3r_eccv24,
-      title={Grounding Image Matching in 3D with MASt3R},
-      author={Vincent Leroy and Yohann Cabon and Jerome Revaud},
-      booktitle = {ECCV},
-      year = {2024}
-}
-```

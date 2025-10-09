@@ -32,7 +32,14 @@ class MASt3RInferenceEngine:
     def load_model(self):
         """Load MASt3R model from pretrained checkpoint."""
         logger.info(f"Loading model from: {self.model_path}")
-        self.model = AsymmetricMASt3R.from_pretrained(self.model_path).to(self.device)
+        
+        # Control verbosity: only verbose if LOGURU_LEVEL is DEBUG
+        log_level = os.environ.get('LOGURU_LEVEL', 'INFO').upper()
+        verbose = (log_level == 'DEBUG')
+        logger.debug(f"Model loading verbosity set to: {verbose} (LOGURU_LEVEL={log_level})")
+        
+        self.model = AsymmetricMASt3R.from_pretrained(self.model_path, verbose=verbose).to(self.device)
+        logger.info(f"Model loaded successfully")
         return self.model
 
     def save_inference_images(self, images, output_dir):

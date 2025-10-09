@@ -3,6 +3,7 @@
 !.gitignore
 !README.md
 !DEVELOPMENT.md
+!.env
 
 # Source code
 !src/
@@ -15,6 +16,7 @@
 # Docker configuration
 !docker/
 !docker/**
+!docker/.env
 
 # Project configuration
 !pyproject.toml
@@ -90,7 +92,6 @@ build/
 venv/
 env/
 ENV/
-.env
 .venv
 
 # IDE and editor files

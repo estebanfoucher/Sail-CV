@@ -1,8 +1,6 @@
 FROM dustynv/l4t-pytorch:r36.4.0
 
-LABEL description="Docker container for MVS app with MASt3R and SAM integration. JETSON VERSION"
-ENV DEVICE="cuda"
-ENV MODEL="MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth"
+LABEL description="Container for SailCV 3D Reconstruction (jetson nano version)"
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Install uv package manager (latest version via official installer)
@@ -19,7 +17,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy project files for dependency installation
-COPY pyproject.toml uv.lock* README.md /app/
+COPY pyproject.toml uv.lock* README.md docker/.env /app/
 COPY mast3r/ /app/mast3r/
 
 # Install mast3r dependencies first

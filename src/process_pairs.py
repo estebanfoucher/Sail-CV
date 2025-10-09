@@ -61,7 +61,7 @@ def process_pair(
     # extract raw data - use provided subsample or default
     subsample_value = subsample if subsample is not None else SUBSAMPLE
     raw_data = mast3r_engine.extract_raw_data(output, subsample=subsample_value)
-
+    
     # load image1
     img1_pil = resize_image(image_1, size=512)
     if save_resized_frames:

@@ -45,8 +45,9 @@ class AsymmetricMASt3R(AsymmetricCroCo3DStereo):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kw):
+        verbose = kw.pop('verbose', True)
         if os.path.isfile(pretrained_model_name_or_path):
-            return load_model(pretrained_model_name_or_path, device='cpu')
+            return load_model(pretrained_model_name_or_path, device='cpu', verbose=verbose)
         else:
             return super(AsymmetricMASt3R, cls).from_pretrained(pretrained_model_name_or_path, **kw)
 
@@ -112,8 +113,9 @@ class AsymmetricMASt3RWithDUNEBackbone(torch.nn.Module):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kw):
+        verbose = kw.pop('verbose', True)
         if os.path.isfile(pretrained_model_name_or_path):
-            return load_dune_mast3r_model(pretrained_model_name_or_path, device='cpu')
+            return load_dune_mast3r_model(pretrained_model_name_or_path, device='cpu', verbose=verbose)
         else:
             return super(AsymmetricMASt3R, cls).from_pretrained(pretrained_model_name_or_path, **kw)
 

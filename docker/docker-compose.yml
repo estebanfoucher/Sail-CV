@@ -1,14 +1,15 @@
 services:
-  mvs-app:
+  sailcv-3d-reconstruction:
     build:
       context: ..
       dockerfile: docker/jetson.Dockerfile
     ports:
-      - "7861:7861"
+      - "${PORT}:${PORT}"
     environment:
       - DEVICE=cuda
-      - MODEL=${MODEL:-MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth}
       - CUDA_MEMORY_FRACTION=0.8
+      - PORT=${PORT}
+      - LOGURU_LEVEL=${LOGURU_LEVEL}
     volumes:
       - ../data:/app/data:rw
       - ../assets:/app/assets:rw

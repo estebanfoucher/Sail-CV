@@ -6,15 +6,20 @@ import os
 from pathlib import Path
 from typing import Dict, Any
 import logging
+from dotenv import load_dotenv
 
 # Base paths
 BASE_DIR = Path(__file__).parent.parent.parent
 WEB_APP_DIR = Path(__file__).parent.parent
 SRC_DIR = BASE_DIR / "src"
 
+DOTENV_PATH = BASE_DIR / ".env"
+load_dotenv(DOTENV_PATH)
+
 # Logging configuration
+LOGURU_LEVEL = os.getenv('LOGURU_LEVEL', 'DEBUG').upper()
 LOGGING_CONFIG = {
-    'level': logging.DEBUG,
+    'level': getattr(logging, LOGURU_LEVEL),
     'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     'handlers': [
         'console',
@@ -27,7 +32,7 @@ LOGGING_CONFIG = {
 APP_CONFIG = {
     'title': 'MVS Interactive Web Application',
     'theme': 'soft',
-    'server_port': 7862,
+    'server_port': int(os.getenv('PORT', 7862)),
     'server_name': '0.0.0.0',
     'share': False,
     'debug': True

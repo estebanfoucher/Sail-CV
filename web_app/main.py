@@ -4,20 +4,38 @@ Basic video loading and single frame processing
 """
 
 import gradio as gr
-import logging
+import os
+import sys
 from pathlib import Path
+from loguru import logger
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (from root of repo)
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 # Add src to path for imports
-import sys
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
 # Import configuration and services
-from config.settings import setup_logging, get_config
+from config.settings import get_config
 from components.ui_factory import UIFactory
 from services.event_handler import EventHandler
 
-# Setup logging
-logger = setup_logging()
+# Setup loguru logger
+LOGURU_LEVEL = os.getenv('LOGURU_LEVEL', 'DEBUG').upper()
+logger.remove()  # Remove default handler
+logger.add(
+    sys.stderr,
+    level=LOGURU_LEVEL,
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+)
+logger.add(
+    Path(__file__).parent / "web_app.log",
+    level=LOGURU_LEVEL,
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+    rotation="10 MB"
+)
+
 config = get_config()
 
 
