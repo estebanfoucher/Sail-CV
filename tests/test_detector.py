@@ -3,12 +3,12 @@ import sys
 
 # main class not to test but used for tests of architectures
 def detector(model_path=None, architecture=None):
-    sys.path.append(str(Path(__file__).parent.parent.parent / "src"))
+    sys.path.append(str(Path(__file__).parent.parent / "src"))
     from detector import TellTaleDetector
     from video import FFmpegVideoWriter, VideoReader
 
     # Get project root (go up from src/ to project root)
-    project_root = Path(__file__).parent.parent.parent
+    project_root = Path(__file__).parent.parent
 
     video_path = str(project_root / "assets" / "2Ce-CKKCtV4.mp4")
     output_folder = project_root / "output_tests" / "detector"
@@ -46,11 +46,11 @@ def detector(model_path=None, architecture=None):
 
 def test_tell_tale_detector_rt_detr():
     rt_detr_model_path = (
-        Path(__file__).parent.parent.parent / "checkpoints" / "rt-detr.pt"
+        Path(__file__).parent.parent / "checkpoints" / "rt-detr.pt"
     )
     detector(model_path=rt_detr_model_path, architecture="rt-detr")
 
 
 def test_tell_tale_detector_yolo():
-    yolo_model_path = Path(__file__).parent.parent.parent / "checkpoints" / "yolo-s.pt"
-    detector(model_path=yolo_model_path, architecture="yolo-s")
+    yolo_model_path = Path(__file__).parent.parent / "checkpoints" / "yolo-s.pt"
+    detector(model_path=yolo_model_path, architecture="yolo")

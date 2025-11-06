@@ -26,6 +26,7 @@
 !scripts/
 !scripts/**
 
+
 # Documentation and project files
 !TODO.txt
 
