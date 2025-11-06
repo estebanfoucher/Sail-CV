@@ -1,10 +1,39 @@
 # SailCV-tell-tales-tracking
-pytorch-based telltale tracker
 
-## setup
+## Overview
 
-[user]
-`uv sync`
+This repository provides a pytorch-based tell-tale tracker for aerodynamics monitoring of separated flow on a sail.
 
-[dev]
-``
+It relies on a **fine tuned RT-DETR** as detector and a **custom python-based tracker**.
+
+## Get Started
+
+### Prerequisites
+
+- Python 3.10+
+- [uv](https://docs.astral.sh/uv/) package manager
+- ffmpeg
+- optional : CUDA-compatible GPU (recommended for optimal performance)
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/estebanfoucher/SailCV-tell-tales-tracking.git &&
+   cd SailCV-tell-tales-tracking
+   ```
+
+2. **Install dependencies**
+
+   set up python:
+   ```bash
+   uv sync
+   ```
+   install ffmpeg:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt update && sudo apt install ffmpeg
+
+   # MacOS
+   brew install ffmpeg
+   ```
