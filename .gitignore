@@ -32,6 +32,7 @@
 !assets/
 !assets/**
 
+
 # Pre-commit configuration
 !.pre-commit-config.yaml
 
@@ -52,6 +53,11 @@
 checkpoints/
 models/
 weights/
+
+ # Allow specific checkpoint files
+!checkpoints/
+!checkpoints/rt-detr.pt
+!checkpoints/yolo-s.pt
 
 # Data directories (input data, not tracked)
 data/
