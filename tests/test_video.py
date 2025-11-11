@@ -1,7 +1,6 @@
 import subprocess
 from pathlib import Path
 
-import cv2
 import sys
 
 

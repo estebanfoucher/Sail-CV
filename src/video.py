@@ -5,8 +5,6 @@ import cv2
 import numpy as np
 from pydantic import BaseModel, Field, field_validator
 
-# Import moved to avoid circular dependency - will be imported when needed
-
 
 class VideoSpecs(BaseModel):
     """Video specifications and metadata using Pydantic validation"""
