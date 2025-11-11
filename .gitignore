@@ -3,10 +3,13 @@
 !.gitignore
 !README.md
 !DEVELOPMENT.md
+!main.py
 
 # Source code
 !src/
 !src/**
+
+
 
 # Tests
 !tests/
