@@ -52,7 +52,6 @@
 *.pickle
 *.joblib
 checkpoints/
-models/
 weights/
 
  # Allow specific checkpoint files
