@@ -1,10 +1,12 @@
 from pathlib import Path
 import sys
 
+
 # main class not to test but used for tests of architectures
 def detector(model_path=None, architecture=None):
     sys.path.append(str(Path(__file__).parent.parent / "src"))
-    from detector import TellTaleDetector
+    from models import ModelSpecs, Image
+    from detector import Detector
     from video import FFmpegVideoWriter, VideoReader
 
     # Get project root (go up from src/ to project root)
@@ -25,12 +27,17 @@ def detector(model_path=None, architecture=None):
 
     frame_count = 10
 
-    detector = TellTaleDetector(model_path=model_path, architecture=architecture)
+    # Create ModelSpecs and Detector
+    specs = ModelSpecs(model_path=model_path, architecture=architecture)
+    detector = Detector(specs)
 
     def process_frame(frame):
-        result = detector.predict(frame, conf=0.1)
-        frame = detector.render_result(frame, result)
-        return frame
+        # Convert numpy array to Image
+        image = Image(image=frame, rgb_bgr="BGR")
+        detections = detector.detect(image)
+        rendered_image = detector.render_result(image, detections)
+        # Convert back to numpy array for writer
+        return rendered_image.to_bgr()
 
     for _ in range(frame_count):
         ret, frame = reader.read()
@@ -45,9 +52,7 @@ def detector(model_path=None, architecture=None):
 
 
 def test_tell_tale_detector_rt_detr():
-    rt_detr_model_path = (
-        Path(__file__).parent.parent / "checkpoints" / "rt-detr.pt"
-    )
+    rt_detr_model_path = Path(__file__).parent.parent / "checkpoints" / "rt-detr.pt"
     detector(model_path=rt_detr_model_path, architecture="rt-detr")
 
 

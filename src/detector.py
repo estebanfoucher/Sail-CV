@@ -1,30 +1,36 @@
 import cv2
-import numpy as np
 import torch
 
+from models import BoundingBox, Detection, Image, ModelSpecs
 
-class TellTaleDetector:
-    def __init__(self, model_path, architecture):
-        """
-        Initialize RTDETR model for tell-tale detection
 
-        Args:
-            model_path (str): Path to model file
-            architecture (str): Architecture of the model (yolo or rt-detr)
-        """
+class Model:
+    """
+    Model class for object detection
+
+    Input:
+        specs: ModelSpecs object containing model configuration
+
+    The model's predict method:
+        Input: Image object (Pydantic validated)
+        Output: List of Detection objects (Pydantic validated)
+    """
+
+    def __init__(self, specs: ModelSpecs):
+        self.specs = specs
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        # Load RTDETR model
-        if architecture == "rt-detr":
+        # Load model based on architecture
+        if specs.architecture == "rt-detr":
             from ultralytics import RTDETR
 
-            self.model = RTDETR(model_path)
-        elif architecture == "yolo":
+            self.model = RTDETR(str(specs.model_path))
+        elif specs.architecture == "yolo":
             from ultralytics import YOLO
 
-            self.model = YOLO(model_path)
+            self.model = YOLO(str(specs.model_path))
         else:
-            raise ValueError(f"Invalid architecture: {architecture}")
+            raise ValueError(f"Invalid architecture: {specs.architecture}")
         self.model.to(self.device)
 
     def format_inference_results(self, results):
@@ -38,60 +44,60 @@ class TellTaleDetector:
         else:
             return None, None, None
 
-    def predict(self, image, conf=0.1):
+    def predict(self, image: Image, conf: float = 0.1) -> list[Detection]:
         """
         Predict tell-tale objects in the image
 
-        Args:
-            image: Input image as numpy array
-            conf: Confidence threshold for predictions (not used, kept for compatibility)
+        Input:
+            image: Image object (Pydantic validated)
+            conf: Confidence threshold (not used, kept for compatibility)
 
-        Returns:
-            dict: Dictionary containing detections, boxes, scores, and class_ids
+        Output:
+            List[Detection]: List of Detection objects (Pydantic validated)
         """
-        # Run inference exactly like the tracker: model(frame)
-        results = self.model(image)
+        # Convert Image to numpy array for model inference
+        # Models typically expect BGR format
+        image_array = image.to_bgr()
 
-        # Use the same format_inference_results as the tracker
+        # Run inference
+        results = self.model(image_array)
+
+        # Format results
         bboxes, confidences, class_ids = self.format_inference_results(results)
 
         # Handle None case (no detections)
-        if bboxes is None:
-            bboxes = np.array([])
-            confidences = np.array([])
-            class_ids = np.array([])
+        if bboxes is None or len(bboxes) == 0:
+            return []
 
-        return {
-            "boxes": bboxes,
-            "confidences": confidences,
-            "class_ids": class_ids,
-            "image_shape": image.shape,
-            "num_detections": len(bboxes),
-        }
+        # Convert to Detection objects
+        detections = []
+        for i in range(len(bboxes)):
+            detection = Detection(
+                bbox=BoundingBox.from_numpy(xyxy=bboxes[i]),
+                confidence=float(confidences[i]),
+                class_id=int(class_ids[i]),
+            )
+            detections.append(detection)
 
-    def render_result(self, image, detections, color=(255, 0, 0), thickness=2):
+        return detections
+
+    def render_result(
+        self,
+        image: Image,
+        detections: list[Detection],
+        color: tuple[int, int, int] = (255, 0, 0),
+        thickness: int = 2,
+    ) -> Image:
         """
         Visualize the detection results
-
-        Args:
-            image: Original image as numpy array
-            detections: Detection results from predict()
-            color: BGR color for bounding boxes
-            thickness: Thickness of bounding box lines
-
-        Returns:
-            numpy array: Image with detection boxes drawn
         """
-        result_image = image.copy()
+        result_image = image.image.copy()
 
-        boxes = detections["boxes"]
-        confidences = detections["confidences"]
-        class_ids = detections["class_ids"]
-
-        for i in range(len(boxes)):
-            x1, y1, x2, y2 = boxes[i].astype(int)
-            conf = confidences[i]
-            class_id = int(class_ids[i])
+        for detection in detections:
+            xyxy = detection.bbox.xyxy
+            x1, y1, x2, y2 = int(xyxy.x1), int(xyxy.y1), int(xyxy.x2), int(xyxy.y2)
+            conf = detection.confidence
+            class_id = detection.class_id
 
             # Draw bounding box
             cv2.rectangle(result_image, (x1, y1), (x2, y2), color, thickness)
@@ -116,4 +122,67 @@ class TellTaleDetector:
                 2,
             )
 
-        return result_image
+        return Image(image=result_image, rgb_bgr=image.rgb_bgr)
+
+
+class Detector:
+    """
+    Detector service class for object detection
+
+    Input:
+        specs: ModelSpecs object containing model configuration
+
+    The detector's detect method:
+        Input: Image object
+        Output: List[Detection] objects
+    """
+
+    def __init__(self, specs: ModelSpecs):
+        """
+        Initialize Detector with model specifications
+
+        Input:
+            specs: ModelSpecs object (Pydantic validated)
+        """
+        self.specs = specs
+        self._model: Model | None = None
+
+    @property
+    def model(self) -> Model:
+        """Get the Model instance (lazy initialization)"""
+        if self._model is None:
+            self._model = Model(self.specs)
+        return self._model
+
+    def detect(self, image: Image) -> list[Detection]:
+        """
+        Detect objects in an image
+
+        Input:
+            image: Image object (Pydantic validated)
+
+        Output:
+            List[Detection]: List of Detection objects (Pydantic validated)
+        """
+        return self.model.predict(image)
+
+    def render_result(
+        self,
+        image: Image,
+        detections: list[Detection],
+        color: tuple[int, int, int] = (255, 0, 0),
+        thickness: int = 2,
+    ) -> Image:
+        """
+        Render detection results on image
+
+        Input:
+            image: Image object (Pydantic validated)
+            detections: List of Detection objects (Pydantic validated)
+            color: BGR color tuple for bounding boxes
+            thickness: Thickness of bounding box lines
+
+        Output:
+            Image: Rendered image with detection boxes drawn
+        """
+        return self.model.render_result(image, detections, color, thickness)
