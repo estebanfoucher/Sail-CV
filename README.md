@@ -37,3 +37,17 @@ It relies on a **fine tuned RT-DETR** as detector and a **custom python-based tr
    # MacOS
    brew install ffmpeg
    ```
+
+## How to use  
+
+### Basic usage
+
+`source .venv/bin/activate && python main.py`
+
+### Docker 
+
+`cd docker && docker compose -f docker-compose.yml build && docker compose -f docker-compose.yml up -d && docker exec -it docker-tell-tales-tracking-1 bash`
+
+then execute
+
+`python3 main.py`
