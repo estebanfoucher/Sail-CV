@@ -1,0 +1,29 @@
+services:
+  tell-tales-tracking:
+    build:
+      context: ..
+      dockerfile: docker/jetson.Dockerfile
+    environment:
+      - DEVICE=cuda
+      - CUDA_MEMORY_FRACTION=0.8
+    volumes:
+      - ../assets:/app/assets:rw
+      - ../checkpoints:/app/checkpoints:ro
+      - ../src:/app/src:rw
+    cap_add:
+      - IPC_LOCK
+      - SYS_RESOURCE
+    runtime: nvidia
+    user: "1000:1000"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+              options:
+                memory: 2048
