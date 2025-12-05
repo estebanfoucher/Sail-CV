@@ -57,6 +57,8 @@ RUN chown -R app_user:app_user /app/src /app/output && \
 # Set working directory to src
 WORKDIR /app/
 
+COPY generate_raw_detection.py /app/
+
 # Set Ultralytics config directory to avoid warnings
 ENV YOLO_CONFIG_DIR="/app/"
 
