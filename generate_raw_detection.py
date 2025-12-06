@@ -29,7 +29,7 @@ detector = Detector(specs)
 output_folder.mkdir(parents=True, exist_ok=True)
 
 # Convert Path to string for OpenCV
-video_path_str = str(assets_dir / "C1.mp4")
+video_path_str = str(assets_dir / "2Ce-CKKCtV4.mp4")
 
 # Open video reader
 reader = VideoReader.open_video_file(video_path_str)
@@ -44,7 +44,7 @@ detections_by_frame = {}
 
 # Setup video writer
 writer = FFmpegVideoWriter(
-    str(output_folder / "C1_raw_detection.mp4"), reader.specs.fps, reader.specs.resolution
+    str(output_folder / "2Ce-CKKCtV4_raw_detection.mp4"), reader.specs.fps, reader.specs.resolution
 )
 
 # Color for rendering bounding boxes
@@ -82,11 +82,11 @@ reader.release()
 writer.release()
 
 # Save to JSON file
-output_json_path = output_folder / "C1_raw_detection.json"
+output_json_path = output_folder / "2Ce-CKKCtV4_raw_detection.json"
 with open(output_json_path, 'w') as f:
     json.dump(detections_by_frame, f, indent=2)
 
-output_video_path = output_folder / "C1_raw_detection.mp4"
+output_video_path = output_folder / "2Ce-CKKCtV4_raw_detection.mp4"
 logger.info(f"Detections saved to {output_json_path}")
 logger.info(f"Video with rendered boxes saved to {output_video_path}")
 logger.info(f"Total frames processed: {len(detections_by_frame)}")
