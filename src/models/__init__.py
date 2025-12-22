@@ -6,11 +6,13 @@ This module contains all Pydantic models used for type safety and validation:
 - Image: Image representation with color space
 - Detection, ModelSpecs: Detection pipeline models
 - Track, TrackerConfig: Tracking pipeline models
+- Layout, LayoutPosition: Layout-based tracking models
 """
 
 from .bounding_box import XYXY, BoundingBox
 from .detector import Detection, ModelSpecs
 from .image import Image
+from .layout import Layout, LayoutPosition
 from .track import Track, TrackerConfig
 
 __all__ = [
@@ -18,6 +20,8 @@ __all__ = [
     "BoundingBox",
     "Detection",
     "Image",
+    "Layout",
+    "LayoutPosition",
     "ModelSpecs",
     "Track",
     "TrackerConfig",

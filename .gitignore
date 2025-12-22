@@ -21,6 +21,10 @@
 !docker/
 !docker/**
 
+# Documentation
+!docs/
+!docs/**
+
 # Project configuration
 !pyproject.toml
 !uv.lock

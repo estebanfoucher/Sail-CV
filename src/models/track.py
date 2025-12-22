@@ -8,13 +8,13 @@ class Track(BaseModel):
     Track result containing a Detection and tracking information
 
     detection: Detection object that this track represents
-    track_id: Unique track identifier
+    track_id: Unique track identifier (int for ByteTrack, str for LayoutTracker)
     frame_id: Optional frame ID for tracking state
     """
 
     detection: Detection = Field(..., description="The detection this track represents")
-    track_id: int = Field(
-        ..., ge=0, description="Unique track identifier (must be >= 0)"
+    track_id: int | str = Field(
+        ..., description="Unique track identifier (int or str for layout IDs)"
     )
     frame_id: int | None = Field(
         None, ge=0, description="Optional frame ID for tracking state"
