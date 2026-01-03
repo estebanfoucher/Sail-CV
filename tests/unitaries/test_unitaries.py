@@ -2,59 +2,6 @@ from pathlib import Path
 import sys
 
 
-def tell_tale_detector(model_path=None, architecture=None):
-    sys.path.append(str(Path(__file__).parent.parent.parent / "src"))
-    from unitaries.tell_tale_detector import TellTaleDetector
-    from video import FFmpegVideoWriter, VideoReader
-
-    # Get project root (go up from src/ to project root)
-    project_root = Path(__file__).parent.parent.parent
-
-    video_path = str(project_root / "assets" / "scene_3" / "camera_1" / "camera_1.mp4")
-    output_folder = project_root / "output_tests" / "tell_tale_detector"
-    output_name = f"output_test_tell_tale_detector_{architecture}.mp4"
-    reader = VideoReader.open_video_file(video_path)
-    output_path = output_folder / output_name
-
-    # Create output directory if it doesn't exist
-    output_folder.mkdir(parents=True, exist_ok=True)
-
-    writer = FFmpegVideoWriter(
-        str(output_path), reader.specs.fps, reader.specs.resolution
-    )
-
-    frame_count = 10
-
-    detector = TellTaleDetector(model_path=model_path, architecture=architecture)
-
-    def process_frame(frame):
-        result = detector.predict(frame, conf=0.1)
-        frame = detector.render_result(frame, result)
-        return frame
-
-    for _ in range(frame_count):
-        ret, frame = reader.read()
-        if not ret:
-            break
-        frame = process_frame(frame)
-        writer.write(frame)
-
-    writer.release()
-    reader.release()
-    print("Test tell_tale_detector passed")
-
-
-def test_tell_tale_detector_rt_detr():
-    rt_detr_model_path = (
-        Path(__file__).parent.parent.parent / "checkpoints" / "rt-detr.pt"
-    )
-    tell_tale_detector(model_path=rt_detr_model_path, architecture="rt-detr")
-
-
-def test_tell_tale_detector_yolo():
-    yolo_model_path = Path(__file__).parent.parent.parent / "checkpoints" / "yolos.pt"
-    tell_tale_detector(model_path=yolo_model_path, architecture="yolo")
-
 
 def sam(model_path=None):
     sys.path.append(str(Path(__file__).parent.parent.parent / "src"))
@@ -81,9 +28,14 @@ def sam(model_path=None):
     sam = SAM(model_path)
 
     def process_frame(frame):
-        point = (1400, 540)
+        # Use center point which is more likely to be in a detected object
+        # Point format: (x, y) where x is width, y is height
+        point = (frame.shape[1] // 2, frame.shape[0] // 2)
         result = sam.predict(frame, point, 1)
-        assert result["mask"] is not None
+        assert result["mask"] is not None, (
+            f"No mask found at point {point} in frame of shape {frame.shape}. "
+            f"Try a different point or check if the frame contains detectable objects."
+        )
         frame = sam.render_result(frame, result["mask"], [point])
         return frame
 

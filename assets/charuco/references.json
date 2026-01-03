@@ -1,0 +1,26 @@
+{
+"positive": [
+    {"scene_name": "scene_10", "frame_number": 984, "camera_name": "camera_1"},
+    {"scene_name": "scene_10", "frame_number": 1769, "camera_name": "camera_2"},
+    {"scene_name": "scene_10", "frame_number": 2729, "camera_name": "camera_2"},
+    {"scene_name": "scene_10", "frame_number": 2037, "camera_name": "camera_1"},
+    {"scene_name": "scene_14", "frame_number": 586, "camera_name": "camera_1"},
+    {"scene_name": "scene_14", "frame_number": 1913, "camera_name": "camera_1"},
+    {"scene_name": "scene_14", "frame_number": 1584, "camera_name": "camera_1"},
+    {"scene_name": "scene_15", "frame_number": 869, "camera_name": "camera_2"},
+    {"scene_name": "scene_15", "frame_number": 1232, "camera_name": "camera_2"},
+    {"scene_name": "scene_15", "frame_number": 1023, "camera_name": "camera_2"},
+    {"scene_name": "scene_15", "frame_number": 1047, "camera_name": "camera_1"},
+    {"scene_name": "scene_12", "frame_number": 2577, "camera_name": "camera_2"}
+],
+"negative": [
+    {"scene_name": "scene_12", "frame_number": 0, "camera_name": "camera_1"},
+    {"scene_name": "scene_12", "frame_number": 0, "camera_name": "camera_2"},
+    {"scene_name": "scene_10", "frame_number": 0, "camera_name": "camera_1"},
+    {"scene_name": "scene_10", "frame_number": 0, "camera_name": "camera_2"},
+    {"scene_name": "scene_14", "frame_number": 0, "camera_name": "camera_1"},
+    {"scene_name": "scene_14", "frame_number": 0, "camera_name": "camera_2"},
+    {"scene_name": "scene_15", "frame_number": 0, "camera_name": "camera_1"},
+    {"scene_name": "scene_15", "frame_number": 0, "camera_name": "camera_2"}
+]
+}

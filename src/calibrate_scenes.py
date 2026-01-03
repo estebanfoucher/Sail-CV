@@ -15,5 +15,5 @@ def calibrate_scene(scene_name: str, stereo_data_folder_path: str | None = None)
 if __name__ == "__main__":
     project_root = Path(__file__).parent.parent
     stereo_data_folder_path = str(project_root / "data")
-    scene_name = "scene_3"
+    scene_name = "scene_15"
     calibrate_scene(scene_name, stereo_data_folder_path)

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import PIL.Image
 import torch
 from loguru import logger
 
@@ -13,9 +14,19 @@ from cameras import (
     export_cameras_to_cloudcompare,
 )
 from stereo.convert_calibration import convert_calibration_parameters
-from stereo.image import load_image, preprocess_image, resize_image
+from stereo.image import (
+    convert_image,
+    crop_to_match_resolution,
+    load_image,
+    preprocess_image,
+    resize_image,
+)
 from stereo.mast3r import MASt3RInferenceEngine
-from stereo.saver import save_point_cloud_obj, save_point_cloud_ply
+from stereo.saver import (
+    render_match_correspondences,
+    save_point_cloud_obj,
+    save_point_cloud_ply,
+)
 from stereo.triangulation import (
     extract_colors_from_image,
     filter_pairs_with_mask,
@@ -48,8 +59,80 @@ def process_pair(
     save_resized_frames=False,
     save_obj_file=False,
     subsample=None,
+    save_match_render=False,
+    match_render_output_folder=None,
 ):
     logger.info(f"Processing pair: {pair_name}")
+
+    # Extract calibration resolution and normalize images to match it
+    # IMPORTANT: calibration_params["image_size"] is the EXIF-corrected resolution
+    # (the processed frame size used during calibration, after EXIF transpose and rotation)
+    # Format: [width, height] -> target_W, target_H
+    # We MUST match this EXIF-corrected resolution, not the original video resolution
+    if "image_size" in calibration_params:
+        calib_image_size = calibration_params["image_size"]
+        target_W = calib_image_size[0]  # width (EXIF-corrected)
+        target_H = calib_image_size[1]  # height (EXIF-corrected)
+        logger.debug(
+            f"Calibration image_size (EXIF-corrected): {calib_image_size} (W x H), "
+            f"target: {target_W}x{target_H}"
+        )
+
+        # Normalize image_1 to calibration resolution if needed
+        # Note: If image_1 comes from VideoReader, it's already EXIF-corrected
+        if isinstance(image_1, np.ndarray):
+            H1, W1 = image_1.shape[
+                :2
+            ]  # (height, width) - should be EXIF-corrected if from VideoReader
+            if target_H != H1 or target_W != W1:
+                logger.debug(
+                    f"Cropping image_1 from {W1}x{H1} to match calibration {target_W}x{target_H}"
+                )
+                image_1 = crop_to_match_resolution(image_1, target_H, target_W)
+                # Convert to PIL for preprocess_image
+                image_1 = convert_image(image_1)
+        else:
+            # PIL Image - convert to numpy, crop, then convert back
+            W1, H1 = image_1.size
+            if target_H != H1 or target_W != W1:
+                logger.debug(
+                    f"Cropping image_1 from {W1}x{H1} to match calibration {target_W}x{target_H}"
+                )
+                image_1_array = np.array(image_1)
+                image_1_array = crop_to_match_resolution(
+                    image_1_array, target_H, target_W
+                )
+                image_1 = PIL.Image.fromarray(image_1_array)
+
+        # Normalize image_2 to calibration resolution if needed
+        # Note: If image_2 comes from VideoReader, it's already EXIF-corrected
+        if isinstance(image_2, np.ndarray):
+            H2, W2 = image_2.shape[
+                :2
+            ]  # (height, width) - should be EXIF-corrected if from VideoReader
+            if target_H != H2 or target_W != W2:
+                logger.debug(
+                    f"Cropping image_2 from {W2}x{H2} to match calibration {target_W}x{target_H}"
+                )
+                image_2 = crop_to_match_resolution(image_2, target_H, target_W)
+                # Convert to PIL for preprocess_image
+                image_2 = convert_image(image_2)
+        else:
+            # PIL Image - convert to numpy, crop, then convert back
+            W2, H2 = image_2.size
+            if target_H != H2 or target_W != W2:
+                logger.debug(
+                    f"Cropping image_2 from {W2}x{H2} to match calibration {target_W}x{target_H}"
+                )
+                image_2_array = np.array(image_2)
+                image_2_array = crop_to_match_resolution(
+                    image_2_array, target_H, target_W
+                )
+                image_2 = PIL.Image.fromarray(image_2_array)
+    else:
+        logger.warning(
+            "No image_size in calibration_params, skipping resolution normalization"
+        )
 
     images = [
         preprocess_image(image_1, size=512, idx=0),
@@ -121,6 +204,28 @@ def process_pair(
     logger.info(f"After camera 1 filtering: {len(matches_im0)}")
     logger.info(f"Final filtered matches (in both masks): {len(matches_im0)}")
 
+    # Render and save match correspondences if requested
+    if save_match_render:
+        # Use specified match render output folder, or default to output_folder/match_renders
+        if match_render_output_folder is not None:
+            match_render_dir = Path(match_render_output_folder)
+        elif output_folder is not None:
+            match_render_dir = Path(output_folder) / "match_renders"
+        else:
+            match_render_dir = None
+
+        if match_render_dir is not None:
+            match_render_path = match_render_dir / f"{pair_name}_matches.png"
+            render_match_correspondences(
+                img1_pil,
+                img2_pil,
+                matches_im0,
+                matches_im1,
+                str(match_render_path),
+                density_factor=32,
+            )
+            logger.info(f"Match correspondences rendered to {match_render_path}")
+
     # triangulate filtered pairs using resized image colors
     point_cloud = triangulate_points(matches_im0, matches_im1, calibration_params)
 
@@ -186,6 +291,7 @@ def process_scene(
     mast3r_engine: MASt3RInferenceEngine,
     point_prompt_1: tuple,
     point_prompt_2: tuple,
+    save_match_render: bool = True,
 ):
     INPUT_PAIR_FOLDER = PROJECT_ROOT / "output" / "extracted_pairs" / scene_name
     INPUT_CALIBRATION_FOLDER = INPUT_PAIR_FOLDER
@@ -197,8 +303,9 @@ def process_scene(
     with open(f"{INPUT_CALIBRATION_FOLDER}/calibration.json") as f:
         calib_data = json.load(f)
 
+    # Convert calibration parameters (uses image_size from calib_data if available)
     calibration_params = convert_calibration_parameters(
-        calib_data, original_size=(1920, 1080), target_size=512, patch_size=16
+        calib_data, target_size=512, patch_size=16
     )
 
     pair_folders = [
@@ -224,6 +331,7 @@ def process_scene(
             point_prompt_2=point_prompt_2,
             save_resized_frames=True,  # Save resized frames for scene processing
             save_obj_file=True,  # Save obj files for scene processing
+            save_match_render=save_match_render,
         )
 
 

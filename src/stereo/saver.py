@@ -2,7 +2,9 @@
 
 
 import json
+from pathlib import Path
 
+import cv2
 import numpy as np
 from loguru import logger
 
@@ -139,4 +141,114 @@ def save_point_cloud_obj(
 
     logger.debug(
         f"Point cloud saved to {filename} with {len(points_valid)} points (filtered by distance < {bound_distance})"
+    )
+
+
+def render_match_correspondences(
+    image_1,
+    image_2,
+    matches_im0: np.ndarray,
+    matches_im1: np.ndarray,
+    output_path: str,
+    density_factor: int = 32,
+) -> None:
+    """
+    Render correspondence matches between two images side-by-side with lines connecting matching points.
+
+    Args:
+        image_1: PIL Image or numpy array (resized image, typically 512x512)
+        image_2: PIL Image or numpy array (resized image, typically 512x512)
+        matches_im0: numpy array of shape (N, 2) - pixel coordinates in image_1
+        matches_im1: numpy array of shape (N, 2) - pixel coordinates in image_2
+        output_path: Path to save the rendered image
+        density_factor: Factor to reduce match density (default 8, shows 1/8th of matches)
+    """
+    # Convert PIL images to numpy arrays if needed
+    img1_array = np.array(image_1) if hasattr(image_1, "size") else image_1.copy()
+    img2_array = np.array(image_2) if hasattr(image_2, "size") else image_2.copy()
+
+    # Ensure images are RGB (3 channels)
+    if len(img1_array.shape) == 2:
+        img1_array = cv2.cvtColor(img1_array, cv2.COLOR_GRAY2RGB)
+    elif img1_array.shape[2] == 4:
+        img1_array = cv2.cvtColor(img1_array, cv2.COLOR_RGBA2RGB)
+
+    if len(img2_array.shape) == 2:
+        img2_array = cv2.cvtColor(img2_array, cv2.COLOR_GRAY2RGB)
+    elif img2_array.shape[2] == 4:
+        img2_array = cv2.cvtColor(img2_array, cv2.COLOR_RGBA2RGB)
+
+    # Get dimensions
+    h1, w1 = img1_array.shape[:2]
+    h2, w2 = img2_array.shape[:2]
+
+    # Create side-by-side combined image
+    separator_width = 5
+    combined_width = w1 + w2 + separator_width
+    combined_height = max(h1, h2)
+    combined_image = np.zeros((combined_height, combined_width, 3), dtype=np.uint8)
+
+    # Place images side by side
+    combined_image[:h1, :w1] = img1_array
+    combined_image[:h2, w1 + separator_width : w1 + separator_width + w2] = img2_array
+
+    # Draw separator line
+    cv2.line(
+        combined_image,
+        (w1, 0),
+        (w1, combined_height),
+        (255, 255, 255),
+        separator_width,
+    )
+
+    # Draw correspondences
+    original_num_matches = len(matches_im0) if len(matches_im0) > 0 else 0
+    rendered_num_matches = 0
+
+    if len(matches_im0) > 0 and len(matches_im1) > 0:
+        # Subsample matches to reduce density
+        matches_im0_subsampled = matches_im0[::density_factor]
+        matches_im1_subsampled = matches_im1[::density_factor]
+        rendered_num_matches = len(matches_im0_subsampled)
+
+        # Generate colors for matches (use HSV color space for better color distribution)
+        num_matches = len(matches_im0_subsampled)
+        colors = []
+        for i in range(num_matches):
+            hue = int(180 * i / max(num_matches, 1)) % 180
+            color_hsv = np.uint8([[[hue, 255, 255]]])
+            color_bgr = cv2.cvtColor(color_hsv, cv2.COLOR_HSV2BGR)[0][0]
+            colors.append(tuple(map(int, color_bgr)))
+
+        # Draw lines and points for each match
+        line_thickness = 1
+        point_radius = 2
+
+        for i in range(num_matches):
+            color = colors[i]
+
+            # Point in image 1 (left side)
+            pt1 = tuple(matches_im0_subsampled[i].astype(int))
+
+            # Point in image 2 (right side, offset by width of image 1 + separator)
+            pt2 = (
+                int(matches_im1_subsampled[i][0]) + w1 + separator_width,
+                int(matches_im1_subsampled[i][1]),
+            )
+
+            # Draw line connecting the points
+            cv2.line(combined_image, pt1, pt2, color, line_thickness)
+
+            # Draw points
+            cv2.circle(combined_image, pt1, point_radius, color, -1)
+            cv2.circle(combined_image, pt2, point_radius, color, -1)
+
+    # Save the combined image
+    output_path_obj = Path(output_path)
+    output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(output_path), cv2.cvtColor(combined_image, cv2.COLOR_RGB2BGR))
+
+    logger.debug(
+        f"Match correspondences rendered to {output_path} with {rendered_num_matches} matches "
+        f"(subsampled from {original_num_matches} by factor {density_factor})"
     )

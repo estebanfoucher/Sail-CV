@@ -37,8 +37,7 @@
 !mast3r/
 !mast3r/**
 
-!assets/
-!assets/**
+
 
 !web_app/
 !web_app/**
@@ -149,6 +148,7 @@ Thumbs.db
 *.jpg
 *.jpeg
 *.png
+!assets/**/.png
 *.bmp
 *.tiff
 *.tif
@@ -204,3 +204,4 @@ docker/volumes/
 *.tmp
 *.temp
 .cache/
+*.DS_Store

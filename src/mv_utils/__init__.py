@@ -6,6 +6,7 @@ This library provides utilities for multi-view stereo calibration and processing
 
 # Import base modules first
 from .extrinsics_calibration import (
+    CharucoDetector,
     StereoTagDetector,
     calibrate_stereo_many,
     get_summary,
@@ -23,6 +24,7 @@ from .video_utils import Video, get_unique_video_name
 
 __version__ = "1.0.0"
 __all__ = [
+    "CharucoDetector",
     "IntrinsicCalibration",
     "Scene",
     "StereoTagDetector",

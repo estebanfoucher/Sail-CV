@@ -88,20 +88,30 @@ def transform_camera_matrix(camera_matrix, transform_params):
 
 
 def convert_calibration_parameters(
-    calibration_data, original_size, target_size=512, patch_size=16
+    calibration_data, original_size=None, target_size=512, patch_size=16
 ):
     """
     Convert calibration parameters for MASt3R compatibility.
 
     Args:
         calibration_data: Original calibration data from JSON
-        original_size: (width, height) of original images
+        original_size: (width, height) of original images (optional, uses image_size from calibration_data if not provided)
         target_size: Target long edge size for MASt3R
         patch_size: Patch size for alignment
 
     Returns:
         Converted calibration data
     """
+    # Use image_size from calibration_data if original_size not provided
+    if original_size is None:
+        if "image_size" in calibration_data:
+            original_size = tuple(calibration_data["image_size"])
+            logger.debug(f"Using image_size from calibration_data: {original_size}")
+        else:
+            raise ValueError(
+                "original_size must be provided or calibration_data must contain 'image_size'"
+            )
+
     logger.debug(f"Converting calibration from {original_size} to MAST3R format")
 
     # Calculate transformation parameters

@@ -72,7 +72,7 @@ Below are two examples of results, applied to boatsail measurement.
 
    set up python:
    ```bash
-   make install-all
+   uv sync
    ```
    install ffmpeg:
    ```bash
