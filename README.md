@@ -90,7 +90,7 @@ Below are two examples of results, applied to boatsail measurement.
 
 4. **Add external module to python environment**
    ```bash
-   export PYTHONPATH="${PWD}/mast3r:${PWD}/mast3r/dust3r:${PYTHONPATH}"
+   export PYTHONPATH="${PWD}/mast3r:${PWD}/mast3r/dust3r:${PWD}/pow3r:${PWD}/pow3r/dust3r:${PYTHONPATH}"
    ```
    Note: Run this command from the project root directory
 
@@ -134,4 +134,3 @@ make test          # Run test suite
 ## Acknowledgments
 
 This project builds upon the excellent work of [MASt3R](https://github.com/naver/mast3r) (Grounding Image Matching in 3D with MASt3R) by Naver Labs.
-

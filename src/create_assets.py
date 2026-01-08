@@ -5,44 +5,42 @@ import numpy as np
 from loguru import logger
 
 from mv_utils import Scene
+from stereo.image import crop_to_match_resolution
 from video import FFmpegVideoWriter, StereoVideoReader
 
-save_asset_dict = {
-    # "scene_3": {
-    #     "camera_1_start_frame_number": 1900,
-    #     "camera_1_end_frame_number": 1950,
-    # },
-    # "scene_7": {
-    #     "camera_1_start_frame_number": 3100,
-    #     "camera_1_end_frame_number": 3200,
-    # },
-    # "scene_8": {
-    #     "camera_1_start_frame_number": 4900,
-    #     "camera_1_end_frame_number": 4970,
-    # },
-    # "scene_10": {
-    #     "camera_1_start_frame_number": 2640,
-    #     "camera_1_end_frame_number": 2644,
-    # },
-    "scene_11": {
-        "camera_1_start_frame_number": 2300,
-        "camera_1_end_frame_number": 2304,
+save_asset_dict_videos = {
+    "scene_3": {
+        "camera_1_start_frame_number": 1900,
+        "camera_1_end_frame_number": 1950,
     },
-    # "scene_12": {
-    #     "camera_1_start_frame_number": 3560,
-    #     "camera_1_end_frame_number": 3564,
-    # },
-    # "scene_13": {
-    #     "camera_1_start_frame_number": 226,
-    #     "camera_1_end_frame_number": 230,
-    # },
-    # "scene_14": {
-    #     "camera_1_start_frame_number": 2150,
-    #     "camera_1_end_frame_number": 2154,
-    # },
+    "scene_7": {
+        "camera_1_start_frame_number": 3100,
+        "camera_1_end_frame_number": 3200,
+    },
+    "scene_8": {
+        "camera_1_start_frame_number": 4900,
+        "camera_1_end_frame_number": 4970,
+    },
+}
+
+save_asset_dict_images = {
+    "scene_10": {
+        "camera_1_frame_number": 2640,
+    },
+    "scene_11": {
+        "camera_1_frame_number": 2300,
+    },
+    "scene_12": {
+        "camera_1_frame_number": 3560,
+    },
+    "scene_13": {
+        "camera_1_frame_number": 226,
+    },
+    "scene_14": {
+        "camera_1_frame_number": 2150,
+    },
     "scene_15": {
-        "camera_1_start_frame_number": 2100,
-        "camera_1_end_frame_number": 2104,
+        "camera_1_frame_number": 2100,
     },
 }
 
@@ -86,7 +84,7 @@ def _calculate_time_based_sync(parameters, fps_1, fps_2):
     return time_offset_seconds, fps_ratio
 
 
-def save_asset(save_asset_dict):
+def save_asset_videos(save_asset_dict):
     for scene_name, scene_data in save_asset_dict.items():
         logger.info(f"Saving asset for scene {scene_name}")
         # save two video separately + save combined video
@@ -248,5 +246,95 @@ def save_asset(save_asset_dict):
         logger.info(f"Asset for scene {scene_name} saved")
 
 
+def save_asset_images(save_asset_dict):
+    """Save individual frames as PNG images from videos."""
+    for scene_name, scene_data in save_asset_dict.items():
+        logger.info(f"Saving asset images for scene {scene_name}")
+
+        scene = Scene(scene_name, stereo_data_folder_path)
+        video_paths = scene.get_video_paths()
+        parameters = scene.parameters
+
+        # Create video readers to get FPS
+        from video import VideoReader
+
+        temp_video_1 = VideoReader.open_video_file(video_paths["camera_1"])
+        temp_video_2 = VideoReader.open_video_file(video_paths["camera_2"])
+        fps_1 = temp_video_1.specs.fps
+        fps_2 = temp_video_2.specs.fps
+        temp_video_1.release()
+        temp_video_2.release()
+
+        # Calculate time-based sync
+        time_offset_seconds, _fps_ratio = _calculate_time_based_sync(
+            parameters, fps_1, fps_2
+        )
+
+        # Get frame number for camera_1
+        frame_number_1 = scene_data["camera_1_frame_number"]
+
+        # Calculate synchronized frame for camera_2 using time-based sync
+        time_1 = frame_number_1 / fps_1
+        time_2 = time_1 - time_offset_seconds
+        frame_number_2 = int(time_2 * fps_2)
+
+        logger.info(
+            f"Reading frames: camera_1 frame {frame_number_1}, "
+            f"camera_2 frame {frame_number_2} (time offset: {time_offset_seconds:.4f}s)"
+        )
+
+        # Read frames
+        video_reader_1 = VideoReader.open_video_file(video_paths["camera_1"])
+        video_reader_2 = VideoReader.open_video_file(video_paths["camera_2"])
+
+        ret_1, frame_1 = video_reader_1.read(frame_number_1)
+        ret_2, frame_2 = video_reader_2.read(frame_number_2)
+        H1, W1 = frame_1.shape[:2]  # shape is (height, width) after EXIF correction
+        H2, W2 = frame_2.shape[:2]  # shape is (height, width) after EXIF correction
+
+        # Target resolution is the smaller camera's resolution (min of both dimensions)
+        # IMPORTANT: H1, W1, H2, W2 are EXIF-corrected resolutions (from VideoReader processed frames)
+        target_H = min(H1, H2)
+        target_W = min(W1, W2)
+        frame_2 = crop_to_match_resolution(frame_2, target_H, target_W)
+
+        if not ret_1 or frame_1 is None:
+            logger.error(f"Failed to read frame {frame_number_1} from camera_1")
+            video_reader_1.release()
+            video_reader_2.release()
+            continue
+
+        if not ret_2 or frame_2 is None:
+            logger.error(f"Failed to read frame {frame_number_2} from camera_2")
+            video_reader_1.release()
+            video_reader_2.release()
+            continue
+
+        # Ensure assets folder exists
+        scene_assets_path = assets_folder_path / scene_name
+        scene_assets_path.mkdir(parents=True, exist_ok=True)
+
+        # Save frames as PNG (preserves original resolution)
+        import cv2
+
+        camera_1_path = scene_assets_path / "camera_1.png"
+        camera_2_path = scene_assets_path / "camera_2.png"
+
+        cv2.imwrite(str(camera_1_path), frame_1)
+        cv2.imwrite(str(camera_2_path), frame_2)
+
+        logger.info(
+            f"Saved images for scene {scene_name}: "
+            f"camera_1.png ({frame_1.shape[1]}x{frame_1.shape[0]}), "
+            f"camera_2.png ({frame_2.shape[1]}x{frame_2.shape[0]})"
+        )
+
+        video_reader_1.release()
+        video_reader_2.release()
+
+        logger.info(f"Asset images for scene {scene_name} saved")
+
+
 if __name__ == "__main__":
-    save_asset(save_asset_dict)
+    save_asset_videos(save_asset_dict_videos)
+    save_asset_images(save_asset_dict_images)

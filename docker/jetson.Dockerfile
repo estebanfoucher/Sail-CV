@@ -72,8 +72,8 @@ RUN chown -R app_user:app_user /app/src /app/output /app/web_app && \
 # Set working directory to src
 WORKDIR /app/src
 
-# Add mast3r and dust3r to Python path
-ENV PYTHONPATH="/app/mast3r:/app/mast3r/dust3r:$PYTHONPATH"
+# Add mast3r, pow3r and their dust3r submodules to Python path
+ENV PYTHONPATH="/app/mast3r:/app/mast3r/dust3r:/app/pow3r:/app/pow3r/dust3r:$PYTHONPATH"
 
 # Set Ultralytics config directory to avoid warnings
 ENV YOLO_CONFIG_DIR="/app/"

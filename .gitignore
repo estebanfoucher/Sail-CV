@@ -36,7 +36,12 @@
 # External dependencies (MASt3R)
 !mast3r/
 !mast3r/**
+# !pow3r/
+# !pow3r/**
 
+# Assets directory (for scene images)
+!assets/
+!assets/**
 
 
 !web_app/
@@ -148,7 +153,8 @@ Thumbs.db
 *.jpg
 *.jpeg
 *.png
-!assets/**/.png
+
+!assets/**/*.png
 *.bmp
 *.tiff
 *.tif

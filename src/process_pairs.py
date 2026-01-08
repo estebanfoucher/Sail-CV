@@ -1,6 +1,3 @@
-import json
-import os
-import time
 from pathlib import Path
 
 import cv2
@@ -13,11 +10,9 @@ from cameras import (
     create_cameras_from_stereo_calibration,
     export_cameras_to_cloudcompare,
 )
-from stereo.convert_calibration import convert_calibration_parameters
 from stereo.image import (
     convert_image,
     crop_to_match_resolution,
-    load_image,
     preprocess_image,
     resize_image,
 )
@@ -144,7 +139,7 @@ def process_pair(
     # extract raw data - use provided subsample or default
     subsample_value = subsample if subsample is not None else SUBSAMPLE
     raw_data = mast3r_engine.extract_raw_data(output, subsample=subsample_value)
-    
+
     # load image1
     img1_pil = resize_image(image_1, size=512)
     if save_resized_frames:
@@ -283,70 +278,3 @@ def instantiate_mast3r_engine() -> MASt3RInferenceEngine:
     mast3r_engine = MASt3RInferenceEngine(model_path=MODEL_PATH, device=DEVICE)
     mast3r_engine.load_model()
     return mast3r_engine
-
-
-def process_scene(
-    scene_name: str,
-    sam: SAM,
-    mast3r_engine: MASt3RInferenceEngine,
-    point_prompt_1: tuple,
-    point_prompt_2: tuple,
-    save_match_render: bool = True,
-):
-    INPUT_PAIR_FOLDER = PROJECT_ROOT / "output" / "extracted_pairs" / scene_name
-    INPUT_CALIBRATION_FOLDER = INPUT_PAIR_FOLDER
-    OUTPUT_FOLDER = PROJECT_ROOT / "output" / scene_name
-
-    # create output folder
-    os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-
-    with open(f"{INPUT_CALIBRATION_FOLDER}/calibration.json") as f:
-        calib_data = json.load(f)
-
-    # Convert calibration parameters (uses image_size from calib_data if available)
-    calibration_params = convert_calibration_parameters(
-        calib_data, target_size=512, patch_size=16
-    )
-
-    pair_folders = [
-        f
-        for f in os.listdir(INPUT_PAIR_FOLDER)
-        if os.path.isdir(os.path.join(INPUT_PAIR_FOLDER, f))
-    ]
-    for pair_folder in pair_folders:
-        pair_folder_path = os.path.join(INPUT_PAIR_FOLDER, pair_folder)
-        pair_name = pair_folder
-        image_1 = load_image(f"{pair_folder_path}/frame_1.png", size=512)
-        image_2 = load_image(f"{pair_folder_path}/frame_2.png", size=512)
-        process_pair(
-            image_1,
-            image_2,
-            mast3r_engine,
-            sam,
-            calibration_params,
-            pair_name,
-            render_cameras=True,
-            output_folder=OUTPUT_FOLDER,
-            point_prompt_1=point_prompt_1,
-            point_prompt_2=point_prompt_2,
-            save_resized_frames=True,  # Save resized frames for scene processing
-            save_obj_file=True,  # Save obj files for scene processing
-            save_match_render=save_match_render,
-        )
-
-
-if __name__ == "__main__":
-    torch.cuda.empty_cache()
-    # sam = instantiate_sam()
-    mast3r_engine = instantiate_mast3r_engine()
-    # make a 1 second sleep
-    time.sleep(1)
-    process_scene(
-        "scene_8",
-        None,
-        mast3r_engine,
-        point_prompt_1=None,
-        point_prompt_2=None,
-    )
-    # process_scene("scene_3", sam, mast3r_engine, point_prompt_1=(256, 144), point_prompt_2=(150, 70))
-    # process_scene("scene_7", sam, mast3r_engine, point_prompt_1=(300, 120), point_prompt_2=(256, 144))
