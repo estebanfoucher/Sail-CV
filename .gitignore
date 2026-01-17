@@ -5,6 +5,7 @@
 !DEVELOPMENT.md
 !main.py
 !docs/
+!generate_raw_detection.py
 
 # Source code
 !src/
@@ -19,6 +20,10 @@
 # Docker configuration
 !docker/
 !docker/**
+
+# Documentation
+!docs/
+!docs/**
 
 # Project configuration
 !pyproject.toml

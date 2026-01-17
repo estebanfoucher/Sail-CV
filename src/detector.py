@@ -44,7 +44,7 @@ class Model:
         else:
             return None, None, None
 
-    def predict(self, image: Image, conf: float = 0.1) -> list[Detection]:
+    def predict(self, image: Image) -> list[Detection]:
         """
         Predict tell-tale objects in the image
 
@@ -59,8 +59,8 @@ class Model:
         # Models typically expect BGR format
         image_array = image.to_bgr()
 
-        # Run inference
-        results = self.model(image_array)
+        # Run inference (verbose=False to suppress output)
+        results = self.model(image_array, verbose=False)
 
         # Format results
         bboxes, confidences, class_ids = self.format_inference_results(results)

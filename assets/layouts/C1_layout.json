@@ -1,0 +1,16 @@
+{
+  "layout": [
+    { "name": "top left", "id": "TL", "x": 0.45, "y": 0.05 },
+    { "name": "top right", "id": "TR", "x": 0.6, "y": 0.05 },
+    { "name": "middle top left", "id": "MT-L", "x": 0.5, "y": 0.2 },
+    { "name": "middle top top center", "id": "MT-C", "x": 0.6, "y": 0.2 },
+    { "name": "middle top right", "id": "MT-R", "x": 0.7, "y": 0.2 },
+    { "name": "middle bottom left", "id": "MB-L", "x": 0.4, "y": 0.45 },
+    { "name": "bottom bottom center", "id": "BB-C", "x": 0.55, "y": 0.45 },
+    { "name": "middle bottom right", "id": "MB-R", "x": 0.8, "y": 0.45 },
+    { "name": "bottom left", "id": "BL", "x": 0.3, "y": 0.9 },
+    { "name": "bottom center", "id": "BC", "x": 0.6, "y": 0.9 },
+    { "name": "bottom right", "id": "BR", "x": 0.9, "y": 0.9}
+  ]
+
+}
