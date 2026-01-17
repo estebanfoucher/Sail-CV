@@ -6,6 +6,7 @@
 !main.py
 !docs/
 !generate_raw_detection.py
+!track_c1_with_crop_module.py
 
 # Source code
 !src/
