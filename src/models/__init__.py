@@ -8,6 +8,7 @@ This module contains all Pydantic models used for type safety and validation:
 - Track, TrackerConfig: Tracking pipeline models
 - Layout, LayoutPosition: Layout-based tracking models
 - CropModule: Base class for crop analysis modules
+- MaskDetector: Base class for mask detection modules
 """
 
 from .bounding_box import XYXY, BoundingBox
@@ -15,6 +16,7 @@ from .crop_module import CropModule
 from .detector import Detection, ModelSpecs
 from .image import Image
 from .layout import Layout, LayoutPosition
+from .mask_detector import MaskDetector
 from .track import Track, TrackerConfig
 
 __all__ = [
@@ -25,6 +27,7 @@ __all__ = [
     "Image",
     "Layout",
     "LayoutPosition",
+    "MaskDetector",
     "ModelSpecs",
     "Track",
     "TrackerConfig",
