@@ -79,6 +79,21 @@ class CropModulePCA(CropModule):
             m = m / 255.0
         return np.clip(m, 0.0, 1.0)
 
+    def _l1_normalize_mask01(
+        self, mask01: np.ndarray
+    ) -> tuple[np.ndarray | None, float]:
+        """
+        L1-normalize a float mask in [0,1] so sum(mask)=1.
+
+        Returns (mask_l1, mask_sum). If mask_sum is ~0, mask_l1 is None.
+        """
+        mask_sum = float(np.sum(mask01))
+        if mask_sum <= self.mask_fusion_eps:
+            return None, mask_sum
+        # In-place scale to avoid an extra allocation.
+        mask01 *= 1.0 / mask_sum
+        return mask01, mask_sum
+
     def _determine_arrow_direction(
         self,
         pca_vector: np.ndarray,
@@ -266,7 +281,7 @@ class CropModulePCA(CropModule):
                 )
 
             # Extract motion mask crop (if available/desired)
-            motion_norm = None
+            motion_l1 = None
             if self.use_motion_in_pca_mask and movement_mask is not None:
                 motion_crop = movement_mask[y1:y2, x1:x2]
                 if motion_crop.shape != (crop_h, crop_w):
@@ -274,34 +289,42 @@ class CropModulePCA(CropModule):
                         motion_crop, (crop_w, crop_h), interpolation=cv2.INTER_NEAREST
                     )
                 motion_crop_f = self._to_float01(motion_crop)
-                motion_norm = motion_crop_f / (
-                    float(np.max(motion_crop_f)) + self.mask_fusion_eps
-                )
+                motion_l1, _motion_sum = self._l1_normalize_mask01(motion_crop_f)
 
             # Build fused mask probability for PCA
             mask_prob = None
             sam_ok = False
             if sam_crop is not None:
                 sam_crop_f = self._to_float01(sam_crop)
-                coverage = float(np.mean(sam_crop_f)) if sam_crop_f.size else 0.0
+                sam_l1, sam_sum = self._l1_normalize_mask01(sam_crop_f)
+                # coverage is mean(sam_crop_f) but reuse sam_sum to avoid an extra pass
+                coverage = sam_sum / float(crop_h * crop_w) if crop_h and crop_w else 0.0
                 sam_ok = (
                     self.sam_fail_min_coverage
                     <= coverage
                     <= self.sam_fail_max_coverage
                 )
-                if motion_norm is not None:
-                    if sam_ok:
-                        a = float(np.clip(self.mask_fusion_alpha, 0.0, 1.0))
-                        mask_prob = a * sam_crop_f + (1.0 - a) * motion_norm
+                if sam_l1 is not None:
+                    if motion_l1 is not None:
+                        if sam_ok:
+                            # L1-normalized fusion: both masks sum to 1, so α is meaningful.
+                            a = float(np.clip(self.mask_fusion_alpha, 0.0, 1.0))
+                            sam_l1 *= a
+                            motion_l1 *= 1.0 - a
+                            sam_l1 += motion_l1
+                            mask_prob = sam_l1
+                        else:
+                            # Coverage-based SAM failure: fallback to motion-only.
+                            mask_prob = motion_l1
                     else:
-                        # Coverage-based SAM failure: fallback to motion-only
-                        mask_prob = motion_norm
+                        # No motion available: use SAM alone (even if coverage is suspicious).
+                        mask_prob = sam_l1
                 else:
-                    # No motion available: use SAM alone (even if coverage is suspicious)
-                    mask_prob = sam_crop_f
-            elif motion_norm is not None:
-                # No SAM available: fallback to motion-only
-                mask_prob = motion_norm
+                    # SAM is effectively empty: treat as missing.
+                    mask_prob = motion_l1
+            else:
+                # No SAM available: fallback to motion-only (if any).
+                mask_prob = motion_l1
 
             # Compute PCA (with soft mask if available)
             principal_axis = self._compute_pca(crop, mask=mask_prob)
