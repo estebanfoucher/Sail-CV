@@ -8,6 +8,7 @@ from models.bounding_box import BoundingBox
 from models.crop_module import CropModule
 from models.image import Image
 from models.mask_detector import MaskDetector
+from models.background_detector import BackgroundDetector
 
 from .utils import extract_crop_from_bbox, validate_crop_coordinates
 
@@ -25,6 +26,8 @@ class CropModulePCA(CropModule):
         n_components: int = 2,
         use_grayscale: bool = True,
         mask_detector: MaskDetector | None = None,
+        background_detector: BackgroundDetector | None = None,
+        layout_direction: tuple[float, float] | None = None,
     ):
         """
         Initialize the PCA crop module.
@@ -35,30 +38,125 @@ class CropModulePCA(CropModule):
                           If False, use RGB channels (default: True)
             mask_detector: Optional mask detector to generate masks before PCA.
                           If provided, PCA will only consider masked regions.
+            background_detector: Optional background detector for movement analysis.
+                               Used to determine arrow direction.
+            layout_direction: Optional 2D unitary vector indicating most likely direction.
+                            Used as fallback for arrow direction determination.
         """
         self.n_components = n_components
         self.use_grayscale = use_grayscale
         self.mask_detector = mask_detector
+        self.background_detector = background_detector
+        self.layout_direction = layout_direction
+
+    def _determine_arrow_direction(
+        self,
+        pca_vector: np.ndarray,
+        movement_mask_crop: np.ndarray | None,
+        crop_center: tuple[int, int],
+    ) -> np.ndarray:
+        """
+        Determine correct arrow direction by analyzing movement distribution.
+
+        Projects movement mask pixels onto PCA axis and determines which side
+        (tip vs root) has more movement. The tip moves more than the root.
+
+        Args:
+            pca_vector: PCA vector [dx, dy] from PCA computation
+            movement_mask_crop: Binary movement mask for the crop region
+            crop_center: Center coordinates (cx, cy) of the crop
+
+        Returns:
+            Corrected PCA vector with proper direction (may be flipped).
+        """
+        if movement_mask_crop is None or movement_mask_crop.sum() == 0:
+            # No movement data, use layout direction if available
+            if self.layout_direction is not None:
+                logger.debug("No movement data, using layout direction prior")
+                return np.array(self.layout_direction[: self.n_components])
+            # No prior, return original
+            return pca_vector
+
+        # Normalize movement mask to 0-1
+        if movement_mask_crop.max() > 1:
+            movement_mask_crop = movement_mask_crop.astype(np.float32) / 255.0
+
+        h, w = movement_mask_crop.shape
+        cx, cy = crop_center
+
+        # Get movement pixel coordinates
+        y_coords, x_coords = np.where(movement_mask_crop > 0.5)
+        
+        if len(x_coords) == 0:
+            # No movement pixels, use layout direction
+            if self.layout_direction is not None:
+                logger.debug("No movement pixels, using layout direction prior")
+                return np.array(self.layout_direction[: self.n_components])
+            return pca_vector
+
+        # Project each movement pixel onto PCA axis
+        # Projection = (x - cx) * dx + (y - cy) * dy
+        dx, dy = pca_vector[0], pca_vector[1]
+        
+        # Center coordinates relative to crop center
+        x_centered = x_coords - cx
+        y_centered = y_coords - cy
+        
+        # Project onto PCA vector
+        projections = x_centered * dx + y_centered * dy
+        
+        # Get movement intensities as weights
+        movement_weights = movement_mask_crop[y_coords, x_coords]
+        
+        # Compute weighted sum on positive side (tip) vs negative side (root)
+        positive_mask = projections > 0
+        negative_mask = projections < 0
+        
+        tip_sum = np.sum(movement_weights[positive_mask] * projections[positive_mask])
+        root_sum = np.sum(np.abs(movement_weights[negative_mask] * projections[negative_mask]))
+        
+        logger.debug(
+            f"Movement analysis: tip_sum={tip_sum:.2f}, root_sum={root_sum:.2f}, "
+            f"movement_pixels={len(x_coords)}"
+        )
+        
+        # Determine direction: if tip has more movement, keep direction; else flip
+        if tip_sum > root_sum:
+            # Tip side has more movement, direction is correct
+            return pca_vector
+        elif root_sum > tip_sum:
+            # Root side has more movement, flip direction
+            logger.debug("Flipping PCA vector direction based on movement analysis")
+            return -pca_vector
+        else:
+            # Inconclusive, use layout direction if available
+            if self.layout_direction is not None:
+                logger.debug("Inconclusive movement, using layout direction prior")
+                return np.array(self.layout_direction[: self.n_components])
+            # Keep original if no prior
+            return pca_vector
 
     def analyze_crop(
         self,
         image: Image,
         bboxes: list[BoundingBox],
         precomputed_masks: list[np.ndarray] | None = None,
+        precomputed_movement_mask: np.ndarray | None = None,
     ) -> list[np.ndarray]:
         """
-        Analyze crops using PCA to extract principal axes.
+        Analyze crops using PCA to extract principal axes with direction determination.
 
         Args:
             image: Image object containing the image data
             bboxes: List of bounding boxes defining crop regions
             precomputed_masks: Optional list of pre-computed masks (avoids double inference).
                              Masks should be full-image size and already clipped to bbox boundaries.
+            precomputed_movement_mask: Optional pre-computed movement mask for full image.
 
         Returns:
             List of numpy arrays, one per bounding box. Each array contains
-            the principal axis/axes as a vector. For n_components=2, returns
-            a 2D vector [x, y] representing the principal direction.
+            the principal axis/axes as a vector with correct direction determined
+            by movement analysis. For n_components=2, returns a 2D vector [x, y].
         """
         results = []
 
@@ -83,6 +181,16 @@ class CropModulePCA(CropModule):
             logger.debug(
                 f"Using {len(all_masks)} precomputed masks for {len(bboxes)} bboxes"
             )
+
+        # Generate movement mask if background detector is available
+        movement_mask = precomputed_movement_mask
+        if movement_mask is None and self.background_detector is not None:
+            try:
+                movement_mask = self.background_detector.generate_foreground_mask(image.image)
+                logger.debug(f"Generated movement mask: shape={movement_mask.shape}")
+            except Exception as e:
+                logger.warning(f"Failed to generate movement mask: {e}")
+                movement_mask = None
 
         for bbox_idx, bbox in enumerate(bboxes):
             # Validate and extract crop
@@ -131,6 +239,33 @@ class CropModulePCA(CropModule):
             # Compute PCA (with mask if available)
             principal_axis = self._compute_pca(crop, mask=mask)
             logger.debug(f"PCA result for bbox {bbox_idx}: {principal_axis}")
+
+            # Determine arrow direction using movement mask
+            if movement_mask is not None and self.n_components >= 2:
+                # Extract movement mask crop
+                x1 = max(0, bbox.xyxy.x1)
+                y1 = max(0, bbox.xyxy.y1)
+                x2 = min(image.image.shape[1], bbox.xyxy.x2)
+                y2 = min(image.image.shape[0], bbox.xyxy.y2)
+                
+                movement_crop = movement_mask[y1:y2, x1:x2]
+                
+                # Ensure movement crop matches crop size
+                crop_h, crop_w = crop.shape[:2]
+                if movement_crop.shape != (crop_h, crop_w):
+                    movement_crop = cv2.resize(
+                        movement_crop, (crop_w, crop_h), interpolation=cv2.INTER_NEAREST
+                    )
+                
+                # Get crop center (relative to crop coordinates)
+                crop_center = (crop_w // 2, crop_h // 2)
+                
+                # Determine correct arrow direction
+                principal_axis = self._determine_arrow_direction(
+                    principal_axis, movement_crop, crop_center
+                )
+                logger.debug(f"Corrected PCA direction for bbox {bbox_idx}: {principal_axis}")
+
             results.append(principal_axis)
 
         return results

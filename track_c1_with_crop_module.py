@@ -14,6 +14,7 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root / "src"))
 
 from crop_module import CropModulePCA, MaskDetectorSAM
+from crop_module.background_detector_vpi import BackgroundDetectorVPI
 from detector import Detector
 from layout_tracker import LayoutTracker
 from models import Image, Layout, ModelSpecs
@@ -235,7 +236,13 @@ def main():
     with open(layout_path) as f:
         layout_data = json.load(f)
     layout = Layout.from_json_dict(layout_data)
-    logger.info(f"Loaded layout with {len(layout.positions)} positions")
+    
+    # Set direction prior for C1 (pointing right)
+    if layout.direction is None:
+        layout.direction = (1.0, 0.0)
+        logger.info("Set layout direction to (1.0, 0.0) for C1")
+    
+    logger.info(f"Loaded layout with {len(layout.positions)} positions, direction={layout.direction}")
 
     # Initialize detector (RT-DETR)
     logger.info(f"Initializing RT-DETR detector with {model_path}")
@@ -282,10 +289,28 @@ def main():
         logger.warning("Continuing without mask detector - PCA will run on full crops")
         mask_detector = None
 
+    # Initialize background detector for movement analysis
+    logger.info("Initializing BackgroundDetectorVPI")
+    try:
+        background_detector = BackgroundDetectorVPI(
+            image_size=(width, height),
+            backend="cuda" if device == "cuda" else "cpu",
+            learn_rate=0.01,
+        )
+        logger.info("✓ BackgroundDetectorVPI initialized")
+    except Exception as e:
+        logger.warning(f"Failed to initialize BackgroundDetectorVPI: {e}")
+        logger.warning("Continuing without background detector - arrow direction will use layout prior only")
+        background_detector = None
+
     # Initialize crop module with PCA (2 components for 2D vectors)
     logger.info("Initializing CropModulePCA with 2 components")
     crop_module = CropModulePCA(
-        n_components=2, use_grayscale=True, mask_detector=mask_detector
+        n_components=2,
+        use_grayscale=True,
+        mask_detector=mask_detector,
+        background_detector=background_detector,
+        layout_direction=layout.direction,
     )
     logger.info("✓ CropModulePCA initialized")
 
@@ -294,6 +319,22 @@ def main():
     writer = FFmpegVideoWriter(
         str(output_video_path), reader.specs.fps, reader.specs.resolution
     )
+    
+    # Create foreground mask video writer (raw mask, like outVideoFGMask in background.py)
+    fgmask_output_path = output_folder / f"{video_path.stem}_fgmask.mp4"
+    fgmask_writer = None
+    
+    # Create movement video writer (with overlays)
+    movement_output_path = output_folder / f"{video_path.stem}_movement.mp4"
+    movement_writer = None
+    
+    if background_detector is not None:
+        fgmask_writer = FFmpegVideoWriter(
+            str(fgmask_output_path), reader.specs.fps, reader.specs.resolution
+        )
+        movement_writer = FFmpegVideoWriter(
+            str(movement_output_path), reader.specs.fps, reader.specs.resolution
+        )
 
     logger.info("=" * 60)
     logger.info("Processing video frames (first 30 frames)")
@@ -307,7 +348,7 @@ def main():
     # Process frames and collect results
     results_timeline = []
     frame_number = 0
-    total_frames = 30
+
     while frame_number < total_frames:
         ret, frame = reader.read()
         if not ret:
@@ -322,8 +363,18 @@ def main():
         # Step 2: Track with layout
         tracks = layout_tracker.update(detections)
 
-        # Step 3: Generate masks once and compute PCA for tracked objects
+        # Step 3: Generate movement mask and masks once, then compute PCA
         pca_vectors = {}
+        movement_mask = None
+
+        # Generate movement mask for full frame (if background detector available)
+        if background_detector is not None:
+            try:
+                movement_mask = background_detector.generate_foreground_mask(image.image)
+                logger.debug(f"Frame {frame_number}: Generated movement mask")
+            except Exception as e:
+                logger.warning(f"Frame {frame_number}: Movement mask generation failed: {e}")
+        
         if tracks:
             # Get bboxes from tracks
             bboxes = [track.detection.bbox for track in tracks]
@@ -341,9 +392,11 @@ def main():
                     logger.warning(f"Frame {frame_number}: Mask generation failed: {e}")
                     masks = None
 
-            # Run PCA analysis (pass masks to avoid double inference)
+            # Run PCA analysis (pass masks and movement mask to avoid double inference)
             try:
-                pca_results = crop_module.analyze_crop(image, bboxes, precomputed_masks=masks)
+                pca_results = crop_module.analyze_crop(
+                    image, bboxes, precomputed_masks=masks, precomputed_movement_mask=movement_mask
+                )
                 logger.debug(f"Frame {frame_number}: Computed {len(pca_results)} PCA vectors")
 
                 # Associate PCA vectors to track IDs
@@ -371,6 +424,38 @@ def main():
         # Write rendered frame
         writer.write(rendered_frame)
 
+        # Write raw foreground mask to fgmask video (like outVideoFGMask in background.py)
+        if movement_mask is not None and fgmask_writer is not None:
+            # Convert binary mask to BGR format (3-channel grayscale)
+            fgmask_bgr = cv2.cvtColor(movement_mask * 255, cv2.COLOR_GRAY2BGR)
+            fgmask_writer.write(fgmask_bgr)
+        
+        # Create movement video frame with foreground mask and bboxes (overlay version)
+        if movement_mask is not None and movement_writer is not None:
+            # Convert movement mask to 3-channel for overlay
+            movement_frame = rendered_frame.copy()
+            movement_colored = cv2.applyColorMap(movement_mask * 255, cv2.COLORMAP_JET)
+            movement_frame = cv2.addWeighted(movement_frame, 0.7, movement_colored, 0.3, 0)
+            
+            # Draw bboxes on movement frame
+            for track in tracks:
+                bbox = track.detection.bbox
+                x1, y1 = int(bbox.xyxy.x1), int(bbox.xyxy.y1)
+                x2, y2 = int(bbox.xyxy.x2), int(bbox.xyxy.y2)
+                cv2.rectangle(movement_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                label = f"ID:{track.track_id}"
+                cv2.putText(
+                    movement_frame,
+                    label,
+                    (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 255, 0),
+                    2,
+                )
+            
+            movement_writer.write(movement_frame)
+
         # Store results
         frame_result = {
             "frame_number": frame_number,
@@ -388,6 +473,10 @@ def main():
 
     # Release resources
     writer.release()
+    if fgmask_writer is not None:
+        fgmask_writer.release()
+    if movement_writer is not None:
+        movement_writer.release()
     reader.release()
 
     # Serialize and save results
@@ -401,6 +490,9 @@ def main():
     logger.info("=" * 60)
     logger.info(f"  - Output video: {output_video_path}")
     logger.info(f"  - Output JSON: {output_json_path}")
+    if background_detector is not None:
+        logger.info(f"  - Foreground mask video (raw): {fgmask_output_path}")
+        logger.info(f"  - Movement video (with overlays): {movement_output_path}")
     logger.info(f"  - Total frames processed: {frame_number}")
     logger.info(
         f"  - Total track entries: {sum(len(frame['tracks']) for frame in results_timeline)}"

@@ -31,14 +31,14 @@ RUN uv pip install --system setuptools
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
 # Install VPI via apt (NVIDIA's Vision Programming Interface)
-# RUN apt-key adv --fetch-key https://repo.download.nvidia.com/jetson/jetson-ota-public.asc && \
-#    add-apt-repository "deb https://repo.download.nvidia.com/jetson/common r36.4 main" && \
-#        apt-get update && apt-get install -y --no-install-recommends \
-#      libegl1-mesa \
-#      libnvvpi3 vpi3-dev vpi3-samples python3.10-vpi3 && \
-#    add-apt-repository -r "deb https://repo.download.nvidia.com/jetson/common r36.4 main" && \
-#    rm -rf /var/lib/apt/lists/* && \
-#    apt-get clean
+RUN apt-key adv --fetch-key https://repo.download.nvidia.com/jetson/jetson-ota-public.asc && \
+   add-apt-repository "deb https://repo.download.nvidia.com/jetson/common r36.4 main" && \
+       apt-get update && apt-get install -y --no-install-recommends \
+     libegl1-mesa \
+     libnvvpi3 vpi3-dev vpi3-samples python3.10-vpi3 && \
+   add-apt-repository -r "deb https://repo.download.nvidia.com/jetson/common r36.4 main" && \
+   rm -rf /var/lib/apt/lists/* && \
+   apt-get clean
 
 # Create non-root user for better security and file management
 RUN useradd -m -u 1000 app_user && \
