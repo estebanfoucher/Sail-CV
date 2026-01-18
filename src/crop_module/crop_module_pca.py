@@ -28,6 +28,12 @@ class CropModulePCA(CropModule):
         mask_detector: MaskDetector | None = None,
         background_detector: BackgroundDetector | None = None,
         layout_direction: tuple[float, float] | None = None,
+        mask_fusion_alpha: float = 0.7,
+        sam_fail_min_coverage: float = 0.01,
+        sam_fail_max_coverage: float = 0.90,
+        mask_fusion_eps: float = 1e-6,
+        use_motion_in_pca_mask: bool = True,
+        use_motion_for_direction: bool = False,
     ):
         """
         Initialize the PCA crop module.
@@ -39,15 +45,39 @@ class CropModulePCA(CropModule):
             mask_detector: Optional mask detector to generate masks before PCA.
                           If provided, PCA will only consider masked regions.
             background_detector: Optional background detector for movement analysis.
-                               Used to determine arrow direction.
+                               Used to generate motion masks (for PCA mask fusion and/or direction).
             layout_direction: Optional 2D unitary vector indicating most likely direction.
                             Used as fallback for arrow direction determination.
+            mask_fusion_alpha: Fusion weight α for SAM vs motion:
+                              maskProb = α*SAM + (1-α)*MotionNorm.
+            sam_fail_min_coverage: Minimum SAM mask coverage (mean over crop) before
+                                   considering SAM as failed.
+            sam_fail_max_coverage: Maximum SAM mask coverage (mean over crop) before
+                                   considering SAM as failed (e.g. SAM fills bbox).
+            mask_fusion_eps: Small epsilon for safe normalizations.
+            use_motion_in_pca_mask: If True, incorporate motion mask into PCA masking.
+            use_motion_for_direction: If True, use motion distribution to flip the PCA
+                                      axis direction (legacy behavior). Default False.
         """
         self.n_components = n_components
         self.use_grayscale = use_grayscale
         self.mask_detector = mask_detector
         self.background_detector = background_detector
         self.layout_direction = layout_direction
+        self.mask_fusion_alpha = float(mask_fusion_alpha)
+        self.sam_fail_min_coverage = float(sam_fail_min_coverage)
+        self.sam_fail_max_coverage = float(sam_fail_max_coverage)
+        self.mask_fusion_eps = float(mask_fusion_eps)
+        self.use_motion_in_pca_mask = bool(use_motion_in_pca_mask)
+        self.use_motion_for_direction = bool(use_motion_for_direction)
+
+    def _to_float01(self, mask: np.ndarray) -> np.ndarray:
+        """Convert a mask to float32 in [0, 1]."""
+        m = mask.astype(np.float32, copy=False)
+        max_val = float(np.max(m)) if m.size else 0.0
+        if max_val > 1.0:
+            m = m / 255.0
+        return np.clip(m, 0.0, 1.0)
 
     def _determine_arrow_direction(
         self,
@@ -207,51 +237,82 @@ class CropModulePCA(CropModule):
                 results.append(np.zeros(self.n_components))
                 continue
 
-            # Extract mask for current bbox if available
-            mask = None
+            crop_h, crop_w = crop.shape[:2]
+
+            # Compute crop coordinates once (match extract_crop_from_bbox clipping)
+            x1 = max(0, bbox.xyxy.x1)
+            y1 = max(0, bbox.xyxy.y1)
+            x2 = min(image.image.shape[1], bbox.xyxy.x2)
+            y2 = min(image.image.shape[0], bbox.xyxy.y2)
+
+            # Extract SAM mask crop (if available)
+            sam_crop = None
             if all_masks is not None and bbox_idx < len(all_masks):
                 full_mask = all_masks[bbox_idx]
-                # Extract mask region corresponding to this crop
-                # Use the same coordinates as extract_crop_from_bbox to ensure exact match
-                x1 = max(0, bbox.xyxy.x1)
-                y1 = max(0, bbox.xyxy.y1)
-                x2 = min(image.image.shape[1], bbox.xyxy.x2)
-                y2 = min(image.image.shape[0], bbox.xyxy.y2)
+                sam_crop = full_mask[y1:y2, x1:x2]
 
-                # Extract mask region
-                mask = full_mask[y1:y2, x1:x2]
-
-                # Ensure mask matches crop size exactly
-                crop_h, crop_w = crop.shape[:2]
-                if mask.shape != (crop_h, crop_w):
+                # Ensure SAM crop matches crop size exactly
+                if sam_crop.shape != (crop_h, crop_w):
                     logger.warning(
-                        f"Mask shape {mask.shape} doesn't match crop shape {(crop_h, crop_w)}, resizing"
+                        f"Mask shape {sam_crop.shape} doesn't match crop shape {(crop_h, crop_w)}, resizing"
                     )
-                    mask = cv2.resize(
-                        mask, (crop_w, crop_h), interpolation=cv2.INTER_NEAREST
+                    sam_crop = cv2.resize(
+                        sam_crop, (crop_w, crop_h), interpolation=cv2.INTER_NEAREST
                     )
 
                 logger.debug(
                     f"Extracted mask region for bbox {bbox_idx}: crop_shape={crop.shape[:2]}, "
-                    f"mask_shape={mask.shape}, coverage={mask.mean() * 100:.2f}%"
+                    f"mask_shape={sam_crop.shape}, coverage={sam_crop.mean() * 100:.2f}%"
                 )
 
-            # Compute PCA (with mask if available)
-            principal_axis = self._compute_pca(crop, mask=mask)
+            # Extract motion mask crop (if available/desired)
+            motion_norm = None
+            if self.use_motion_in_pca_mask and movement_mask is not None:
+                motion_crop = movement_mask[y1:y2, x1:x2]
+                if motion_crop.shape != (crop_h, crop_w):
+                    motion_crop = cv2.resize(
+                        motion_crop, (crop_w, crop_h), interpolation=cv2.INTER_NEAREST
+                    )
+                motion_crop_f = self._to_float01(motion_crop)
+                motion_norm = motion_crop_f / (
+                    float(np.max(motion_crop_f)) + self.mask_fusion_eps
+                )
+
+            # Build fused mask probability for PCA
+            mask_prob = None
+            sam_ok = False
+            if sam_crop is not None:
+                sam_crop_f = self._to_float01(sam_crop)
+                coverage = float(np.mean(sam_crop_f)) if sam_crop_f.size else 0.0
+                sam_ok = (
+                    self.sam_fail_min_coverage
+                    <= coverage
+                    <= self.sam_fail_max_coverage
+                )
+                if motion_norm is not None:
+                    if sam_ok:
+                        a = float(np.clip(self.mask_fusion_alpha, 0.0, 1.0))
+                        mask_prob = a * sam_crop_f + (1.0 - a) * motion_norm
+                    else:
+                        # Coverage-based SAM failure: fallback to motion-only
+                        mask_prob = motion_norm
+                else:
+                    # No motion available: use SAM alone (even if coverage is suspicious)
+                    mask_prob = sam_crop_f
+            elif motion_norm is not None:
+                # No SAM available: fallback to motion-only
+                mask_prob = motion_norm
+
+            # Compute PCA (with soft mask if available)
+            principal_axis = self._compute_pca(crop, mask=mask_prob)
             logger.debug(f"PCA result for bbox {bbox_idx}: {principal_axis}")
 
             # Determine arrow direction using movement mask
-            if movement_mask is not None and self.n_components >= 2:
+            if self.use_motion_for_direction and movement_mask is not None and self.n_components >= 2:
                 # Extract movement mask crop
-                x1 = max(0, bbox.xyxy.x1)
-                y1 = max(0, bbox.xyxy.y1)
-                x2 = min(image.image.shape[1], bbox.xyxy.x2)
-                y2 = min(image.image.shape[0], bbox.xyxy.y2)
-                
                 movement_crop = movement_mask[y1:y2, x1:x2]
                 
                 # Ensure movement crop matches crop size
-                crop_h, crop_w = crop.shape[:2]
                 if movement_crop.shape != (crop_h, crop_w):
                     movement_crop = cv2.resize(
                         movement_crop, (crop_w, crop_h), interpolation=cv2.INTER_NEAREST
@@ -291,12 +352,14 @@ class CropModulePCA(CropModule):
 
         For grayscale: computes PCA on pixel positions weighted by intensity.
         For RGB: computes PCA on pixel positions and color channels.
-        If mask is provided, only masked pixels are considered.
+        If mask is provided, it is treated as a *soft probability mask* in [0,1]
+        that down-weights pixels (rather than a hard include/exclude).
 
         Args:
             crop: Numpy array of shape (H, W, 3) or (H, W) representing the crop
-            mask: Optional binary mask of shape (H, W). If provided, only pixels
-                  where mask > 0 are used for PCA.
+            mask: Optional mask of shape (H, W). If provided, it is interpreted as
+                  a soft probability mask in [0,1] (or uint8 0/255) and used to
+                  weight pixel intensities.
 
         Returns:
             Numpy array of shape (n_components,) containing the principal axis/axes.
@@ -313,32 +376,47 @@ class CropModulePCA(CropModule):
             y_coords, x_coords = np.mgrid[0:h, 0:w]
 
             # Flatten coordinates and intensities
-            coords = np.column_stack([x_coords.flatten(), y_coords.flatten()])
-            intensities = crop_gray.flatten().astype(np.float64)
+            coords_full = np.column_stack([x_coords.flatten(), y_coords.flatten()])
+            intensities_full = crop_gray.flatten().astype(np.float64)
 
-            # Apply mask if provided
+            # Choose weights
             if mask is not None:
                 mask_flat = mask.flatten().astype(np.float64)
-                # Normalize mask to 0-1 if needed
-                if mask_flat.max() > 1:
+                if mask_flat.max() > 1.0:
                     mask_flat = mask_flat / 255.0
-                # Filter to only masked pixels
-                mask_indices = mask_flat > 0.5
-                coords = coords[mask_indices]
-                intensities = intensities[mask_indices]
-                logger.debug(
-                    f"Applied mask: {mask_indices.sum()} pixels out of {len(mask_flat)}"
-                )
+                mask_flat = np.clip(mask_flat, 0.0, 1.0)
 
-                if len(coords) == 0:
-                    logger.warning("No pixels in mask, returning zero vector")
-                    return np.zeros(self.n_components)
+                # Soft weighting: multiply intensity by mask probability.
+                pixel_weight_full = intensities_full * mask_flat
+                keep = pixel_weight_full > 0
 
-            # Normalize intensities to use as weights
-            if intensities.sum() > 0:
-                weights = intensities / intensities.sum()
+                if np.any(keep):
+                    coords = coords_full[keep]
+                    pixel_weight = pixel_weight_full[keep]
+                    total_w = float(np.sum(pixel_weight))
+                    if total_w > 0:
+                        weights = pixel_weight / total_w
+                    else:
+                        weights = np.ones(len(coords), dtype=np.float64) / len(coords)
+                    logger.debug(
+                        f"Applied soft mask: kept {int(keep.sum())} pixels out of {len(mask_flat)}"
+                    )
+                else:
+                    # Safe fallback: ignore mask if it annihilates all weights.
+                    logger.warning(
+                        "Mask produced zero total weight; falling back to unmasked PCA"
+                    )
+                    coords = coords_full
+                    if intensities_full.sum() > 0:
+                        weights = intensities_full / intensities_full.sum()
+                    else:
+                        weights = np.ones_like(intensities_full) / len(intensities_full)
             else:
-                weights = np.ones_like(intensities) / len(intensities)
+                coords = coords_full
+                if intensities_full.sum() > 0:
+                    weights = intensities_full / intensities_full.sum()
+                else:
+                    weights = np.ones_like(intensities_full) / len(intensities_full)
 
             # Compute weighted mean (centroid)
             weighted_mean = np.sum(coords * weights[:, np.newaxis], axis=0)

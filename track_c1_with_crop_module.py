@@ -460,16 +460,9 @@ def main():
     fgmask_output_path = output_folder / f"{video_path.stem}_fgmask.mp4"
     fgmask_writer = None
     
-    # Create movement video writer (with overlays)
-    movement_output_path = output_folder / f"{video_path.stem}_movement.mp4"
-    movement_writer = None
-    
     if background_detector is not None:
         fgmask_writer = FFmpegVideoWriter(
             str(fgmask_output_path), reader.specs.fps, reader.specs.resolution
-        )
-        movement_writer = FFmpegVideoWriter(
-            str(movement_output_path), reader.specs.fps, reader.specs.resolution
         )
 
     logger.info("=" * 60)
@@ -484,7 +477,6 @@ def main():
     # Process frames and collect results
     results_timeline = []
     frame_number = 0
-    total_frames = 150
     while frame_number < total_frames:
         ret, frame = reader.read()
         if not ret:
@@ -595,32 +587,6 @@ def main():
             fgmask_bgr = cv2.cvtColor(movement_mask * 255, cv2.COLOR_GRAY2BGR)
             fgmask_writer.write(fgmask_bgr)
         
-        # Create movement video frame with foreground mask and bboxes (overlay version)
-        if movement_mask is not None and movement_writer is not None:
-            # Convert movement mask to 3-channel for overlay
-            movement_frame = rendered_frame.copy()
-            movement_colored = cv2.applyColorMap(movement_mask * 255, cv2.COLORMAP_JET)
-            movement_frame = cv2.addWeighted(movement_frame, 0.7, movement_colored, 0.3, 0)
-            
-            # Draw bboxes on movement frame
-            for track in tracks:
-                bbox = track.detection.bbox
-                x1, y1 = int(bbox.xyxy.x1), int(bbox.xyxy.y1)
-                x2, y2 = int(bbox.xyxy.x2), int(bbox.xyxy.y2)
-                cv2.rectangle(movement_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                label = f"ID:{track.track_id}"
-                cv2.putText(
-                    movement_frame,
-                    label,
-                    (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (0, 255, 0),
-                    2,
-                )
-            
-            movement_writer.write(movement_frame)
-
         # Store results
         frame_result = {
             "frame_number": frame_number,
@@ -640,8 +606,6 @@ def main():
     writer.release()
     if fgmask_writer is not None:
         fgmask_writer.release()
-    if movement_writer is not None:
-        movement_writer.release()
     reader.release()
 
     # Serialize and save results
@@ -657,7 +621,6 @@ def main():
     logger.info(f"  - Output JSON: {output_json_path}")
     if background_detector is not None:
         logger.info(f"  - Foreground mask video (raw): {fgmask_output_path}")
-        logger.info(f"  - Movement video (with overlays): {movement_output_path}")
     logger.info(f"  - Total frames processed: {frame_number}")
     logger.info(
         f"  - Total track entries: {sum(len(frame['tracks']) for frame in results_timeline)}"
