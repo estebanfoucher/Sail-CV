@@ -1,5 +1,7 @@
+import time
 import cv2
 import torch
+from loguru import logger
 
 from models import BoundingBox, Detection, Image, ModelSpecs
 
@@ -19,6 +21,7 @@ class Model:
     def __init__(self, specs: ModelSpecs):
         self.specs = specs
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        logger.info(f"Detector using device: {self.device}")
 
         # Load model based on architecture
         if specs.architecture == "rt-detr":
@@ -32,6 +35,7 @@ class Model:
         else:
             raise ValueError(f"Invalid architecture: {specs.architecture}")
         self.model.to(self.device)
+        logger.info(f"✓ Model moved to {self.device}")
 
     def format_inference_results(self, results):
         """Format inference results exactly like the tracker"""
@@ -55,18 +59,26 @@ class Model:
         Output:
             List[Detection]: List of Detection objects (Pydantic validated)
         """
+        start_time = time.perf_counter()
+        
         # Convert Image to numpy array for model inference
         # Models typically expect BGR format
         image_array = image.to_bgr()
 
         # Run inference (verbose=False to suppress output)
+        inference_start = time.perf_counter()
         results = self.model(image_array, verbose=False)
+        inference_time = (time.perf_counter() - inference_start) * 1000  # ms
+        
+        logger.debug(f"Detector inference: {inference_time:.1f}ms")
 
         # Format results
         bboxes, confidences, class_ids = self.format_inference_results(results)
 
         # Handle None case (no detections)
         if bboxes is None or len(bboxes) == 0:
+            total_time = (time.perf_counter() - start_time) * 1000
+            logger.debug(f"Detector total (no detections): {total_time:.1f}ms")
             return []
 
         # Convert to Detection objects
@@ -79,6 +91,9 @@ class Model:
             )
             detections.append(detection)
 
+        total_time = (time.perf_counter() - start_time) * 1000
+        logger.debug(f"Detector total: {total_time:.1f}ms ({len(detections)} detections)")
+        
         return detections
 
     def render_result(

@@ -45,22 +45,25 @@ RUN useradd -m -u 1000 app_user && \
     usermod -aG sudo app_user
 
 # Create directories first
-RUN mkdir -p /app/output
+RUN mkdir -p /app/output /app/.cache
 
 # Copy source files
 COPY src/ /app/src/
 
-# Set proper ownership and permissions for all directories
-RUN chown -R app_user:app_user /app/src /app/output && \
-    chmod -R 755 /app/output
-
-# Set working directory to src
-WORKDIR /app/
-
 COPY generate_raw_detection.py /app/
+COPY track_c1_with_crop_module.py /app/
 
-# Set Ultralytics config directory to avoid warnings
-ENV YOLO_CONFIG_DIR="/app/"
+# Set proper ownership and permissions for all directories
+# Give app_user ownership of the entire /app directory so models can be downloaded
+RUN chown -R app_user:app_user /app && \
+    chmod -R 755 /app
+
+# Set Ultralytics config and cache directories
+ENV YOLO_CONFIG_DIR="/app/.cache"
+ENV TORCH_HOME="/app/.cache/torch"
+
+# Set working directory
+WORKDIR /app/
 
 # Switch to non-root user
 USER app_user

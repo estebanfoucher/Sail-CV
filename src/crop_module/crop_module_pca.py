@@ -40,13 +40,20 @@ class CropModulePCA(CropModule):
         self.use_grayscale = use_grayscale
         self.mask_detector = mask_detector
 
-    def analyze_crop(self, image: Image, bboxes: list[BoundingBox]) -> list[np.ndarray]:
+    def analyze_crop(
+        self,
+        image: Image,
+        bboxes: list[BoundingBox],
+        precomputed_masks: list[np.ndarray] | None = None,
+    ) -> list[np.ndarray]:
         """
         Analyze crops using PCA to extract principal axes.
 
         Args:
             image: Image object containing the image data
             bboxes: List of bounding boxes defining crop regions
+            precomputed_masks: Optional list of pre-computed masks (avoids double inference).
+                             Masks should be full-image size and already clipped to bbox boundaries.
 
         Returns:
             List of numpy arrays, one per bounding box. Each array contains
@@ -55,9 +62,10 @@ class CropModulePCA(CropModule):
         """
         results = []
 
-        # Generate masks for all bboxes at once if mask_detector is provided
-        all_masks = None
-        if self.mask_detector is not None:
+        # Use precomputed masks if provided, otherwise generate
+        all_masks = precomputed_masks
+        if all_masks is None and self.mask_detector is not None:
+            # Generate masks only if not provided
             try:
                 # Convert all bboxes to XYXY format for mask generation
                 bbox_list = [bbox.to_numpy() for bbox in bboxes]
@@ -71,6 +79,10 @@ class CropModulePCA(CropModule):
                     f"Failed to generate masks: {e}, continuing without masks"
                 )
                 all_masks = None
+        elif all_masks is not None:
+            logger.debug(
+                f"Using {len(all_masks)} precomputed masks for {len(bboxes)} bboxes"
+            )
 
         for bbox_idx, bbox in enumerate(bboxes):
             # Validate and extract crop

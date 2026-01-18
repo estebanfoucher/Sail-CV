@@ -4,6 +4,9 @@ import json
 import sys
 from pathlib import Path
 
+import cv2
+import numpy as np
+import torch
 from loguru import logger
 
 # Add src to path
@@ -41,6 +44,164 @@ def make_json_serializable(obj):
     return obj
 
 
+def visualize_pca_vectors(
+    video_path: Path,
+    json_path: Path,
+    output_path: Path,
+    arrow_scale: float = 50.0,
+    arrow_thickness: int = 2,
+    arrow_color: tuple[int, int, int] = (0, 255, 255),  # Yellow in BGR
+):
+    """
+    Visualize PCA vectors on video frames.
+
+    Args:
+        video_path: Path to raw video file
+        json_path: Path to JSON file with tracking results and PCA vectors
+        output_path: Path to save output video with vector visualization
+        arrow_scale: Scale factor for arrow length (larger = longer arrows)
+        arrow_thickness: Thickness of arrow lines
+        arrow_color: Color of arrows in BGR format
+    """
+    logger.info("=" * 60)
+    logger.info("Visualizing PCA vectors on video")
+    logger.info("=" * 60)
+
+    # Load JSON results
+    logger.info(f"Loading results from {json_path}")
+    with open(json_path) as f:
+        results = json.load(f)
+
+    logger.info(f"Loaded {len(results)} frames of results")
+
+    # Open video
+    reader = VideoReader.open_video_file(str(video_path))
+    writer = FFmpegVideoWriter(
+        str(output_path), reader.specs.fps, reader.specs.resolution
+    )
+
+    logger.info(f"Processing video: {video_path.name}")
+    logger.info(f"Output: {output_path.name}")
+
+    frame_number = 0
+    total_arrows_drawn = 0
+    
+    while True:
+        ret, frame = reader.read()
+        if not ret:
+            break
+
+        # Get results for current frame
+        if frame_number < len(results):
+            frame_result = results[frame_number]
+            tracks = frame_result.get("tracks", [])
+            pca_vectors = frame_result.get("pca_vectors", {})
+
+            # Draw each track's bbox and PCA vector
+            for track in tracks:
+                # Extract track info
+                if isinstance(track, dict):
+                    track_id = track.get("track_id")
+                    detection = track.get("detection", {})
+                    bbox = detection.get("bbox", {})
+                    xyxy = bbox.get("xyxy", {})
+                else:
+                    # Already converted objects
+                    track_id = getattr(track, "track_id", None)
+                    detection = getattr(track, "detection", None)
+                    if detection:
+                        bbox_obj = getattr(detection, "bbox", None)
+                        if bbox_obj:
+                            xyxy = getattr(bbox_obj, "xyxy", None)
+                        else:
+                            xyxy = None
+                    else:
+                        xyxy = None
+
+                if xyxy is None:
+                    continue
+
+                # Get bbox coordinates
+                if isinstance(xyxy, dict):
+                    x1, y1 = int(xyxy.get("x1", 0)), int(xyxy.get("y1", 0))
+                    x2, y2 = int(xyxy.get("x2", 0)), int(xyxy.get("y2", 0))
+                else:
+                    x1, y1 = int(xyxy.x1), int(xyxy.y1)
+                    x2, y2 = int(xyxy.x2), int(xyxy.y2)
+
+                # Calculate bbox center
+                center_x = (x1 + x2) // 2
+                center_y = (y1 + y2) // 2
+
+                # Draw bbox
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+                # Draw track ID
+                label = f"ID:{track_id}"
+                cv2.putText(
+                    frame,
+                    label,
+                    (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 255, 0),
+                    2,
+                )
+
+                # Draw PCA vector if available
+                if track_id is not None and str(track_id) in pca_vectors:
+                    pca_vector = pca_vectors[str(track_id)]
+
+                    # PCA vector should be 2D: [dx, dy] representing the principal component
+                    if isinstance(pca_vector, list) and len(pca_vector) >= 2:
+                        dx, dy = pca_vector[0], pca_vector[1]
+                        
+                        # Scale the vector for visualization
+                        end_x = int(center_x + dx * arrow_scale)
+                        end_y = int(center_y + dy * arrow_scale)
+
+                        # Draw arrow from center to scaled endpoint
+                        cv2.arrowedLine(
+                            frame,
+                            (center_x, center_y),
+                            (end_x, end_y),
+                            arrow_color,
+                            arrow_thickness,
+                            tipLength=0.3,
+                        )
+                        
+                        # Draw PCA vector magnitude as text
+                        magnitude = np.sqrt(dx**2 + dy**2)
+                        pca_label = f"PCA:{magnitude:.2f}"
+                        cv2.putText(
+                            frame,
+                            pca_label,
+                            (x1, y2 + 20),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.5,
+                            arrow_color,
+                            2,
+                        )
+                        
+                        total_arrows_drawn += 1
+
+        # Write frame
+        writer.write(frame)
+
+        frame_number += 1
+        if frame_number % 100 == 0:
+            logger.info(f"Processed {frame_number} frames, {total_arrows_drawn} arrows drawn so far")
+
+    # Release resources
+    writer.release()
+    reader.release()
+
+    logger.info("✓ PCA vector visualization completed")
+    logger.info(f"  Output saved to: {output_path}")
+    logger.info(f"  Total frames: {frame_number}")
+    logger.info(f"  Total arrows drawn: {total_arrows_drawn}")
+
+
 def main():
     """Main function to process C1.mp4 with layout tracker and crop module."""
     # Paths
@@ -49,7 +210,7 @@ def main():
     layout_path = project_root / "assets" / "layouts" / "C1_layout.json"
     # Use best.pt (assuming this is the best_1_class model)
     # If you have a specific best_1_class.pt file, update this path
-    model_path = project_root / "checkpoints" / "best.pt"
+    model_path = project_root / "checkpoints" / "best_1_class.pt"
     output_folder = project_root / "assets" / "processed"
     output_video_path = output_folder / "C1_crop_module_tracked.mp4"
     output_json_path = output_folder / "C1_crop_module_tracked.json"
@@ -89,7 +250,7 @@ def main():
     total_frames = reader.specs.frame_count
     reader.release()
 
-    logger.info(f"Video specs: {width}x{height} @ {fps} fps, {total_frames} frames")
+    logger.info(f"Video specs: {width}x{height} @ {fps} fps, processing first {total_frames} frames")
 
     # Initialize layout tracker
     logger.info("Initializing LayoutTracker")
@@ -104,20 +265,27 @@ def main():
     )
     logger.info("✓ LayoutTracker initialized")
 
+    # Detect device
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    logger.info(f"Using device: {device}")
+    if device == "cuda":
+        logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
+        logger.info(f"CUDA version: {torch.version.cuda}")
+    
     # Initialize mask detector (SAM2)
-    logger.info("Initializing MaskDetectorSAM (SAM2)")
+    logger.info(f"Initializing MaskDetectorSAM (SAM2) on {device}")
     try:
-        mask_detector = MaskDetectorSAM(device="cpu")
+        mask_detector = MaskDetectorSAM(device=device)
         logger.info("✓ MaskDetectorSAM initialized")
     except Exception as e:
         logger.error(f"Failed to initialize MaskDetectorSAM: {e}")
         logger.warning("Continuing without mask detector - PCA will run on full crops")
         mask_detector = None
 
-    # Initialize crop module with PCA
-    logger.info("Initializing CropModulePCA")
+    # Initialize crop module with PCA (2 components for 2D vectors)
+    logger.info("Initializing CropModulePCA with 2 components")
     crop_module = CropModulePCA(
-        n_components=1, use_grayscale=True, mask_detector=mask_detector
+        n_components=2, use_grayscale=True, mask_detector=mask_detector
     )
     logger.info("✓ CropModulePCA initialized")
 
@@ -128,7 +296,7 @@ def main():
     )
 
     logger.info("=" * 60)
-    logger.info("Processing video frames")
+    logger.info("Processing video frames (first 30 frames)")
     logger.info("=" * 60)
 
     # Class info for rendering
@@ -139,8 +307,8 @@ def main():
     # Process frames and collect results
     results_timeline = []
     frame_number = 0
-
-    while True:
+    total_frames = 300
+    while frame_number < total_frames:
         ret, frame = reader.read()
         if not ret:
             break
@@ -154,14 +322,15 @@ def main():
         # Step 2: Track with layout
         tracks = layout_tracker.update(detections)
 
-        # Step 3: Generate masks and compute PCA for tracked objects
+        # Step 3: Generate masks once and compute PCA for tracked objects
         pca_vectors = {}
         if tracks:
             # Get bboxes from tracks
             bboxes = [track.detection.bbox for track in tracks]
             bbox_list = [bbox.to_numpy() for bbox in bboxes]
 
-            # Generate masks on full image
+            # Generate masks on full image (only once)
+            masks = None
             if mask_detector is not None:
                 try:
                     masks = mask_detector.generate_masks(image.image, bbox_list)
@@ -171,12 +340,10 @@ def main():
                 except Exception as e:
                     logger.warning(f"Frame {frame_number}: Mask generation failed: {e}")
                     masks = None
-            else:
-                masks = None
 
-            # Run PCA analysis
+            # Run PCA analysis (pass masks to avoid double inference)
             try:
-                pca_results = crop_module.analyze_crop(image, bboxes)
+                pca_results = crop_module.analyze_crop(image, bboxes, precomputed_masks=masks)
                 logger.debug(f"Frame {frame_number}: Computed {len(pca_results)} PCA vectors")
 
                 # Associate PCA vectors to track IDs
@@ -241,6 +408,32 @@ def main():
     logger.info(
         f"  - Frames with PCA vectors: {sum(1 for f in results_timeline if f['pca_vectors'])}"
     )
+
+    # Generate visualization video with PCA vectors
+    logger.info("")
+    logger.info("=" * 60)
+    logger.info("Generate PCA vector visualization from existing JSON")
+    logger.info("=" * 60)
+
+    vector_output_path = output_folder / f"{video_path.stem}_pca_vectors.mp4"
+    visualize_pca_vectors(
+        video_path=video_path,
+        json_path=output_json_path,
+        output_path=vector_output_path,
+        arrow_scale=50.0,  # Adjust to make arrows longer/shorter
+        arrow_thickness=3,
+        arrow_color=(0, 255, 255),  # Yellow arrows
+    )
+
+    logger.info("")
+    logger.info("=" * 60)
+    logger.info("✓ Visualization completed successfully")
+    logger.info("=" * 60)
+    logger.info(f"Output:")
+    logger.info(f"  - PCA vectors video: {vector_output_path}")
+    logger.info(f"Using data from:")
+    logger.info(f"  - Raw video: {video_path}")
+    logger.info(f"  - JSON results: {output_json_path}")
 
 
 if __name__ == "__main__":
