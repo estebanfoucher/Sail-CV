@@ -1,5 +1,6 @@
 """Main script to track C1.mp4 with layout tracker and crop module pipeline."""
 
+import math
 import json
 import sys
 from pathlib import Path
@@ -171,9 +172,8 @@ def visualize_pca_vectors(
                             tipLength=0.3,
                         )
                         
-                        # Draw PCA vector magnitude as text
-                        magnitude = np.sqrt(dx**2 + dy**2)
-                        pca_label = f"PCA:{magnitude:.2f}"
+                        # Vector is expected to be unit-normalized in JSON.
+                        pca_label = f"u=({dx:.2f},{dy:.2f})"
                         cv2.putText(
                             frame,
                             pca_label,
@@ -259,6 +259,141 @@ def main():
 
     logger.info(f"Video specs: {width}x{height} @ {fps} fps, processing first {total_frames} frames")
 
+    # ---------------------------------------------------------------------
+    # Arrow sense temporal smoothing (EMA) parameters
+    #
+    # We keep PCA axis computation unchanged (unsigned). We only determine a
+    # stable *sense* (sign) using:
+    #   W_t = SAM_mask * normalize(Motion)
+    #   F_t = alpha * F_{t-1} + (1 - alpha) * W_t
+    #
+    # alpha is derived from the EMA time constant tau in seconds:
+    #   dt = 1/fps
+    #   alpha = exp(-dt/tau)
+    # ---------------------------------------------------------------------
+    arrow_sense_tau_seconds = 0.2
+    arrow_sense_eps = 1e-6
+    fusion_threshold = 0.0  # 0 = use all pixels; >0 = ignore low-confidence weights
+    purge_state_after_seconds = 0.5  # drop per-track EMA state after inactivity
+
+    dt_seconds = (1.0 / fps) if fps and fps > 0 else 0.0
+    alpha_frame = (
+        math.exp(-dt_seconds / arrow_sense_tau_seconds)
+        if (dt_seconds > 0.0 and arrow_sense_tau_seconds > 0.0)
+        else 0.0
+    )
+    purge_state_after_frames = (
+        int(round(purge_state_after_seconds * fps)) if fps and fps > 0 else 0
+    )
+
+    # Per-track EMA state in crop coordinates (resized as needed).
+    # Track IDs in this pipeline are strings (e.g. "MT-C"), so keep keys as str.
+    fusion_ema_by_track: dict[str, np.ndarray] = {}
+    track_last_seen_frame: dict[str, int] = {}
+
+    def _mask_to_float01(mask: np.ndarray) -> np.ndarray:
+        """Convert uint/bool/float mask to float32 in [0, 1]."""
+        m = mask.astype(np.float32, copy=False)
+        max_val = float(np.max(m)) if m.size else 0.0
+        if max_val > 1.0:
+            m = m / 255.0
+        return np.clip(m, 0.0, 1.0)
+
+    def _unit_normalize_vec2(v: np.ndarray) -> np.ndarray:
+        """Return 2D unit vector; [0,0] if degenerate."""
+        v2 = np.asarray(v, dtype=np.float32)[:2]
+        n = float(np.linalg.norm(v2))
+        if n <= arrow_sense_eps:
+            return np.zeros(2, dtype=np.float32)
+        return v2 / n
+
+    def _resize_nearest(mask: np.ndarray, width: int, height: int) -> np.ndarray:
+        """Resize single-channel mask with nearest-neighbor."""
+        return cv2.resize(mask, (width, height), interpolation=cv2.INTER_NEAREST)
+
+    def _compute_signed_unit_axis_for_track(
+        *,
+        axis_2d: np.ndarray,
+        track_id: str,
+        bbox,
+        sam_full_mask_for_bbox: np.ndarray | None,
+        motion_full_mask: np.ndarray | None,
+    ) -> np.ndarray:
+        """
+        Determine a stable arrow sense (sign) for a PCA axis.
+
+        Uses per-frame fusion weights:
+          W_t = SAM_mask * normalize(Motion)
+        and temporal smoothing:
+          F_t = alpha*F_{t-1} + (1-alpha)*W_t
+
+        Sense decision uses:
+          score = sum(F_t * projection)
+        where projection is the pixel coordinate projected onto the *unsigned* PCA axis.
+        """
+        axis_u = _unit_normalize_vec2(axis_2d)
+        if float(np.linalg.norm(axis_u)) <= arrow_sense_eps:
+            return axis_u
+
+        # Crop coordinates (match crop_module's bbox clipping)
+        x1 = max(0, int(bbox.xyxy.x1))
+        y1 = max(0, int(bbox.xyxy.y1))
+        x2 = min(int(width), int(bbox.xyxy.x2))
+        y2 = min(int(height), int(bbox.xyxy.y2))
+        crop_w = x2 - x1
+        crop_h = y2 - y1
+        if crop_w <= 1 or crop_h <= 1:
+            return axis_u
+
+        # Build per-frame fusion weight mask W_t in crop coords if possible.
+        W_t = None
+        if sam_full_mask_for_bbox is not None and motion_full_mask is not None:
+            sam_crop = sam_full_mask_for_bbox[y1:y2, x1:x2]
+            motion_crop = motion_full_mask[y1:y2, x1:x2]
+            if sam_crop.size and motion_crop.size:
+                sam_crop_f = _mask_to_float01(sam_crop)
+                motion_crop_f = _mask_to_float01(motion_crop)
+                motion_norm = motion_crop_f / (
+                    float(np.max(motion_crop_f)) + arrow_sense_eps
+                )
+                W_t = (sam_crop_f * motion_norm).astype(np.float32)
+
+        # Update / reuse EMA state.
+        F_prev = fusion_ema_by_track.get(track_id)
+        if F_prev is not None and F_prev.shape != (crop_h, crop_w):
+            F_prev = _resize_nearest(F_prev, crop_w, crop_h)
+
+        if W_t is not None:
+            if F_prev is None:
+                F_t = W_t
+            else:
+                F_t = (alpha_frame * F_prev + (1.0 - alpha_frame) * W_t).astype(
+                    np.float32
+                )
+            fusion_ema_by_track[track_id] = F_t
+        else:
+            F_t = F_prev
+
+        # No fusion weights available: cannot infer sense robustly.
+        if F_t is None or float(np.sum(F_t)) <= arrow_sense_eps:
+            return axis_u
+
+        # Compute score = sum(weights * projection) in crop coordinates.
+        ys, xs = np.mgrid[0:crop_h, 0:crop_w]
+        cx = crop_w // 2
+        cy = crop_h // 2
+        proj = (xs - cx) * axis_u[0] + (ys - cy) * axis_u[1]
+
+        if fusion_threshold > 0.0:
+            sel = F_t > fusion_threshold
+            if not np.any(sel):
+                return axis_u
+            score = float(np.sum(F_t[sel] * proj[sel]))
+        else:
+            score = float(np.sum(F_t * proj))
+
+        return axis_u if score >= 0.0 else (-axis_u)
+
     # Initialize layout tracker
     logger.info("Initializing LayoutTracker")
     layout_tracker = LayoutTracker(
@@ -300,7 +435,7 @@ def main():
         logger.info("✓ BackgroundDetectorVPI initialized")
     except Exception as e:
         logger.warning(f"Failed to initialize BackgroundDetectorVPI: {e}")
-        logger.warning("Continuing without background detector - arrow direction will use layout prior only")
+        logger.warning("Continuing without background detector - arrow sense will use PCA axis only")
         background_detector = None
 
     # Initialize crop module with PCA (2 components for 2D vectors)
@@ -309,7 +444,8 @@ def main():
         n_components=2,
         use_grayscale=True,
         mask_detector=mask_detector,
-        background_detector=background_detector,
+        # Keep PCA axis computation unchanged (no internal movement-based flipping).
+        background_detector=None,
         layout_direction=layout.direction,
     )
     logger.info("✓ CropModulePCA initialized")
@@ -348,7 +484,7 @@ def main():
     # Process frames and collect results
     results_timeline = []
     frame_number = 0
-
+    total_frames = 150
     while frame_number < total_frames:
         ret, frame = reader.read()
         if not ret:
@@ -364,7 +500,8 @@ def main():
         tracks = layout_tracker.update(detections)
 
         # Step 3: Generate movement mask and masks once, then compute PCA
-        pca_vectors = {}
+        pca_vectors: dict[int, list[float]] = {}
+        masks = None
         movement_mask = None
 
         # Generate movement mask for full frame (if background detector available)
@@ -395,18 +532,46 @@ def main():
             # Run PCA analysis (pass masks and movement mask to avoid double inference)
             try:
                 pca_results = crop_module.analyze_crop(
-                    image, bboxes, precomputed_masks=masks, precomputed_movement_mask=movement_mask
+                    image,
+                    bboxes,
+                    precomputed_masks=masks,
+                    # IMPORTANT: do not pass movement mask here; sense is handled below.
+                    precomputed_movement_mask=None,
                 )
                 logger.debug(f"Frame {frame_number}: Computed {len(pca_results)} PCA vectors")
 
                 # Associate PCA vectors to track IDs
-                for track, pca_vector in zip(tracks, pca_results):
-                    pca_vectors[track.track_id] = pca_vector.tolist()
+                for bbox_idx, (track, pca_vector) in enumerate(zip(tracks, pca_results)):
+                    track_id_key = str(track.track_id)
+                    sam_full_mask_for_bbox = (
+                        masks[bbox_idx]
+                        if (masks is not None and bbox_idx < len(masks))
+                        else None
+                    )
+
+                    signed_axis = _compute_signed_unit_axis_for_track(
+                        axis_2d=pca_vector,
+                        track_id=track_id_key,
+                        bbox=track.detection.bbox,
+                        sam_full_mask_for_bbox=sam_full_mask_for_bbox,
+                        motion_full_mask=movement_mask,
+                    )
+
+                    # JSON output expects signed, 2D unit-normalized vector.
+                    pca_vectors[track.track_id] = signed_axis.tolist()
+                    track_last_seen_frame[track_id_key] = frame_number
                     logger.debug(
-                        f"Frame {frame_number}: Track {track.track_id} -> PCA: {pca_vector}"
+                        f"Frame {frame_number}: Track {track.track_id} -> PCA unsigned={pca_vector}, signed_unit={signed_axis}"
                     )
             except Exception as e:
                 logger.warning(f"Frame {frame_number}: PCA computation failed: {e}")
+
+        # Purge per-track EMA state for tracks not seen recently.
+        if purge_state_after_frames > 0:
+            for tid in list(track_last_seen_frame.keys()):
+                if frame_number - track_last_seen_frame[tid] > purge_state_after_frames:
+                    track_last_seen_frame.pop(tid, None)
+                    fusion_ema_by_track.pop(tid, None)
 
         # Step 4: Render frame with tracks
         rendered_frame = draw_tracks(
