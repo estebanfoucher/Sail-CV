@@ -307,7 +307,7 @@ def main():
     # Process frames and collect results
     results_timeline = []
     frame_number = 0
-    total_frames = 300
+    total_frames = 30
     while frame_number < total_frames:
         ret, frame = reader.read()
         if not ret:

@@ -192,16 +192,12 @@ class MaskDetectorSAM(MaskDetector):
                 # Hungarian algorithm: find optimal assignment
                 bbox_indices, mask_indices = linear_sum_assignment(cost_matrix)
                 
-                # Assign masks to bboxes
+                # Assign masks to bboxes (accept any match from Hungarian assignment, threshold = 0)
                 assigned_masks = [None] * num_bboxes
                 for bbox_idx, mask_idx in zip(bbox_indices, mask_indices):
                     iou = -cost_matrix[bbox_idx, mask_idx]  # Convert back to IoU
-                    if iou > 0.3:  # Threshold for valid match
-                        assigned_masks[bbox_idx] = raw_masks[mask_idx]
-                        logger.debug(f"Assigned mask {mask_idx} to bbox {bbox_idx} (IoU: {iou:.2f})")
-                    else:
-                        assigned_masks[bbox_idx] = np.zeros((h, w), dtype=np.uint8)
-                        logger.warning(f"Mask {mask_idx} IoU too low ({iou:.2f}) for bbox {bbox_idx}, using zero mask")
+                    assigned_masks[bbox_idx] = raw_masks[mask_idx]
+                    logger.debug(f"Assigned mask {mask_idx} to bbox {bbox_idx} (IoU: {iou:.2f})")
                 
                 # Fill unmatched bboxes with zero masks
                 for bbox_idx in range(num_bboxes):
