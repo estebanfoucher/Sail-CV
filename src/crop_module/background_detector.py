@@ -1,4 +1,4 @@
-"""VPI-based background subtraction for foreground mask generation."""
+"""Background subtraction for foreground mask generation (VPI and OpenCV implementations)."""
 
 import cv2
 import numpy as np
@@ -11,6 +11,71 @@ except ImportError:
     logger.warning("VPI not available. BackgroundDetectorVPI will not work.")
 
 from models.background_detector import BackgroundDetector
+
+
+class BackgroundDetectorOCV(BackgroundDetector):
+    """
+    Background detector using OpenCV MOG2 BackgroundSubtractor.
+
+    Generates foreground (movement) masks by subtracting background from frames.
+    """
+
+    def __init__(
+        self,
+        image_size: tuple[int, int],
+        learn_rate: float = 0.01,
+    ):
+        """
+        Initialize OpenCV MOG2 BackgroundSubtractor.
+
+        Args:
+            image_size: Tuple of (width, height) for image dimensions
+            learn_rate: Learning rate for background model (0.0 to 1.0)
+        """
+        self.image_size = image_size
+        self.learn_rate = learn_rate
+
+        # Initialize OpenCV MOG2 background subtractor
+        self.bgsub = cv2.createBackgroundSubtractorMOG2(
+            history=500,
+            varThreshold=16,
+            detectShadows=True,
+        )
+
+        logger.info(
+            f"Initialized BackgroundDetectorOCV with size {image_size}, learn_rate={learn_rate}"
+        )
+
+    def generate_foreground_mask(self, image: np.ndarray) -> np.ndarray:
+        """
+        Generate binary foreground mask (movement mask) for a full image.
+
+        Args:
+            image: Full image as numpy array of shape (H, W, 3) in BGR format
+
+        Returns:
+            Binary foreground mask as numpy array of shape (H, W) with values 0/1.
+        """
+        h, w = image.shape[:2]
+
+        # Verify image size matches expected size
+        if (w, h) != self.image_size:
+            logger.warning(
+                f"Image size {(w, h)} doesn't match expected {self.image_size}, "
+                f"resizing image"
+            )
+            image = cv2.resize(image, self.image_size)
+
+        # Apply background subtractor
+        fgmask = self.bgsub.apply(image, learningRate=self.learn_rate)
+
+        # Normalize to binary (0/1)
+        # MOG2 returns 0, 127 (shadow), or 255 (foreground)
+        mask = (fgmask > 127).astype(
+            np.uint8
+        )  # Threshold at 127 to include foreground and exclude shadows
+
+        return mask
 
 
 class BackgroundDetectorVPI(BackgroundDetector):

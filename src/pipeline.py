@@ -9,8 +9,8 @@ import torch
 from loguru import logger
 
 from crop_module import CropModulePCA, MaskDetectorSAM
-from crop_module.background_detector_vpi import BackgroundDetectorVPI
-from detector import Detector
+from crop_module.background_detector import BackgroundDetectorOCV, BackgroundDetectorVPI
+from detector import Detector, FakeDetector
 from layout_tracker import LayoutTracker
 from models import Image, Layout, ModelSpecs, PipelineConfig
 from tracker_utils.render_tracks import draw_tracks
@@ -65,15 +65,23 @@ class Pipeline:
         if not model_path.is_absolute():
             model_path = self.project_root / model_path
 
-        # Initialize detector
-        logger.info(
-            f"Initializing {config.detector.architecture} detector with {model_path}"
-        )
-        specs = ModelSpecs(
-            model_path=model_path, architecture=config.detector.architecture
-        )
-        self.detector = Detector(specs)
-        logger.info("✓ Detector initialized")
+        # Check if model_path is a JSON file (fake detector mode)
+        if model_path.suffix.lower() == ".json":
+            logger.info(
+                f"Initializing FakeDetector with precomputed results: {model_path}"
+            )
+            self.detector = FakeDetector(precomputed_results_json_path=model_path)
+            logger.info("✓ FakeDetector initialized")
+        else:
+            # Initialize real detector
+            logger.info(
+                f"Initializing {config.detector.architecture} detector with {model_path}"
+            )
+            specs = ModelSpecs(
+                model_path=model_path, architecture=config.detector.architecture
+            )
+            self.detector = Detector(specs)
+            logger.info("✓ Detector initialized")
 
         # Device detection
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -138,7 +146,7 @@ class Pipeline:
         if self.background_detector is None:
             raise RuntimeError(
                 "Background detector initialization failed. "
-                "The pipeline requires BackgroundDetectorVPI to work correctly."
+                "The pipeline requires a background detector to work correctly."
             )
 
         # Initialize layout tracker
@@ -165,23 +173,49 @@ class Pipeline:
         if self.background_detector is not None:
             return
 
-        logger.info("Initializing BackgroundDetectorVPI")
-        backend = self.config.background_detector.backend
-        if backend == "cuda" and self.device != "cuda":
-            logger.warning("CUDA requested but not available, using CPU")
-            backend = "cpu"
+        detector_type = self.config.background_detector.type
 
-        self.background_detector = BackgroundDetectorVPI(
-            image_size=(width, height),
-            backend=backend,
-            learn_rate=self.config.background_detector.learn_rate,
-        )
-        logger.info("✓ BackgroundDetectorVPI initialized")
+        if detector_type == "ocv":
+            logger.info("Initializing BackgroundDetectorOCV")
+            try:
+                self.background_detector = BackgroundDetectorOCV(
+                    image_size=(width, height),
+                    learn_rate=self.config.background_detector.learn_rate,
+                )
+                logger.info("✓ BackgroundDetectorOCV initialized")
+            except Exception as e:
+                raise RuntimeError(
+                    f"BackgroundDetectorOCV initialization failed: {e}"
+                ) from e
+
+        elif detector_type == "vpi":
+            logger.info("Initializing BackgroundDetectorVPI")
+            backend = self.config.background_detector.backend
+            if backend == "cuda" and self.device != "cuda":
+                logger.warning("CUDA requested but not available, using CPU")
+                backend = "cpu"
+
+            try:
+                self.background_detector = BackgroundDetectorVPI(
+                    image_size=(width, height),
+                    backend=backend,
+                    learn_rate=self.config.background_detector.learn_rate,
+                )
+                logger.info("✓ BackgroundDetectorVPI initialized")
+            except Exception as e:
+                raise RuntimeError(
+                    f"BackgroundDetectorVPI initialization failed: {e}"
+                ) from e
+        else:
+            raise ValueError(
+                f"Unknown background detector type: {detector_type}. "
+                f"Must be 'ocv' or 'vpi'"
+            )
 
         # Ensure it was actually initialized
         if self.background_detector is None:
             raise RuntimeError(
-                "BackgroundDetectorVPI initialization failed - detector is None"
+                f"Background detector ({detector_type}) initialization failed - detector is None"
             )
 
     def _initialize_layout_tracker(self, width: int, height: int):

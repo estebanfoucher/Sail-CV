@@ -10,7 +10,9 @@ import pytest
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
+from crop_module.background_detector import BackgroundDetectorOCV
 from dumper import Dumper
+from detector import FakeDetector
 from models import Layout, PipelineConfig
 from pipeline import Pipeline
 from streamer import Streamer
@@ -22,7 +24,7 @@ def test_pipeline_with_fixture():
     # Paths
     fixture_video = project_root / "fixtures" / "C1_fixture.mp4"
     fixture_layout = project_root / "fixtures" / "C1_layout.json"
-    parameters_file = project_root / "parameters" / "default.yaml"
+    parameters_file = project_root / "parameters" / "test.yaml"
     output_folder = project_root / "output_tests" / "pipeline"
 
     # Validate fixture exists
@@ -44,6 +46,11 @@ def test_pipeline_with_fixture():
     # Initialize pipeline
     pipeline = Pipeline(config, layout, project_root=project_root)
 
+    # Verify that FakeDetector is being used
+    assert isinstance(
+        pipeline.detector, FakeDetector
+    ), f"Expected FakeDetector, got {type(pipeline.detector)}"
+
     # Prepare output paths
     output_json_path = output_folder / "C1_fixture_tracked.json"
     output_video_path = output_folder / "C1_fixture_tracked.mp4"
@@ -60,6 +67,11 @@ def test_pipeline_with_fixture():
     with Streamer(fixture_video) as streamer:
         # Initialize pipeline for video dimensions
         pipeline.initialize_for_video(streamer.width, streamer.height, streamer.fps)
+
+        # Verify that BackgroundDetectorOCV is being used
+        assert isinstance(
+            pipeline.background_detector, BackgroundDetectorOCV
+        ), f"Expected BackgroundDetectorOCV, got {type(pipeline.background_detector)}"
 
         # Initialize dumper video writers
         dumper.initialize_video_writers(streamer.fps, (streamer.width, streamer.height))

@@ -86,6 +86,7 @@ class ArrowSenseConfig(BaseModel):
 class BackgroundDetectorConfig(BaseModel):
     """Configuration for background detector."""
 
+    type: str = Field("ocv", description="Background detector type: 'ocv' or 'vpi'")
     backend: str = Field("cuda", description="Backend to use (cuda or cpu)")
     learn_rate: float = Field(
         0.01, ge=0.0, le=1.0, description="Learning rate for background model"
