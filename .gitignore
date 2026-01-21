@@ -5,8 +5,10 @@
 !DEVELOPMENT.md
 !main.py
 !docs/
-!generate_raw_detection.py
-!track_c1_with_crop_module.py
+!analyze_video.py
+
+!fixtures/
+!fixtures/**
 
 # Source code
 !src/

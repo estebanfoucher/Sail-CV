@@ -19,19 +19,37 @@ from .detector import Detection, ModelSpecs
 from .image import Image
 from .layout import Layout, LayoutPosition
 from .mask_detector import MaskDetector
+from .pipeline_config import (
+    ArrowSenseConfig,
+    BackgroundDetectorConfig,
+    CropModuleConfig,
+    DetectorConfig,
+    LayoutTrackerConfig,
+    OutputConfig,
+    PipelineConfig,
+    VisualizationConfig,
+)
 from .track import Track, TrackerConfig
 
 __all__ = [
-    "BackgroundDetector",
     "XYXY",
+    "ArrowSenseConfig",
+    "BackgroundDetector",
+    "BackgroundDetectorConfig",
     "BoundingBox",
     "CropModule",
+    "CropModuleConfig",
     "Detection",
+    "DetectorConfig",
     "Image",
     "Layout",
     "LayoutPosition",
+    "LayoutTrackerConfig",
     "MaskDetector",
     "ModelSpecs",
+    "OutputConfig",
+    "PipelineConfig",
     "Track",
     "TrackerConfig",
+    "VisualizationConfig",
 ]

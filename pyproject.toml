@@ -20,6 +20,8 @@ dependencies = [
     "tqdm>=4.65.0",
     # Computer vision and 3D processing
     "ultralytics>=8.0.0",
+    # Configuration and utilities
+    "pyyaml>=6.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]

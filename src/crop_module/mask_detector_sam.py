@@ -44,10 +44,14 @@ class MaskDetectorSAM(MaskDetector):
 
             if self.model_path is None:
                 # Use Ultralytics SAM2 tiny model (fastest, smallest ~40MB)
-                logger.info(f"Loading Ultralytics SAM2-tiny model on device: {self.device}")
+                logger.info(
+                    f"Loading Ultralytics SAM2-tiny model on device: {self.device}"
+                )
                 self._model = SAM("sam2_t.pt")  # sam2_t.pt is SAM2 tiny model (fastest)
             else:
-                logger.info(f"Loading Ultralytics SAM2 from {self.model_path} on device: {self.device}")
+                logger.info(
+                    f"Loading Ultralytics SAM2 from {self.model_path} on device: {self.device}"
+                )
                 self._model = SAM(str(self.model_path))
 
             # Set device
@@ -72,27 +76,27 @@ class MaskDetectorSAM(MaskDetector):
         mask_coords = np.where(mask > 0.5)
         if len(mask_coords[0]) == 0:
             return 0.0
-        
+
         mask_x1, mask_y1 = mask_coords[1].min(), mask_coords[0].min()
         mask_x2, mask_y2 = mask_coords[1].max(), mask_coords[0].max()
-        
+
         # Target bbox
         x1, y1, x2, y2 = bbox[:4]
-        
+
         # Compute intersection
         inter_x1 = max(mask_x1, x1)
         inter_y1 = max(mask_y1, y1)
         inter_x2 = min(mask_x2, x2)
         inter_y2 = min(mask_y2, y2)
-        
+
         if inter_x2 <= inter_x1 or inter_y2 <= inter_y1:
             return 0.0
-        
+
         inter_area = (inter_x2 - inter_x1) * (inter_y2 - inter_y1)
         mask_area = (mask_x2 - mask_x1) * (mask_y2 - mask_y1)
         bbox_area = (x2 - x1) * (y2 - y1)
         union_area = mask_area + bbox_area - inter_area
-        
+
         return inter_area / union_area if union_area > 0 else 0.0
 
     def generate_masks(self, image: np.ndarray, bboxes: list) -> list[np.ndarray]:
@@ -110,7 +114,7 @@ class MaskDetectorSAM(MaskDetector):
             clipped to bbox boundaries. Unmatched bboxes get zero masks.
         """
         start_time = time.perf_counter()
-        
+
         logger.debug(
             f"Generating masks for full image: shape={image.shape}, {len(bboxes)} bboxes"
         )
@@ -142,7 +146,9 @@ class MaskDetectorSAM(MaskDetector):
             labels = np.ones(len(points), dtype=int)  # All foreground points
             prep_time = (time.perf_counter() - prep_start) * 1000
 
-            logger.debug(f"Using {len(points)} point prompts from bbox centers (prep: {prep_time:.1f}ms)")
+            logger.debug(
+                f"Using {len(points)} point prompts from bbox centers (prep: {prep_time:.1f}ms)"
+            )
 
             # Run Ultralytics SAM2 inference on full image with all points
             # SAM2 supports batch point prompts
@@ -154,7 +160,9 @@ class MaskDetectorSAM(MaskDetector):
                 verbose=False,
             )
             inference_time = (time.perf_counter() - inference_start) * 1000
-            logger.debug(f"SAM2 inference: {inference_time:.1f}ms for {len(bboxes)} bboxes")
+            logger.debug(
+                f"SAM2 inference: {inference_time:.1f}ms for {len(bboxes)} bboxes"
+            )
 
             # Extract raw masks from SAM2 results
             raw_masks = []
@@ -187,43 +195,55 @@ class MaskDetectorSAM(MaskDetector):
                 for bbox_idx, bbox in enumerate(bboxes):
                     for mask_idx, mask in enumerate(raw_masks):
                         iou = self._compute_mask_bbox_iou(mask, bbox)
-                        cost_matrix[bbox_idx, mask_idx] = -iou  # Negative for minimization
-                
+                        cost_matrix[
+                            bbox_idx, mask_idx
+                        ] = -iou  # Negative for minimization
+
                 # Hungarian algorithm: find optimal assignment
                 bbox_indices, mask_indices = linear_sum_assignment(cost_matrix)
-                
+
                 # Assign masks to bboxes (accept any match from Hungarian assignment, threshold = 0)
                 assigned_masks = [None] * num_bboxes
-                for bbox_idx, mask_idx in zip(bbox_indices, mask_indices):
+                for bbox_idx, mask_idx in zip(bbox_indices, mask_indices, strict=False):
                     iou = -cost_matrix[bbox_idx, mask_idx]  # Convert back to IoU
                     assigned_masks[bbox_idx] = raw_masks[mask_idx]
-                    logger.debug(f"Assigned mask {mask_idx} to bbox {bbox_idx} (IoU: {iou:.2f})")
-                
+                    logger.debug(
+                        f"Assigned mask {mask_idx} to bbox {bbox_idx} (IoU: {iou:.2f})"
+                    )
+
                 # Fill unmatched bboxes with zero masks
                 for bbox_idx in range(num_bboxes):
                     if assigned_masks[bbox_idx] is None:
                         assigned_masks[bbox_idx] = np.zeros((h, w), dtype=np.uint8)
-                        logger.warning(f"No mask assigned to bbox {bbox_idx}, using zero mask")
+                        logger.warning(
+                            f"No mask assigned to bbox {bbox_idx}, using zero mask"
+                        )
             else:
                 # No masks returned, all get zero masks
                 assigned_masks = [np.zeros((h, w), dtype=np.uint8) for _ in bboxes]
-                logger.warning(f"No masks returned from SAM2, using zero masks for all {num_bboxes} bboxes")
+                logger.warning(
+                    f"No masks returned from SAM2, using zero masks for all {num_bboxes} bboxes"
+                )
 
             # Clip each mask to its bbox
             clipped_masks = []
-            for i, (mask, bbox) in enumerate(zip(assigned_masks, bboxes)):
+            for mask, bbox in zip(assigned_masks, bboxes, strict=False):
+                # Type check: mask should not be None after the None replacement above
+                mask_to_use = np.zeros((h, w), dtype=np.uint8) if mask is None else mask
                 x1, y1, x2, y2 = bbox[:4]
                 x1, y1 = max(0, int(x1)), max(0, int(y1))
                 x2, y2 = min(w, int(x2)), min(h, int(y2))
-                
+
                 # Zero out everything outside bbox in full mask
                 clipped_mask = np.zeros((h, w), dtype=np.uint8)
-                clipped_mask[y1:y2, x1:x2] = mask[y1:y2, x1:x2]
-                
+                clipped_mask[y1:y2, x1:x2] = mask_to_use[y1:y2, x1:x2]
+
                 clipped_masks.append(clipped_mask)
 
             total_time = (time.perf_counter() - start_time) * 1000
-            logger.debug(f"SAM2 total: {total_time:.1f}ms ({len(clipped_masks)} masks generated and clipped)")
+            logger.debug(
+                f"SAM2 total: {total_time:.1f}ms ({len(clipped_masks)} masks generated and clipped)"
+            )
             return clipped_masks
 
         except Exception as e:
@@ -243,7 +263,7 @@ class MaskDetectorSAM(MaskDetector):
             Binary mask as numpy array of shape (H, W) with values 0/1.
         """
         start_time = time.perf_counter()
-        
+
         logger.debug(f"Generating mask for crop: shape={crop.shape}")
 
         h, w = crop.shape[:2]
@@ -296,11 +316,15 @@ class MaskDetectorSAM(MaskDetector):
                     return mask
                 else:
                     total_time = (time.perf_counter() - start_time) * 1000
-                    logger.warning(f"No masks found in SAM results, using full mask (time: {total_time:.1f}ms)")
+                    logger.warning(
+                        f"No masks found in SAM results, using full mask (time: {total_time:.1f}ms)"
+                    )
                     return np.ones((h, w), dtype=np.uint8)
             else:
                 total_time = (time.perf_counter() - start_time) * 1000
-                logger.warning(f"No results from SAM, using full mask (time: {total_time:.1f}ms)")
+                logger.warning(
+                    f"No results from SAM, using full mask (time: {total_time:.1f}ms)"
+                )
                 return np.ones((h, w), dtype=np.uint8)
 
         except Exception as e:
