@@ -1811,6 +1811,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "loguru" },
+    { name = "matplotlib" },
     { name = "numpy" },
     { name = "opencv-python" },
     { name = "pydantic" },
@@ -1833,6 +1834,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "loguru", specifier = ">=0.7.0" },
+    { name = "matplotlib", specifier = ">=3.5.0" },
     { name = "numpy", specifier = "<2.0.0" },
     { name = "opencv-python", specifier = "==4.8.0.74" },
     { name = "pydantic", specifier = ">=2.0.0" },

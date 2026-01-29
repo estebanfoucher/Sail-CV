@@ -10,6 +10,7 @@ This module contains all Pydantic models used for type safety and validation:
 - CropModule: Base class for crop analysis modules
 - MaskDetector: Base class for mask detection modules
 - BackgroundDetector: Base class for background detection modules
+- TelltalePoint, SailGeometry, CameraConfig, Sail3DConfig: 3D sail tracking models
 """
 
 from .background_detector import BackgroundDetector
@@ -30,6 +31,7 @@ from .pipeline_config import (
     PipelineConfig,
     VisualizationConfig,
 )
+from .sail_3d import CameraConfig, Sail3DConfig, SailGeometry, TelltalePoint
 from .track import Track, TrackerConfig
 
 __all__ = [
@@ -41,6 +43,7 @@ __all__ = [
     "ClassifierConfig",
     "CropModule",
     "CropModuleConfig",
+    "CameraConfig",
     "Detection",
     "DetectorConfig",
     "Image",
@@ -51,6 +54,9 @@ __all__ = [
     "ModelSpecs",
     "OutputConfig",
     "PipelineConfig",
+    "Sail3DConfig",
+    "SailGeometry",
+    "TelltalePoint",
     "Track",
     "TrackerConfig",
     "VisualizationConfig",
