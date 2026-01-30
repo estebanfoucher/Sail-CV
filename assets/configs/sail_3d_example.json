@@ -27,5 +27,8 @@
   },
   "angle_min": 0,
   "angle_max": 45,
-  "coarse_steps": 10
+  "coarse_steps": 7,
+  "twist_min": 0,
+  "twist_max": 30,
+  "coarse_steps_twist": 5
 }

@@ -2,10 +2,12 @@
 3D Visualization module for sail tracking debugging.
 
 This module provides interactive 3D plotting for visualizing:
-- Sail geometry at different angles
+- Sail geometry at different angles and twist
 - Camera position and viewing direction
 - Telltale positions
 - Projection from 3D to 2D
+
+Supports both 1-DOF (angle only) and 2-DOF (angle + twist) visualization.
 
 Requires matplotlib with mplot3d support.
 """
@@ -19,6 +21,7 @@ from models.sail_3d import Sail3DConfig
 from projection import (
     compute_camera_matrix,
     get_sail_corners_world,
+    get_sail_mesh_world,
     get_telltales_world,
     project_telltales,
 )
@@ -32,6 +35,7 @@ if TYPE_CHECKING:
 def plot_sail_camera_setup(
     config: Sail3DConfig,
     angle_deg: float = 0.0,
+    twist_deg: float = 0.0,
     detections: list[Detection] | None = None,
     show_projection_rays: bool = False,
     ax: "Axes3D | None" = None,
@@ -40,9 +44,12 @@ def plot_sail_camera_setup(
     """
     Plot the complete 3D scene showing sail, camera, and telltales.
 
+    Supports both flat sail (no twist) and twisted sail visualization.
+
     Args:
         config: Sail3DConfig with geometry and camera settings
-        angle_deg: Sail angle in degrees
+        angle_deg: Base sail angle in degrees at the foot
+        twist_deg: Twist angle in degrees (added at the head)
         detections: Optional list of detections (not used in 3D plot, reserved for future)
         show_projection_rays: If True, draw lines from camera to telltales
         ax: Optional existing Axes3D to plot on
@@ -67,21 +74,33 @@ def plot_sail_camera_setup(
     ax.quiver(0, 0, 0, 0, axis_length, 0, color='green', arrow_length_ratio=0.1, label='Y (starboard)')
     ax.quiver(0, 0, 0, 0, 0, axis_length, color='blue', arrow_length_ratio=0.1, label='Z (up)')
 
-    # --- Plot sail rectangle ---
-    corners = get_sail_corners_world(config.sail, angle_deg)
-    
-    # Create polygon for sail surface
-    sail_poly = Poly3DCollection(
-        [corners],
-        alpha=0.3,
-        facecolor='cyan',
-        edgecolor='darkblue',
-        linewidth=2,
-    )
-    ax.add_collection3d(sail_poly)
+    # --- Plot sail surface ---
+    if abs(twist_deg) < 0.1:
+        # No twist: draw as single polygon
+        corners = get_sail_corners_world(config.sail, angle_deg, twist_deg)
+        sail_poly = Poly3DCollection(
+            [corners],
+            alpha=0.3,
+            facecolor='cyan',
+            edgecolor='darkblue',
+            linewidth=2,
+        )
+        ax.add_collection3d(sail_poly)
+    else:
+        # With twist: draw as mesh of quadrilaterals
+        mesh = get_sail_mesh_world(config.sail, angle_deg, twist_deg, num_strips=8)
+        for quad in mesh:
+            sail_poly = Poly3DCollection(
+                [quad],
+                alpha=0.3,
+                facecolor='cyan',
+                edgecolor='darkblue',
+                linewidth=1,
+            )
+            ax.add_collection3d(sail_poly)
 
     # --- Plot telltales on sail ---
-    telltales = get_telltales_world(config.sail, angle_deg)
+    telltales = get_telltales_world(config.sail, angle_deg, twist_deg)
     for tell_id, world_pos in telltales:
         ax.scatter(
             world_pos[0], world_pos[1], world_pos[2],
@@ -125,7 +144,11 @@ def plot_sail_camera_setup(
     ax.set_xlabel('X (boat axis)')
     ax.set_ylabel('Y (lateral)')
     ax.set_zlabel('Z (vertical)')
-    ax.set_title(f'Sail at {angle_deg:.1f}° angle')
+    
+    if abs(twist_deg) < 0.1:
+        ax.set_title(f'Sail at {angle_deg:.1f}° angle')
+    else:
+        ax.set_title(f'Sail at {angle_deg:.1f}° angle, {twist_deg:.1f}° twist')
     
     # Set equal aspect ratio
     max_range = max(config.sail.width, config.sail.height, 3.0)
@@ -144,6 +167,7 @@ def plot_sail_camera_setup(
 def plot_sail_angle_sweep(
     config: Sail3DConfig,
     angles: list[float] | None = None,
+    twist_deg: float = 0.0,
     figsize: tuple[int, int] = (16, 4),
 ) -> "Figure":
     """
@@ -152,6 +176,7 @@ def plot_sail_angle_sweep(
     Args:
         config: Sail3DConfig with geometry and camera settings
         angles: List of angles to plot (default: evenly spaced in range)
+        twist_deg: Twist angle in degrees (same for all plots)
         figsize: Figure size
 
     Returns:
@@ -169,23 +194,35 @@ def plot_sail_angle_sweep(
     for i, angle in enumerate(angles):
         ax = fig.add_subplot(1, n_angles, i + 1, projection='3d')
         
-        # Plot sail
-        corners = get_sail_corners_world(config.sail, angle)
-        sail_poly = Poly3DCollection(
-            [corners],
-            alpha=0.4,
-            facecolor='cyan',
-            edgecolor='darkblue',
-            linewidth=2,
-        )
-        ax.add_collection3d(sail_poly)
+        # Plot sail (as mesh if twisted)
+        if abs(twist_deg) < 0.1:
+            corners = get_sail_corners_world(config.sail, angle, twist_deg)
+            sail_poly = Poly3DCollection(
+                [corners],
+                alpha=0.4,
+                facecolor='cyan',
+                edgecolor='darkblue',
+                linewidth=2,
+            )
+            ax.add_collection3d(sail_poly)
+        else:
+            mesh = get_sail_mesh_world(config.sail, angle, twist_deg, num_strips=6)
+            for quad in mesh:
+                sail_poly = Poly3DCollection(
+                    [quad],
+                    alpha=0.4,
+                    facecolor='cyan',
+                    edgecolor='darkblue',
+                    linewidth=1,
+                )
+                ax.add_collection3d(sail_poly)
 
         # Plot camera
         cam_pos = np.array(config.camera.position)
         ax.scatter(cam_pos[0], cam_pos[1], cam_pos[2], c='orange', s=50, marker='^')
 
         # Plot telltales
-        telltales = get_telltales_world(config.sail, angle)
+        telltales = get_telltales_world(config.sail, angle, twist_deg)
         for tell_id, world_pos in telltales:
             ax.scatter(world_pos[0], world_pos[1], world_pos[2], c='red', s=20)
 
@@ -193,7 +230,10 @@ def plot_sail_angle_sweep(
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
-        ax.set_title(f'{angle:.0f}°')
+        if abs(twist_deg) < 0.1:
+            ax.set_title(f'{angle:.0f}°')
+        else:
+            ax.set_title(f'{angle:.0f}° / {twist_deg:.0f}° twist')
         
         max_range = max(config.sail.width, config.sail.height, 3.0)
         ax.set_xlim(-1, max_range + 1)
@@ -207,6 +247,7 @@ def plot_sail_angle_sweep(
 def plot_2d_projection_overlay(
     config: Sail3DConfig,
     angle_deg: float,
+    twist_deg: float = 0.0,
     image: np.ndarray | None = None,
     detections: list[Detection] | None = None,
     assignments: list[tuple[int, str]] | None = None,
@@ -217,7 +258,8 @@ def plot_2d_projection_overlay(
 
     Args:
         config: Sail3DConfig with geometry and camera settings
-        angle_deg: Sail angle in degrees
+        angle_deg: Base sail angle in degrees at the foot
+        twist_deg: Twist angle in degrees (added at the head)
         image: Optional background image (BGR or RGB numpy array)
         detections: Optional list of detections to overlay
         assignments: Optional list of (detection_idx, telltale_id) matches
@@ -247,7 +289,7 @@ def plot_2d_projection_overlay(
         ax.set_ylim(img_height, 0)  # Invert Y for image coordinates
 
     # Project telltales
-    projected = project_telltales(config.sail, config.camera, angle_deg)
+    projected = project_telltales(config.sail, config.camera, angle_deg, twist_deg)
     telltales = config.sail.telltales
 
     # Plot projected telltale positions
@@ -305,7 +347,10 @@ def plot_2d_projection_overlay(
 
     ax.set_xlabel('X (pixels)')
     ax.set_ylabel('Y (pixels)')
-    ax.set_title(f'2D Projection at {angle_deg:.1f}° angle')
+    if abs(twist_deg) < 0.1:
+        ax.set_title(f'2D Projection at {angle_deg:.1f}° angle')
+    else:
+        ax.set_title(f'2D Projection at {angle_deg:.1f}° angle, {twist_deg:.1f}° twist')
     ax.set_aspect('equal')
     ax.grid(True, alpha=0.3)
 
@@ -321,15 +366,17 @@ def plot_2d_projection_overlay(
 def create_interactive_angle_slider(
     config: Sail3DConfig,
     initial_angle: float = 0.0,
+    initial_twist: float = 0.0,
 ) -> None:
     """
-    Create matplotlib figure with slider to interactively adjust sail angle.
+    Create matplotlib figure with sliders to interactively adjust sail angle and twist.
 
-    The 3D view updates in real-time as the slider is moved.
+    The 3D view updates in real-time as the sliders are moved.
 
     Args:
         config: Sail3DConfig with geometry and camera settings
-        initial_angle: Initial angle to display
+        initial_angle: Initial base angle to display
+        initial_twist: Initial twist to display
     """
     import matplotlib.pyplot as plt
     from matplotlib.widgets import Slider
@@ -337,18 +384,23 @@ def create_interactive_angle_slider(
 
     fig = plt.figure(figsize=(12, 9))
     
-    # Create 3D axis with space for slider
+    # Create 3D axis with space for sliders
     ax = fig.add_subplot(111, projection='3d')
-    plt.subplots_adjust(bottom=0.15)
+    plt.subplots_adjust(bottom=0.2)
 
     # Storage for current plot elements
-    plot_elements = {'sail': None, 'telltales': [], 'texts': []}
+    plot_elements = {'sail_polys': [], 'telltales': [], 'texts': []}
+    current_params = {'angle': initial_angle, 'twist': initial_twist}
 
-    def update_plot(angle: float) -> None:
-        """Update the plot for a given angle."""
-        # Remove old sail polygon
-        if plot_elements['sail'] is not None:
-            plot_elements['sail'].remove()
+    def update_plot(_=None) -> None:
+        """Update the plot for current angle and twist."""
+        angle = current_params['angle']
+        twist = current_params['twist']
+        
+        # Remove old sail polygons
+        for poly in plot_elements['sail_polys']:
+            poly.remove()
+        plot_elements['sail_polys'] = []
         
         # Remove old telltale markers and texts
         for scatter in plot_elements['telltales']:
@@ -358,20 +410,33 @@ def create_interactive_angle_slider(
         plot_elements['telltales'] = []
         plot_elements['texts'] = []
 
-        # Draw new sail
-        corners = get_sail_corners_world(config.sail, angle)
-        sail_poly = Poly3DCollection(
-            [corners],
-            alpha=0.3,
-            facecolor='cyan',
-            edgecolor='darkblue',
-            linewidth=2,
-        )
-        ax.add_collection3d(sail_poly)
-        plot_elements['sail'] = sail_poly
+        # Draw new sail (as mesh if twisted)
+        if abs(twist) < 0.1:
+            corners = get_sail_corners_world(config.sail, angle, twist)
+            sail_poly = Poly3DCollection(
+                [corners],
+                alpha=0.3,
+                facecolor='cyan',
+                edgecolor='darkblue',
+                linewidth=2,
+            )
+            ax.add_collection3d(sail_poly)
+            plot_elements['sail_polys'].append(sail_poly)
+        else:
+            mesh = get_sail_mesh_world(config.sail, angle, twist, num_strips=8)
+            for quad in mesh:
+                sail_poly = Poly3DCollection(
+                    [quad],
+                    alpha=0.3,
+                    facecolor='cyan',
+                    edgecolor='darkblue',
+                    linewidth=1,
+                )
+                ax.add_collection3d(sail_poly)
+                plot_elements['sail_polys'].append(sail_poly)
 
         # Draw new telltales
-        telltales = get_telltales_world(config.sail, angle)
+        telltales = get_telltales_world(config.sail, angle, twist)
         for tell_id, world_pos in telltales:
             scatter = ax.scatter(
                 world_pos[0], world_pos[1], world_pos[2],
@@ -385,8 +450,19 @@ def create_interactive_angle_slider(
             )
             plot_elements['texts'].append(text)
 
-        ax.set_title(f'Sail at {angle:.1f}° angle')
+        if abs(twist) < 0.1:
+            ax.set_title(f'Sail at {angle:.1f}° angle')
+        else:
+            ax.set_title(f'Sail at {angle:.1f}° angle, {twist:.1f}° twist')
         fig.canvas.draw_idle()
+
+    def on_angle_change(val: float) -> None:
+        current_params['angle'] = val
+        update_plot()
+
+    def on_twist_change(val: float) -> None:
+        current_params['twist'] = val
+        update_plot()
 
     # Initial plot setup (static elements)
     # Coordinate axes
@@ -417,22 +493,31 @@ def create_interactive_angle_slider(
     ax.set_ylim(-max_range/2 - 1, max_range/2 + 1)
     ax.set_zlim(0, config.sail.height + 1)
 
-    # Create slider
-    slider_ax = fig.add_axes([0.2, 0.05, 0.6, 0.03])
+    # Create sliders
+    angle_slider_ax = fig.add_axes([0.2, 0.1, 0.6, 0.03])
     angle_slider = Slider(
-        slider_ax,
-        'Sail Angle (°)',
+        angle_slider_ax,
+        'Base Angle (°)',
         config.angle_min,
         config.angle_max,
         valinit=initial_angle,
         valstep=0.5,
     )
+    angle_slider.on_changed(on_angle_change)
 
-    # Connect slider to update function
-    angle_slider.on_changed(update_plot)
+    twist_slider_ax = fig.add_axes([0.2, 0.05, 0.6, 0.03])
+    twist_slider = Slider(
+        twist_slider_ax,
+        'Twist (°)',
+        config.twist_min,
+        config.twist_max,
+        valinit=initial_twist,
+        valstep=0.5,
+    )
+    twist_slider.on_changed(on_twist_change)
 
     # Initial plot
-    update_plot(initial_angle)
+    update_plot()
 
     plt.show()
 
@@ -440,6 +525,7 @@ def create_interactive_angle_slider(
 def plot_projection_comparison(
     config: Sail3DConfig,
     angle_deg: float,
+    twist_deg: float = 0.0,
     figsize: tuple[int, int] = (14, 6),
 ) -> "Figure":
     """
@@ -447,7 +533,8 @@ def plot_projection_comparison(
 
     Args:
         config: Sail3DConfig with geometry and camera settings
-        angle_deg: Sail angle in degrees
+        angle_deg: Base sail angle in degrees at the foot
+        twist_deg: Twist angle in degrees (added at the head)
         figsize: Figure size
 
     Returns:
@@ -467,19 +554,31 @@ def plot_projection_comparison(
     ax3d.quiver(0, 0, 0, 0, axis_length, 0, color='green', arrow_length_ratio=0.1)
     ax3d.quiver(0, 0, 0, 0, 0, axis_length, color='blue', arrow_length_ratio=0.1)
 
-    # Sail
-    corners = get_sail_corners_world(config.sail, angle_deg)
-    sail_poly = Poly3DCollection(
-        [corners],
-        alpha=0.3,
-        facecolor='cyan',
-        edgecolor='darkblue',
-        linewidth=2,
-    )
-    ax3d.add_collection3d(sail_poly)
+    # Sail (as mesh if twisted)
+    if abs(twist_deg) < 0.1:
+        corners = get_sail_corners_world(config.sail, angle_deg, twist_deg)
+        sail_poly = Poly3DCollection(
+            [corners],
+            alpha=0.3,
+            facecolor='cyan',
+            edgecolor='darkblue',
+            linewidth=2,
+        )
+        ax3d.add_collection3d(sail_poly)
+    else:
+        mesh = get_sail_mesh_world(config.sail, angle_deg, twist_deg, num_strips=8)
+        for quad in mesh:
+            sail_poly = Poly3DCollection(
+                [quad],
+                alpha=0.3,
+                facecolor='cyan',
+                edgecolor='darkblue',
+                linewidth=1,
+            )
+            ax3d.add_collection3d(sail_poly)
 
     # Telltales
-    telltales = get_telltales_world(config.sail, angle_deg)
+    telltales = get_telltales_world(config.sail, angle_deg, twist_deg)
     for tell_id, world_pos in telltales:
         ax3d.scatter(world_pos[0], world_pos[1], world_pos[2], c='red', s=50)
         ax3d.text(world_pos[0], world_pos[1], world_pos[2] + 0.2, tell_id, fontsize=8)
@@ -499,7 +598,10 @@ def plot_projection_comparison(
     ax3d.set_xlabel('X')
     ax3d.set_ylabel('Y')
     ax3d.set_zlabel('Z')
-    ax3d.set_title(f'3D Scene (angle={angle_deg:.1f}°)')
+    if abs(twist_deg) < 0.1:
+        ax3d.set_title(f'3D Scene (angle={angle_deg:.1f}°)')
+    else:
+        ax3d.set_title(f'3D Scene (angle={angle_deg:.1f}°, twist={twist_deg:.1f}°)')
     
     max_range = max(config.sail.width, config.sail.height, 3.0)
     ax3d.set_xlim(-1, max_range + 1)
@@ -517,7 +619,7 @@ def plot_projection_comparison(
     ax2d.grid(True, alpha=0.3)
 
     # Project and plot telltales
-    projected = project_telltales(config.sail, config.camera, angle_deg)
+    projected = project_telltales(config.sail, config.camera, angle_deg, twist_deg)
     for (proj_x, proj_y), telltale in zip(projected, config.sail.telltales, strict=False):
         ax2d.scatter(proj_x, proj_y, c='blue', s=100, marker='x', linewidths=2)
         ax2d.annotate(
@@ -531,7 +633,10 @@ def plot_projection_comparison(
 
     ax2d.set_xlabel('X (pixels)')
     ax2d.set_ylabel('Y (pixels)')
-    ax2d.set_title(f'2D Projection (angle={angle_deg:.1f}°)')
+    if abs(twist_deg) < 0.1:
+        ax2d.set_title(f'2D Projection (angle={angle_deg:.1f}°)')
+    else:
+        ax2d.set_title(f'2D Projection (angle={angle_deg:.1f}°, twist={twist_deg:.1f}°)')
 
     plt.tight_layout()
     return fig

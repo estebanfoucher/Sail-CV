@@ -103,14 +103,24 @@ class Sail3DConfig(BaseModel):
     Complete configuration for 3D sail tracking.
 
     Combines sail geometry, camera configuration, and optimization parameters.
+    Supports both 1-DOF (angle only) and 2-DOF (angle + twist) tracking.
     """
 
     sail: SailGeometry = Field(..., description="Sail geometry and telltale positions")
     camera: CameraConfig = Field(..., description="Camera configuration")
+    
+    # Angle (rotation) parameters
     angle_min: float = Field(default=0.0, description="Minimum sail angle in degrees")
     angle_max: float = Field(default=45.0, description="Maximum sail angle in degrees")
     coarse_steps: int = Field(
         default=10, ge=1, description="Number of discrete angle steps for coarse search"
+    )
+    
+    # Twist parameters (2-DOF tracking)
+    twist_min: float = Field(default=0.0, description="Minimum twist angle in degrees")
+    twist_max: float = Field(default=30.0, description="Maximum twist angle in degrees")
+    coarse_steps_twist: int = Field(
+        default=5, ge=1, description="Number of discrete twist steps for coarse search"
     )
 
     @classmethod
@@ -124,6 +134,9 @@ class Sail3DConfig(BaseModel):
             angle_min=data.get("angle_min", 0.0),
             angle_max=data.get("angle_max", 45.0),
             coarse_steps=data.get("coarse_steps", 10),
+            twist_min=data.get("twist_min", 0.0),
+            twist_max=data.get("twist_max", 30.0),
+            coarse_steps_twist=data.get("coarse_steps_twist", 5),
         )
 
     @classmethod

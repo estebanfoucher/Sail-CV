@@ -95,4 +95,3 @@ conda run -n base python plot_detections.py \
 | `--height` | 720 | Frame height (ignored if --video provided) |
 | `--fps` | 30.0 | Output FPS (ignored if --video provided) |
 | `--bg-color` | 30 30 30 | Background BGR color |
-
