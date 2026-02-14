@@ -1,0 +1,66 @@
+services:
+  reconstruction:
+    build:
+      context: ..
+      dockerfile: docker/reconstruction.Dockerfile
+    ports:
+      - "${PORT:-7862}:${PORT:-7862}"
+    environment:
+      - DEVICE=cuda
+      - CUDA_MEMORY_FRACTION=0.8
+      - PORT=${PORT:-7862}
+      - LOGURU_LEVEL=${LOGURU_LEVEL:-DEBUG}
+    volumes:
+      - ../assets/reconstruction:/app/assets:rw
+      - ../checkpoints:/app/checkpoints:ro
+      - ../src/reconstruction:/app/src/reconstruction:rw
+      - ../web_app:/app/web_app:rw
+      - ../output:/app/output:rw
+    cap_add:
+      - IPC_LOCK
+      - SYS_RESOURCE
+    runtime: nvidia
+    user: "1000:1000"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+              options:
+                memory: 2048
+
+  tracking:
+    build:
+      context: ..
+      dockerfile: docker/tracking.Dockerfile
+    environment:
+      - DEVICE=cuda
+      - CUDA_MEMORY_FRACTION=0.8
+    volumes:
+      - ../assets/tracking:/app/assets:rw
+      - ../checkpoints:/app/checkpoints:ro
+      - ../parameters:/app/parameters:ro
+      - ../src/tracking:/app/src/tracking:rw
+      - ../output:/app/output:rw
+    cap_add:
+      - IPC_LOCK
+      - SYS_RESOURCE
+    runtime: nvidia
+    user: "1000:1000"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+              options:
+                memory: 2048
