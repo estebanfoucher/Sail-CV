@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from loguru import logger
 
-from mv_utils import Scene
+from calibration import Scene
 from stereo.image import crop_to_match_resolution
 from video import FFmpegVideoWriter, StereoVideoReader
 

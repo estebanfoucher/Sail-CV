@@ -168,7 +168,7 @@ class VideoReader:
         """Ensure frame is in landscape orientation (width >= height)"""
         # Apply EXIF transpose first
         # Import here to avoid circular dependency
-        from mv_utils.image_utils import apply_exif_transpose_to_frames
+        from calibration.image_utils import apply_exif_transpose_to_frames
 
         corrected_frame = apply_exif_transpose_to_frames([frame])[0]
 

@@ -10,7 +10,7 @@ from typing import Tuple, Dict, Any
 
 # Import existing classes from src
 from video import VideoReader
-from mv_utils.utils import validate_calibration
+from calibration.utils import validate_calibration
 
 # Configure logger
 logger = logging.getLogger(__name__)
