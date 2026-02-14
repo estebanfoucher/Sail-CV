@@ -5,7 +5,13 @@
 !DEVELOPMENT.md
 !main.py
 !docs/
-!generate_raw_detection.py
+!analyze_video.py
+
+!fixtures/
+!fixtures/**
+
+!parameters/
+!parameters/**
 
 # Source code
 !src/

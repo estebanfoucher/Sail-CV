@@ -31,36 +31,39 @@ RUN uv pip install --system setuptools
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
 # Install VPI via apt (NVIDIA's Vision Programming Interface)
-# RUN apt-key adv --fetch-key https://repo.download.nvidia.com/jetson/jetson-ota-public.asc && \
-#    add-apt-repository "deb https://repo.download.nvidia.com/jetson/common r36.4 main" && \
-#        apt-get update && apt-get install -y --no-install-recommends \
-#      libegl1-mesa \
-#      libnvvpi3 vpi3-dev vpi3-samples python3.10-vpi3 && \
-#    add-apt-repository -r "deb https://repo.download.nvidia.com/jetson/common r36.4 main" && \
-#    rm -rf /var/lib/apt/lists/* && \
-#    apt-get clean
+RUN apt-key adv --fetch-key https://repo.download.nvidia.com/jetson/jetson-ota-public.asc && \
+   add-apt-repository "deb https://repo.download.nvidia.com/jetson/common r36.4 main" && \
+       apt-get update && apt-get install -y --no-install-recommends \
+     libegl1-mesa \
+     libnvvpi3 vpi3-dev vpi3-samples python3.10-vpi3 && \
+   add-apt-repository -r "deb https://repo.download.nvidia.com/jetson/common r36.4 main" && \
+   rm -rf /var/lib/apt/lists/* && \
+   apt-get clean
 
 # Create non-root user for better security and file management
 RUN useradd -m -u 1000 app_user && \
     usermod -aG sudo app_user
 
 # Create directories first
-RUN mkdir -p /app/output
+RUN mkdir -p /app/output /app/.cache
 
 # Copy source files
 COPY src/ /app/src/
 
-# Set proper ownership and permissions for all directories
-RUN chown -R app_user:app_user /app/src /app/output && \
-    chmod -R 755 /app/output
-
-# Set working directory to src
-WORKDIR /app/
-
 COPY generate_raw_detection.py /app/
+COPY track_c1_with_crop_module.py /app/
 
-# Set Ultralytics config directory to avoid warnings
-ENV YOLO_CONFIG_DIR="/app/"
+# Set proper ownership and permissions for all directories
+# Give app_user ownership of the entire /app directory so models can be downloaded
+RUN chown -R app_user:app_user /app && \
+    chmod -R 755 /app
+
+# Set Ultralytics config and cache directories
+ENV YOLO_CONFIG_DIR="/app/.cache"
+ENV TORCH_HOME="/app/.cache/torch"
+
+# Set working directory
+WORKDIR /app/
 
 # Switch to non-root user
 USER app_user

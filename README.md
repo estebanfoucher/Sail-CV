@@ -38,16 +38,27 @@ It relies on a **fine tuned RT-DETR** as detector and a **custom python-based tr
    brew install ffmpeg
    ```
 
-## How to use  
+## How to use
 
 ### Basic usage
 
 `source .venv/bin/activate && python main.py`
 
-### Docker 
+### Crop Module Tracking Pipeline
 
+Track telltales with layout tracker and PCA analysis:
+
+```bash
+
+# With custom parameters and output directory
+python analyze_video.py \
+  --video assets/C1.mp4 \
+  --layout assets/layouts/C1_layout.json \
+  --parameters parameters/c1_faker.yaml \
+  --output output
+```
+
+### Docker
+
+jeston:
 `cd docker && docker compose -f docker-compose.yml build && docker compose -f docker-compose.yml up -d && docker exec -it docker-tell-tales-tracking-1 bash`
-
-then execute
-
-`python3 main.py`
