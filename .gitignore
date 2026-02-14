@@ -1,57 +1,5 @@
-# Restrictive approach: ignore everything by default, then explicitly allow
-*
-!.gitignore
-!README.md
-!DEVELOPMENT.md
-!.env
-
-# Source code
-!src/
-!src/**
-
-# Tests
-!tests/
-!tests/**
-
-# Docker configuration
-!docker/
-!docker/**
-!docker/.env
-
-# Project configuration
-!pyproject.toml
-!uv.lock
-!requirements-dev.txt
-!Makefile
-
-# Development scripts
-!scripts/
-!scripts/**
-
-# Documentation and project files
-!TODO.txt
-!launch.sh
-!config.json
-
-# External dependencies (MASt3R)
-!mast3r/
-!mast3r/**
-# !pow3r/
-# !pow3r/**
-
-# Assets directory (for scene images)
-!assets/
-!assets/**
-
-
-!web_app/
-!web_app/**
-
-# Pre-commit configuration
-!.pre-commit-config.yaml
-
 # ===========================================
-# EXCLUSIONS - Files/directories to ignore
+# Sail-CV .gitignore
 # ===========================================
 
 # Model files and checkpoints (large binary files)
@@ -64,9 +12,12 @@
 *.pkl
 *.pickle
 *.joblib
-checkpoints/
-models/
 weights/
+
+# Allow specific checkpoint files
+!checkpoints/
+!checkpoints/rt-detr.pt
+!checkpoints/yolo-s.pt
 
 # Data directories (input data, not tracked)
 data/
@@ -75,6 +26,7 @@ raw_data/
 
 # Output directories (generated content)
 output/
+output_tests/
 results/
 logs/
 temp/
@@ -137,13 +89,14 @@ dmypy.json
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Thumbs.db
 
-# Large media files (images, videos, audio)
-*.mp4 # except those in assets/
+# Large media files (except in assets/)
+*.mp4
 !assets/**/*.mp4
 *.avi
 *.mov
+!assets/**/*.MOV
+!assets/**/*.mov
 *.mkv
 *.wmv
 *.flv
@@ -153,7 +106,6 @@ Thumbs.db
 *.jpg
 *.jpeg
 *.png
-
 !assets/**/*.png
 *.bmp
 *.tiff
@@ -187,14 +139,12 @@ Thumbs.db
 *.out
 *.err
 
-# Specific exclusions for test assets
-src/cameras/test_assets/camera_pyramids/**
-
 # Docker volumes and data
 docker/data/
 docker/volumes/
 
 # Environment-specific files
+.env
 .env.local
 .env.development
 .env.production
@@ -210,4 +160,3 @@ docker/volumes/
 *.tmp
 *.temp
 .cache/
-*.DS_Store
