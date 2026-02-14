@@ -70,21 +70,25 @@ quick-check: format lint typecheck ## Quick check (format + lint + typecheck, no
 
 # ── Docker ──────────────────────────────────────────────────────────
 
-docker-build: ## Build Docker images
-	@echo "Building Docker images..."
-	cd docker && docker compose build
+docker-build-base: ## Build base Docker image
+	@echo "Building base Docker image..."
+	cd docker && docker compose build base
 
-docker-build-reconstruction: ## Build reconstruction Docker image
+docker-build: docker-build-base ## Build all Docker images (base first)
+	@echo "Building Docker images..."
+	cd docker && docker compose build reconstruction tracking
+
+docker-build-reconstruction: docker-build-base ## Build reconstruction Docker image
 	@echo "Building reconstruction Docker image..."
 	cd docker && docker compose build reconstruction
 
-docker-build-tracking: ## Build tracking Docker image
+docker-build-tracking: docker-build-base ## Build tracking Docker image
 	@echo "Building tracking Docker image..."
 	cd docker && docker compose build tracking
 
-docker-up: ## Start Docker containers
+docker-up: ## Start Docker containers (excludes base)
 	@echo "Starting Docker containers..."
-	cd docker && docker compose up
+	cd docker && docker compose up reconstruction tracking
 
 docker-down: ## Stop Docker containers
 	@echo "Stopping Docker containers..."

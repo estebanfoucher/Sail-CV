@@ -1,4 +1,4 @@
-FROM dustynv/l4t-pytorch:r36.4.0 AS base
+FROM dustynv/l4t-pytorch:r36.4.0
 
 LABEL description="Sail-CV base image for Jetson hardware"
 ARG DEBIAN_FRONTEND=noninteractive
@@ -19,9 +19,6 @@ WORKDIR /app
 
 # Copy project files for dependency installation
 COPY pyproject.toml uv.lock* README.md /app/
-
-# Install main project dependencies
-RUN uv pip install --system -e .
 
 # Install setuptools explicitly for building extensions
 RUN uv pip install --system setuptools

@@ -7,9 +7,9 @@ from pathlib import Path
 
 from loguru import logger
 
-# Add src to path
+# Add src/tracking to path (flat imports: from models import ..., from pipeline import ...)
 project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root / "src"))
+sys.path.insert(0, str(project_root / "src" / "tracking"))
 
 from dumper import Dumper
 from models import Layout, PipelineConfig

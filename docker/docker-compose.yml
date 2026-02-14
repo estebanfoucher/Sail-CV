@@ -1,8 +1,17 @@
 services:
+  base:
+    build:
+      context: ..
+      dockerfile: docker/base.Dockerfile
+    image: sail-cv-base
+
   reconstruction:
     build:
       context: ..
       dockerfile: docker/reconstruction.Dockerfile
+    depends_on:
+      base:
+        condition: service_completed_successfully
     ports:
       - "${PORT:-7862}:${PORT:-7862}"
     environment:
@@ -11,7 +20,7 @@ services:
       - PORT=${PORT:-7862}
       - LOGURU_LEVEL=${LOGURU_LEVEL:-DEBUG}
     volumes:
-      - ../assets/reconstruction:/app/assets:rw
+      - ../assets/reconstruction:/app/assets/reconstruction:rw
       - ../checkpoints:/app/checkpoints:ro
       - ../src/reconstruction:/app/src/reconstruction:rw
       - ../web_app:/app/web_app:rw
@@ -38,11 +47,14 @@ services:
     build:
       context: ..
       dockerfile: docker/tracking.Dockerfile
+    depends_on:
+      base:
+        condition: service_completed_successfully
     environment:
       - DEVICE=cuda
       - CUDA_MEMORY_FRACTION=0.8
     volumes:
-      - ../assets/tracking:/app/assets:rw
+      - ../assets/tracking:/app/assets/tracking:rw
       - ../checkpoints:/app/checkpoints:ro
       - ../parameters:/app/parameters:ro
       - ../src/tracking:/app/src/tracking:rw
