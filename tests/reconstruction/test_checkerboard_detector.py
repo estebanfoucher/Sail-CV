@@ -11,8 +11,8 @@ from calibration.intrinsics_calibration import detect_checkerboard_fast
 
 def test_checkerboard_detector_frame_0_should_fail():
     """Test that frame 0 normally fails detection (no checkerboard)."""
-    project_root = Path(__file__).parent.parent
-    frame_path = project_root / "assets" / "checkerboard" / "frame_0.png"
+    project_root = Path(__file__).resolve().parents[2]
+    frame_path = project_root / "assets" / "reconstruction" / "checkerboard" / "frame_0.png"
     board_size = (14, 10)  # (inner_corners_x, inner_corners_y)
 
     if not frame_path.exists():
@@ -47,8 +47,8 @@ def test_checkerboard_detector_frame_0_should_fail():
 
 def test_checkerboard_detector_frame_400_should_succeed():
     """Test that frame 400 detects checkerboard successfully."""
-    project_root = Path(__file__).parent.parent
-    frame_path = project_root / "assets" / "checkerboard" / "frame_400.png"
+    project_root = Path(__file__).resolve().parents[2]
+    frame_path = project_root / "assets" / "reconstruction" / "checkerboard" / "frame_400.png"
     board_size = (13, 9)  # (inner_corners_x, inner_corners_y)
 
     if not frame_path.exists():

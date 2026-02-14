@@ -1,10 +1,6 @@
 from pathlib import Path
-import sys
 import numpy as np
 import pytest
-
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from models import (
     Detection,
@@ -121,7 +117,7 @@ def test_tracker_update():
 def test_tracker_integration_with_detector():
     """Test integration between Detector and Tracker"""
     # This test requires model files, so we'll skip if they don't exist
-    project_root = Path(__file__).parent.parent
+    project_root = Path(__file__).resolve().parents[2]
     yolo_model_path = project_root / "checkpoints" / "yolo-s.pt"
 
     if not yolo_model_path.exists():

@@ -2,7 +2,6 @@ import subprocess
 from pathlib import Path
 
 import cv2
-import sys
 
 
 def test_is_ffmpeg_available():
@@ -11,13 +10,11 @@ def test_is_ffmpeg_available():
 
 
 def test_video_reader_and_writer():
-    sys.path.append(str(Path(__file__).parent.parent / "src"))
     from video import FFmpegVideoWriter, VideoReader
 
-    # Get project root (go up from src/ to project root)
-    project_root = Path(__file__).parent.parent
+    project_root = Path(__file__).resolve().parents[2]
 
-    video_path = str(project_root / "assets" / "scene_3" / "camera_1" / "camera_1.mp4")
+    video_path = str(project_root / "assets" / "reconstruction" / "scene_3" / "camera_1" / "camera_1.mp4")
     output_folder = project_root / "output_tests" / "video_reader_and_writer"
     output_name = "output_test_video_reader_and_writer.mp4"
     reader = VideoReader.open_video_file(video_path)
@@ -59,17 +56,15 @@ def test_video_reader_and_writer():
 
 
 def test_stereo_video_reader():
-    sys.path.append(str(Path(__file__).parent.parent / "src"))
     from video import FFmpegVideoWriter, StereoVideoReader
 
-    # Get project root (go up from src/ to project root)
-    project_root = Path(__file__).parent.parent
+    project_root = Path(__file__).resolve().parents[2]
 
     video_1_path = str(
-        project_root / "assets" / "scene_3" / "camera_1" / "camera_1.mp4"
+        project_root / "assets" / "reconstruction" / "scene_3" / "camera_1" / "camera_1.mp4"
     )
     video_2_path = str(
-        project_root / "assets" / "scene_3" / "camera_2" / "camera_2.mp4"
+        project_root / "assets" / "reconstruction" / "scene_3" / "camera_2" / "camera_2.mp4"
     )
 
     sync_frame_offset = 0
@@ -118,17 +113,15 @@ def test_stereo_video_reader():
 
 
 def test_stereo_image_saver():
-    sys.path.append(str(Path(__file__).parent.parent / "src"))
     from video import StereoVideoReader
 
-    # Get project root (go up from src/ to project root)
-    project_root = Path(__file__).parent.parent
+    project_root = Path(__file__).resolve().parents[2]
 
     video_1_path = str(
-        project_root / "assets" / "scene_8" / "camera_1" / "camera_1.mp4"
+        project_root / "assets" / "reconstruction" / "scene_8" / "camera_1" / "camera_1.mp4"
     )
     video_2_path = str(
-        project_root / "assets" / "scene_8" / "camera_2" / "camera_2.mp4"
+        project_root / "assets" / "reconstruction" / "scene_8" / "camera_2" / "camera_2.mp4"
     )
     sync_frame_offset = 0
     frame_to_save_number_list = [0, 10, 20, 30, 40, 50, 60]

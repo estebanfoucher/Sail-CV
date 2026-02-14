@@ -29,7 +29,7 @@ from stereo.triangulation import (
 )
 from unitaries.sam import SAM
 
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODEL_PATH = (
     PROJECT_ROOT
     / "checkpoints"

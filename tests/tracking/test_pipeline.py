@@ -2,13 +2,11 @@
 
 import json
 from pathlib import Path
-import sys
 
 import pytest
 
-# Add src to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root / "src"))
+# Project root (pythonpath configured in pyproject.toml)
+project_root = Path(__file__).resolve().parents[2]
 
 from crop_module.background_detector import BackgroundDetectorOCV
 from crop_module.mask_detector import MaskDetectorGrabCut

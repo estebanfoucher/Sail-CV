@@ -12,12 +12,9 @@ Coordinate System Conventions:
 """
 
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
-
-sys.path.append(str(Path(__file__).parent.parent.parent / "src"))
 
 from cameras import (
     Camera,
@@ -28,7 +25,7 @@ from cameras import (
 
 # Get the test assets directory relative to this test file
 TEST_ASSETS_DIR = Path(__file__).parent / "test_assets"
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = Path(__file__).resolve().parents[3]
 
 OUTPUT_DIR = ROOT_DIR / "output_tests" / "cameras"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

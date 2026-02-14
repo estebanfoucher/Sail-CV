@@ -1,8 +1,6 @@
 import subprocess
 from pathlib import Path
 
-import sys
-
 
 def test_is_ffmpeg_available():
     """Check if ffmpeg is available in the system"""
@@ -10,13 +8,11 @@ def test_is_ffmpeg_available():
 
 
 def test_video_reader_and_writer():
-    sys.path.append(str(Path(__file__).parent.parent / "src"))
     from video import FFmpegVideoWriter, VideoReader
 
-    # Get project root (go up from src/ to project root)
-    project_root = Path(__file__).parent.parent
+    project_root = Path(__file__).resolve().parents[2]
 
-    video_path = str(project_root / "assets" / "IMG_9496_0.0_3.0.MOV")
+    video_path = str(project_root / "assets" / "tracking" / "IMG_9496_0.0_3.0.MOV")
     output_folder = project_root / "output_tests" / "video_reader_and_writer"
     output_name = "output_test_video_reader_and_writer.mp4"
     reader = VideoReader.open_video_file(video_path)

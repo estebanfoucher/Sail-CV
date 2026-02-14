@@ -3,10 +3,10 @@ from pathlib import Path
 
 import numpy as np
 from loguru import logger
+from video import FFmpegVideoWriter, StereoVideoReader
 
 from calibration import Scene
 from stereo.image import crop_to_match_resolution
-from video import FFmpegVideoWriter, StereoVideoReader
 
 save_asset_dict_videos = {
     "scene_3": {
@@ -45,9 +45,9 @@ save_asset_dict_images = {
 }
 
 # use path.parent to get the project root
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).resolve().parents[2]
 stereo_data_folder_path = project_root / "data"
-assets_folder_path = project_root / "assets"
+assets_folder_path = project_root / "assets" / "reconstruction"
 
 
 def _calculate_time_based_sync(parameters, fps_1, fps_2):

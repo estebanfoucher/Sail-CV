@@ -48,10 +48,8 @@ typecheck: ## Run type checking with mypy
 
 # ── Testing ─────────────────────────────────────────────────────────
 
-test: ## Run all tests
-	@echo "Running all tests..."
-	rm -rf output_tests
-	uv run pytest tests/ -v
+test: test-reconstruction test-tracking ## Run all tests (modules separately to avoid namespace collisions)
+	@echo "All tests complete."
 
 test-reconstruction: ## Run reconstruction tests only
 	@echo "Running reconstruction tests..."

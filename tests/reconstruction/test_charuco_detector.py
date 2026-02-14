@@ -57,10 +57,10 @@ def extract_frame(video_path: Path, frame_number: int) -> np.ndarray | None:
 
 def test_charuco_benchmark():
     """Comprehensive benchmark test for Charuco detection."""
-    project_root = Path(__file__).parent.parent
+    project_root = Path(__file__).resolve().parents[2]
 
     # Load references
-    references_path = project_root / "assets" / "charuco" / "references.json"
+    references_path = project_root / "assets" / "reconstruction" / "charuco" / "references.json"
     if not references_path.exists():
         pytest.skip(f"References file not found: {references_path}")
 
@@ -71,8 +71,8 @@ def test_charuco_benchmark():
     negative_refs = references.get("negative", [])
 
     # Create output directories
-    positive_dir = project_root / "assets" / "charuco" / "positive"
-    negative_dir = project_root / "assets" / "charuco" / "negative"
+    positive_dir = project_root / "assets" / "reconstruction" / "charuco" / "positive"
+    negative_dir = project_root / "assets" / "reconstruction" / "charuco" / "negative"
     positive_dir.mkdir(parents=True, exist_ok=True)
     negative_dir.mkdir(parents=True, exist_ok=True)
 

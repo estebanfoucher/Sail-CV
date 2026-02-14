@@ -1,13 +1,7 @@
 """Simple test for PCA crop module with 1 axis."""
 
-from pathlib import Path
-import sys
-
 import cv2
 import numpy as np
-
-# Add src to path
-sys.path.append(str(Path(__file__).parent.parent / "src"))
 
 from models import BoundingBox, Detection, Image
 from crop_module import CropModulePCA

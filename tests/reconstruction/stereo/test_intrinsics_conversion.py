@@ -7,24 +7,21 @@ Results are saved to output_tests/ directory as JSON and PNG files for inspectio
 """
 
 import os
-import sys
 import json
 import numpy as np
 import pytest
 import PIL.Image
 from pathlib import Path
 
-# Add the necessary directories to the path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-src_path = os.path.join(project_root, "src")
-sys.path.insert(0, src_path)
+# Project root (pythonpath configured in pyproject.toml)
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 from stereo.image import resize_image
 from stereo.convert_calibration import (
     calculate_resize_and_crop_params,
     transform_camera_matrix,
 )
-from test_intrinsics_conversion_utils import (
+from .test_intrinsics_conversion_utils import (
     save_json_results,
     generate_synthetic_checkerboard,
     generate_3d_test_points_random,
@@ -73,7 +70,7 @@ def patch_size():
 def intrinsics_1_1():
     """Load intrinsics for camera 1_1"""
     intrinsics_path = os.path.join(
-        project_root, "assets", "intrinsics", "intrinsics_1_1.json"
+        project_root, "assets", "reconstruction", "intrinsics", "intrinsics_1_1.json"
     )
     with open(intrinsics_path, "r") as f:
         data = json.load(f)
@@ -84,7 +81,7 @@ def intrinsics_1_1():
 def intrinsics_1_2():
     """Load intrinsics for camera 1_2"""
     intrinsics_path = os.path.join(
-        project_root, "assets", "intrinsics", "intrinsics_1_2.json"
+        project_root, "assets", "reconstruction", "intrinsics", "intrinsics_1_2.json"
     )
     with open(intrinsics_path, "r") as f:
         data = json.load(f)

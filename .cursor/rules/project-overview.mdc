@@ -11,10 +11,11 @@ Sail-CV is an embedded computer vision framework for quantitative measurement of
 - src/tracking/ - Tell-tale detection and tracking (RT-DETR, ByteTracker, PCA)
 - mast3r/ - External MASt3R/Dust3R submodule (PYTHONPATH, not a package)
 - web_app/ - Gradio web interface for reconstruction
-- assets/ - Module-specific assets (scenes, videos, calibration data)
-- checkpoints/ - Model weights (rt-detr.pt, yolo-s.pt)
+- assets/reconstruction/ - Scenes, calibration images, checkerboard/charuco frames
+- assets/tracking/ - Tracking videos, raw detections, layouts, configs
+- checkpoints/ - Model weights (rt-detr.pt, yolo-s.pt, FastSAM-x.pt, MASt3R)
 - parameters/ - YAML config files for tracking
-- fixtures/ - Test fixtures
+- fixtures/ - Test fixtures (C1_fixture.mp4, C1_layout.json)
 - tests/ - Unified test suite (tests/reconstruction/, tests/tracking/)
 - docker/ - Separate Dockerfiles per service + docker-compose.yml
 - scripts/ - Dev scripts (format, lint, test, check-all)
@@ -27,7 +28,7 @@ Sail-CV is an embedded computer vision framework for quantitative measurement of
 - Test runner: pytest
 - Build system: hatchling
 - Docker base: dustynv/l4t-pytorch:r36.4.0 (Jetson)
-- PYTHONPATH: src, mast3r, mast3r/dust3r
+- PYTHONPATH: src, mast3r, mast3r/dust3r, src/reconstruction, src/tracking
 
 ## Module Independence
 
@@ -40,3 +41,21 @@ Both modules use flat imports within their namespace:
 - Tracking: from models import Detection, from tracker_utils import ByteTracker
 
 The pythonpath in pyproject.toml includes src, so src/reconstruction/ and src/tracking/ directories are importable roots when running within their respective context.
+
+## Path Resolution
+
+Project root from source files in src/reconstruction/ or src/tracking/:
+- `Path(__file__).resolve().parents[2]` (NOT `.parent.parent` which only reaches src/)
+
+Project root from test files in tests/reconstruction/ or tests/tracking/:
+- `Path(__file__).resolve().parents[2]`
+
+Project root from deeper test files (tests/reconstruction/stereo/, tests/tracking/dataset/):
+- `Path(__file__).resolve().parents[3]`
+
+Asset paths must include the module namespace:
+- Reconstruction: `project_root / "assets" / "reconstruction" / "scene_3" / ...`
+- Tracking: `project_root / "assets" / "tracking" / "2Ce-CKKCtV4.mp4"`
+- Checkpoints/fixtures/parameters are at project root: `project_root / "checkpoints" / "rt-detr.pt"`
+
+Do NOT use sys.path.append/insert in tests — pyproject.toml pythonpath handles everything.

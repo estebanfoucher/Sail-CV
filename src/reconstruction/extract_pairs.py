@@ -1,12 +1,13 @@
 import json
 import os
+from pathlib import Path
 
 import cv2
-
 from video import StereoVideoReader
 
-STEREO_DATA_FOLDER_PATH = "../assets/"
-OUTPUT_FOLDER = "../output/extracted_pairs"
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+STEREO_DATA_FOLDER_PATH = str(_PROJECT_ROOT / "assets" / "reconstruction")
+OUTPUT_FOLDER = str(_PROJECT_ROOT / "output" / "extracted_pairs")
 
 
 def extract_pairs(scene_name, frame_to_save_number_list, output_folder):

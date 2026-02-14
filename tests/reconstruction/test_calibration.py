@@ -2,25 +2,24 @@ from pathlib import Path
 from calibration import Scene
 import pytest
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _is_raw_data_available():
     try:
-        # Get project root (go up from src/ to project root)
-        project_root = Path(__file__).parent.parent
-
         scene_name = "scene_3"
-        stereo_data_folder_path = str(project_root / "data")
+        stereo_data_folder_path = str(PROJECT_ROOT / "data")
 
         # Create scene and calibrate intrinsics for both cameras
         scene = Scene(scene_name, stereo_data_folder_path)
         return True
-    except Exception as e:
+    except Exception:
         return False
 
 
 @pytest.mark.skipif(not _is_raw_data_available(), reason="Raw data not available")
 def test_calibrate_intrinsics_scene():
-    project_root = Path(__file__).parent.parent
+    project_root = PROJECT_ROOT
 
     scene_name = "scene_3"
     stereo_data_folder_path = str(project_root / "data")

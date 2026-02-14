@@ -5,24 +5,13 @@ Tests comparison between custom load+preprocess and dust3r load_images.
 """
 
 import os
-import sys
 import numpy as np
 import torch
 import pytest
 import PIL.Image
 
-# Add the necessary directories to the path to import our modules
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-src_path = os.path.join(project_root, "src")
-mast3r_path = os.path.join(project_root, "mast3r")
-dust3r_path = os.path.join(project_root, "mast3r", "dust3r")
-
-# Remove any existing paths that might interfere
-sys.path = [p for p in sys.path if not p.endswith("/tests")]
-
-sys.path.insert(0, src_path)
-sys.path.insert(0, mast3r_path)
-sys.path.insert(0, dust3r_path)
+# Project root (pythonpath configured in pyproject.toml)
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 # Import after path setup
 from stereo.image import load_image, preprocess_image, convert_image
@@ -193,14 +182,13 @@ def test_different_sizes(test_images, size):
 def test_video_frame_reading_vs_save_and_load():
     """Test that direct video frame reading is equivalent to cv2.imwrite + load_image."""
     # Use a video file from the assets (relative path from project root)
-    video_path = os.path.join(project_root, "assets", "scene_3", "camera_1", "camera_1.mp4")
+    video_path = os.path.join(project_root, "assets", "reconstruction", "scene_3", "camera_1", "camera_1.mp4")
 
     # Skip test if video file doesn't exist
     if not os.path.exists(video_path):
         pytest.skip(f"Test video not found: {video_path}")
 
     # Import VideoReader from the video module
-    sys.path.insert(0, os.path.join(project_root, "src"))
     from video import VideoReader
 
     # Create a temporary directory for saving the frame

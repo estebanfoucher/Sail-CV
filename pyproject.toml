@@ -237,5 +237,5 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src", "src/reconstruction", "src/tracking", "mast3r", "mast3r/dust3r"]
+pythonpath = ["src", "mast3r", "mast3r/dust3r"]
 addopts = "-v --tb=short"

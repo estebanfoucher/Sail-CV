@@ -1,17 +1,12 @@
 """Test suite for crop module with YOLO dataset."""
 
 from pathlib import Path
-import sys
 
 import cv2
 import numpy as np
 
-# Add src to path at the beginning to ensure correct imports
-# Must be before any imports to avoid conflicts with tests/dataset package
-project_root = Path(__file__).parent.parent.parent
-src_path = str(project_root / "src")
-if src_path not in sys.path:
-    sys.path.insert(0, src_path)
+# Project root (pythonpath configured in pyproject.toml)
+project_root = Path(__file__).resolve().parents[3]
 
 # Import after path is set
 from models import Image, ModelSpecs
@@ -23,7 +18,7 @@ from crop_module.utils import extract_crop_from_bbox  # noqa: E402
 
 def test_loader():
     """Step 1: Test dataset loading and verify with detector rendering."""
-    project_root = Path(__file__).parent.parent.parent
+    project_root = Path(__file__).resolve().parents[3]
     dataset_path = project_root / "home_telltale"
     output_dir = project_root / "output_tests" / "dataset" / "step1_loader"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -55,7 +50,7 @@ def test_loader():
 
 def test_crop_extraction():
     """Step 2: Test crop extraction pipeline."""
-    project_root = Path(__file__).parent.parent.parent
+    project_root = Path(__file__).resolve().parents[3]
     dataset_path = project_root / "home_telltale"
     output_dir = project_root / "output_tests" / "dataset" / "step2_crops"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -84,7 +79,7 @@ def test_crop_extraction():
 
 def test_mask_generation():
     """Step 2.5: Test mask generation with SAM."""
-    project_root = Path(__file__).parent.parent.parent
+    project_root = Path(__file__).resolve().parents[3]
     dataset_path = project_root / "home_telltale"
     output_dir = project_root / "output_tests" / "dataset" / "step2_mask"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -162,7 +157,7 @@ def test_mask_generation():
 
 def test_pca_results():
     """Step 3: Test PCA analysis and visualize results."""
-    project_root = Path(__file__).parent.parent.parent
+    project_root = Path(__file__).resolve().parents[3]
     dataset_path = project_root / "home_telltale"
     output_dir = project_root / "output_tests" / "dataset" / "step3_pca"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -279,7 +274,7 @@ def test_pca_results():
 
 def test_full_crop_module_pipeline():
     """Full pipeline test: Load -> Mask -> PCA on same examples."""
-    project_root = Path(__file__).parent.parent.parent
+    project_root = Path(__file__).resolve().parents[3]
     dataset_path = project_root / "home_telltale"
     output_dir = project_root / "output_tests" / "dataset" / "step4_full_pipeline"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -483,7 +478,7 @@ if __name__ == "__main__":
     print("✓ All tests completed!")
     print("=" * 60)
     """Full pipeline test: Load -> Mask -> PCA on same examples."""
-    project_root = Path(__file__).parent.parent.parent
+    project_root = Path(__file__).resolve().parents[3]
     dataset_path = project_root / "home_telltale"
     output_dir = project_root / "output_tests" / "dataset" / "step4_full_pipeline"
     output_dir.mkdir(parents=True, exist_ok=True)

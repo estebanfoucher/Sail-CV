@@ -2,14 +2,12 @@
 
 import json
 from pathlib import Path
-import sys
 
 import cv2
 import numpy as np
 
-# Add src to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root / "src"))
+# Project root (pythonpath configured in pyproject.toml)
+project_root = Path(__file__).resolve().parents[2]
 
 from classifyer import Classifier
 from models.classifier import ClassifierConfig
@@ -22,6 +20,7 @@ def test_classifier_minimal():
     fixture_video = project_root / "fixtures" / "C1_fixture.mp4"
     fixture_results_json = project_root / "output_tests" / "pipeline" / "C1_fixture_tracked.json"
     output_dir = project_root / "output_tests" / "classifier_test"
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load first frame from video
