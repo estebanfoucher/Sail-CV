@@ -1,0 +1,241 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sail-cv"
+version = "0.1.0"
+description = "Embedded computer vision measurement of sails aerodynamic performance"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # Core ML/AI dependencies
+    "torch>=2.0.0,<2.3.0; sys_platform == 'darwin'",  # macOS compatibility
+    "torch>=2.0.0; sys_platform == 'linux'",           # Linux/Jetson compatibility
+    "torchvision>=0.15.0,<0.18.0; sys_platform == 'darwin'",  # macOS compatibility
+    "torchvision>=0.15.0; sys_platform == 'linux'",           # Linux/Jetson compatibility
+    "opencv-python==4.8.0.74",
+    "numpy<2.0.0",  # Compatibility with OpenCV and other packages
+    "pydantic>=2.0.0",
+    # Logging and utilities
+    "loguru>=0.7.0",
+    "tqdm>=4.65.0",
+    "python-dotenv>=1.0.0",
+    # Computer vision
+    "ultralytics>=8.0.0",
+    "scikit-learn>=1.3.0",
+    "scipy>=1.11.0",
+    "matplotlib>=3.7.0",
+    # Configuration
+    "pyyaml>=6.0.0",
+    # Additional utilities
+    "setuptools>=65.0.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[project.optional-dependencies]
+reconstruction = [
+    # 3D processing
+    "trimesh>=3.23.0",
+    "einops>=0.7.0",
+    "open3d>=0.19.0",
+    # MASt3R/Dust3R dependencies
+    "roma>=1.0.0",
+    "huggingface-hub[torch]>=0.22.0",
+    "tensorboard>=2.13.0",
+    "pyglet<2.0.0",
+    # Web interface
+    "gradio>=3.40.0",
+    # Image format support
+    "pillow-heif>=0.10.0",
+    "numpy-quaternion>=2023.1.0",
+    # Calibration
+    "pupil-apriltags>=1.0.0",
+]
+tracking = [
+    # Morphological snake mask detector
+    "scikit-image>=0.21.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+    "pre-commit>=3.0.0",
+    "types-PyYAML>=6.0.0",
+]
+advanced = [
+    "pyrender>=0.1.45",
+    "kapture>=1.0.0",
+    "kapture-localization>=1.0.0",
+    "pycolmap>=0.4.0",
+    "poselib>=0.1.0",
+]
+
+[tool.ruff]
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+    "mast3r",       # External dependency
+    "checkpoints",  # Model files
+    "output",       # Generated output
+]
+
+line-length = 88
+indent-width = 4
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E4",      # pycodestyle errors
+    "E7",      # pycodestyle errors
+    "E9",      # pycodestyle errors
+    "F",       # pyflakes
+    "I",       # isort
+    "B",       # flake8-bugbear
+    "C4",      # flake8-comprehensions
+    "UP",      # pyupgrade
+    "ARG001",  # unused-function-args
+    "SIM",     # flake8-simplify
+    "TCH",     # flake8-type-checking
+    "PTH",     # flake8-use-pathlib
+    "ERA",     # eradicate
+    "PL",      # pylint
+    "RUF",     # ruff-specific rules
+]
+
+ignore = [
+    "E501",    # line too long, handled by formatter
+    "B008",    # do not perform function calls in argument defaults
+    "B006",    # do not use mutable data structures for argument defaults
+    "PLR0913", # too many arguments to function call
+    "PLR0912", # too many branches
+    "PLR0915", # too many statements
+    "PLR2004", # magic value used in comparison
+    "ARG002",  # unused-method-argument
+    "ARG001",  # unused-function-argument
+    # Path-related rules (can be addressed gradually)
+    "PTH118",  # os.path.join -> Path /
+    "PTH123",  # open() -> Path.open()
+    "PTH208",  # os.scandir -> Path.iterdir()
+    "PTH110",  # os.path.exists -> Path.exists()
+    "PTH113",  # os.path.isfile -> Path.is_file()
+    "PTH112",  # os.path.isdir -> Path.is_dir()
+    "PTH103",  # os.makedirs -> Path.mkdir()
+    "PTH120",  # os.path.dirname -> Path.parent
+    # Import organization
+    "PLC0415", # import should be at top-level
+    # Code cleanup
+    "ERA001",  # Found commented-out code
+    # Minor code quality
+    "SIM115",  # Use context manager for opening files
+    "E722",    # Do not use bare except
+]
+
+fixable = ["ALL"]
+unfixable = []
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "reconstruction",
+    "tracking",
+    "mv_utils",
+    "calibration",
+    "stereo",
+    "unitaries",
+    "cameras",
+    "models",
+    "crop_module",
+    "tracker_utils",
+    "classifyer",
+    "dataset",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = false
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+explicit_package_bases = true
+mypy_path = "src"
+no_implicit_optional = false
+allow_any_generics = true
+allow_subclassing_any = true
+disable_error_code = [
+    "union-attr",
+    "return-value",
+    "var-annotated",
+    "misc",
+    "arg-type",
+    "attr-defined",
+    "return",
+    "assignment",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "cv2.*",
+    "torch.*",
+    "torchvision.*",
+    "ultralytics.*",
+    "pydantic.*",
+    "roma.*",
+    "dust3r.*",
+    "mast3r.*",
+    "trimesh.*",
+    "einops.*",
+    "gradio.*",
+    "loguru.*",
+    "tqdm.*",
+    "numpy.*",
+    "scipy.*",
+    "sklearn.*",
+    "matplotlib.*",
+    "PIL.*",
+    "pyglet.*",
+    "tensorboard.*",
+    "huggingface_hub.*",
+    "pupil_apriltags.*",
+    "pillow_heif.*",
+    "quaternion.*",
+    "yaml.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "mast3r", "mast3r/dust3r"]
+addopts = "-v --tb=short"
