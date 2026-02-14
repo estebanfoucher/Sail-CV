@@ -1,0 +1,26 @@
+---
+globs: docker/**,Dockerfile*,docker-compose*
+---
+# Docker and Infrastructure
+
+## Docker Setup
+- docker/base.Dockerfile: shared base (l4t-pytorch, uv, ffmpeg)
+- docker/reconstruction.Dockerfile: adds mast3r, croco extensions, gradio
+- docker/tracking.Dockerfile: adds VPI (NVIDIA Vision Programming Interface)
+- docker/docker-compose.yml: multi-service (reconstruction + tracking)
+
+## Target Hardware
+- NVIDIA Jetson (tested on Jetson Nano)
+- Base image: dustynv/l4t-pytorch:r36.4.0
+- NVIDIA runtime with GPU access
+
+## Build Commands
+- make docker-build: build all images
+- make docker-build-reconstruction: build reconstruction only
+- make docker-build-tracking: build tracking only
+- make docker-up / make docker-down: start/stop services
+
+## Important
+- Non-root user (app_user, uid 1000) for security
+- Volumes mount src/, assets/, checkpoints/ for development
+- PYTHONPATH must include mast3r and mast3r/dust3r for reconstruction

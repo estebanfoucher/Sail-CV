@@ -1,0 +1,35 @@
+---
+globs: *.py
+---
+# Python Standards
+
+## Style
+- Python 3.10+ (use X | Y union syntax, not Optional[X])
+- PEP 8 via ruff, line-length 88
+- Double quotes for strings
+- Type hints on function signatures
+- Docstrings on public functions and classes (Google or NumPy style)
+
+## Imports
+- Flat imports within each module (not from sailcv.reconstruction.xxx)
+- Reconstruction imports: from stereo.xxx import ..., from calibration.xxx import ..., from video import VideoReader
+- Tracking imports: from models import Detection, Track, from tracker_utils import ByteTracker
+- Use isort via ruff for import ordering
+
+## CV/ML Practices
+- OpenCV (cv2) for image processing, NumPy for arrays
+- Pydantic for data models and validation
+- Loguru for logging (not stdlib logging)
+- Keep model loading separate from inference
+- Handle edge cases: empty frames, invalid detections, missing calibration
+- Use float32 for inference, uint8 for images
+
+## Performance
+- Vectorized NumPy over Python loops
+- Profile real-time loop code
+- Consider memory for embedded systems (Jetson)
+
+## Dependencies
+- Add to pyproject.toml (not requirements.txt)
+- Module-specific heavy deps go in optional extras ([reconstruction] or [tracking])
+- Pin versions for CV/ML libraries

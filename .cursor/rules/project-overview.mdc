@@ -1,0 +1,42 @@
+---
+alwaysApply: true
+---
+# Sail-CV Project Overview
+
+Sail-CV is an embedded computer vision framework for quantitative measurement of sail aerodynamic performance. It contains two independent modules sharing infrastructure.
+
+## Repository Structure
+
+- src/reconstruction/ - 3D stereo reconstruction (calibration, mast3r, triangulation)
+- src/tracking/ - Tell-tale detection and tracking (RT-DETR, ByteTracker, PCA)
+- mast3r/ - External MASt3R/Dust3R submodule (PYTHONPATH, not a package)
+- web_app/ - Gradio web interface for reconstruction
+- assets/ - Module-specific assets (scenes, videos, calibration data)
+- checkpoints/ - Model weights (rt-detr.pt, yolo-s.pt)
+- parameters/ - YAML config files for tracking
+- fixtures/ - Test fixtures
+- tests/ - Unified test suite (tests/reconstruction/, tests/tracking/)
+- docker/ - Separate Dockerfiles per service + docker-compose.yml
+- scripts/ - Dev scripts (format, lint, test, check-all)
+
+## Key Conventions
+
+- Package manager: uv (not pip)
+- Linter/Formatter: ruff (PEP 8, line-length 88)
+- Type checker: mypy (Python 3.10+)
+- Test runner: pytest
+- Build system: hatchling
+- Docker base: dustynv/l4t-pytorch:r36.4.0 (Jetson)
+- PYTHONPATH: src, mast3r, mast3r/dust3r
+
+## Module Independence
+
+The two modules do NOT share code at the source level currently. Each has its own video.py, models, and utilities. Keep them independent unless a clear shared pattern emerges.
+
+## Import Style
+
+Both modules use flat imports within their namespace:
+- Reconstruction: from stereo.triangulation import ..., from calibration import Scene
+- Tracking: from models import Detection, from tracker_utils import ByteTracker
+
+The pythonpath in pyproject.toml includes src, so src/reconstruction/ and src/tracking/ directories are importable roots when running within their respective context.

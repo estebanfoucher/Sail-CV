@@ -1,0 +1,29 @@
+---
+globs: src/reconstruction/**/*.py,tests/reconstruction/**/*.py,web_app/**/*.py
+---
+# 3D Reconstruction Module
+
+## Overview
+Stereo-view 3D dense reconstruction using calibrated cameras and MASt3R AI model.
+
+## Key Components
+- calibration/ (renamed from mv_utils): intrinsics/extrinsics calibration, scene management
+- stereo/: MASt3R integration, triangulation, point cloud processing
+- cameras/: camera parameter handling
+- video.py: VideoReader, StereoVideoReader, FFmpegVideoWriter (enhanced with EXIF)
+- unitaries/: SAM segmentation utilities
+
+## External Dependency: MASt3R
+- Located at mast3r/ (project root), NOT inside the package
+- Must be on PYTHONPATH: mast3r, mast3r/dust3r
+- Do not modify files inside mast3r/ - treat as external
+
+## Web App
+- Gradio-based interface at web_app/
+- Imports from src/reconstruction/ via PYTHONPATH
+- Has its own requirements.txt for web-specific deps
+
+## Testing
+- Tests in tests/reconstruction/
+- Run with: make test-reconstruction
+- Assets in assets/reconstruction/ and tests/reconstruction/cameras/test_assets/
