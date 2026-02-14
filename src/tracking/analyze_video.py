@@ -2,19 +2,16 @@
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
-from loguru import logger
-
-# Add src/tracking to path (flat imports: from models import ..., from pipeline import ...)
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root / "src" / "tracking"))
-
 from dumper import Dumper
-from models import Layout, PipelineConfig
+from loguru import logger
 from pipeline import Pipeline
 from streamer import Streamer
+
+from models import Layout, PipelineConfig
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def main():
@@ -37,13 +34,13 @@ def main():
     parser.add_argument(
         "--parameters",
         type=Path,
-        default=project_root / "parameters" / "default.yaml",
+        default=PROJECT_ROOT / "parameters" / "default.yaml",
         help="Path to parameters YAML file (default: parameters/default.yaml)",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        help="Path to output directory (default: assets/processed)",
+        help="Path to output directory (default: output/tracking)",
     )
 
     args = parser.parse_args()
@@ -58,34 +55,34 @@ def main():
 
     # Set default output folder if not provided
     if args.output is None:
-        args.output = project_root / "assets" / "processed"
+        args.output = PROJECT_ROOT / "output" / "tracking"
     args.output.mkdir(parents=True, exist_ok=True)
 
     logger.info("=" * 60)
-    logger.info("Crop Module Tracking Pipeline")
+    logger.info("Sail-CV Tell-Tales Tracking Pipeline")
     logger.info("=" * 60)
-    logger.info(f"Video: {args.video}")
-    logger.info(f"Layout: {args.layout}")
+    logger.info(f"Video:      {args.video}")
+    logger.info(f"Layout:     {args.layout}")
     logger.info(f"Parameters: {args.parameters}")
-    logger.info(f"Output: {args.output}")
+    logger.info(f"Output:     {args.output}")
     logger.info("=" * 60)
 
     # Load configuration
     logger.info(f"Loading configuration from {args.parameters}")
     config = PipelineConfig.from_yaml(args.parameters)
-    logger.info("✓ Configuration loaded")
+    logger.info("Configuration loaded")
 
     # Load layout
     logger.info(f"Loading layout from {args.layout}")
     with args.layout.open() as f:
         layout_data = json.load(f)
     layout = Layout.from_json_dict(layout_data)
-    logger.info("✓ Layout loaded")
+    logger.info("Layout loaded")
 
     # Initialize pipeline
     logger.info("Initializing pipeline")
-    pipeline = Pipeline(config, layout, project_root=project_root)
-    logger.info("✓ Pipeline initialized")
+    pipeline = Pipeline(config, layout, project_root=PROJECT_ROOT)
+    logger.info("Pipeline initialized")
 
     # Prepare output paths
     output_json_path = args.output / f"{args.video.stem}_crop_module_tracked.json"
@@ -97,7 +94,9 @@ def main():
     # Initialize dumper
     dumper = Dumper(
         output_json_path=output_json_path,
-        output_video_path=output_video_path if config.output.render_masks or config.output.render_arrows else None,
+        output_video_path=output_video_path
+        if config.output.render_masks or config.output.render_arrows
+        else None,
         output_fgmask_path=output_fgmask_path,
     )
 
@@ -121,7 +120,9 @@ def main():
             # Dump result
             dumper.dump_frame(result)
 
-            if (frame_number + 1) % 10 == 0 or (frame_number + 1) == streamer.total_frames:
+            if (frame_number + 1) % 10 == 0 or (
+                frame_number + 1
+            ) == streamer.total_frames:
                 logger.info(
                     f"Processed frame {frame_number + 1}/{streamer.total_frames} - "
                     f"{len(result.get('tracks', []))} tracks, "
@@ -133,7 +134,7 @@ def main():
 
     logger.info("")
     logger.info("=" * 60)
-    logger.info("✓ Pipeline execution completed successfully")
+    logger.info("Pipeline execution completed successfully")
     logger.info("=" * 60)
     logger.info("Output files:")
     logger.info(f"  - JSON: {output_json_path}")

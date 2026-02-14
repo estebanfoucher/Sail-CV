@@ -1,15 +1,16 @@
 # Sail-CV
 
 [![GitHub](https://img.shields.io/badge/GitHub-Sail--CV-181717?logo=github)](https://github.com/estebanfoucher/Sail-CV)
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
 ## Looking is measuring : embedded computer vision measurement of sails aerodynamic performance.
 
-Understanding the interaction between wind flow and sails is essential for optimizing sailing performance.
-Sailors traditionally rely on two qualitative visual cues —tell-tales and sail shape— but obtaining quantitative,
-real-time measurements of these indicators remains challenging. Moreover, these visual cues are seldom recorded
-in forms suitable for post-navigation analysis.
-This work introduces an embedded computer-vision framework that quantitatively measures two key aerodynamic features: (1) boundary-layer behavior through continuous tell-tale state tracking, and (2) 3D sail
-geometry via a photogrammetry-based reconstruction method. The two modules operate independently yet
+
+This work introduces an embedded computer-vision framework that quantitatively measures
+1.  3D sail geometry via a photogrammetry-based reconstruction method
+2.  boundary-layer behavior through continuous tell-tale state tracking, and.
+
+The two modules operate independently yet
 share the same minimal hardware requirements, enabling practical, plug-and-play deployment across a broad
 range of yachts.
 
@@ -57,88 +58,6 @@ a model wind-powered vessel, comparing with another tell-tales detection method 
 
 ---
 
-## Get Started
-
-### Prerequisites
-
-- Python 3.10+
-- [uv](https://docs.astral.sh/uv/) package manager
-- ffmpeg
-- Optional: CUDA-compatible GPU (recommended for optimal performance)
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/estebanfoucher/sail-CV.git
-   cd sail-CV
-   git submodule update --init --recursive
-   ```
-
-2. **Install dependencies**
-
-   Set up python:
-   ```bash
-   uv sync
-   ```
-   Install ffmpeg:
-   ```bash
-   # Ubuntu/Debian
-   sudo apt update && sudo apt install ffmpeg
-
-   # MacOS
-   brew install ffmpeg
-   ```
-
-3. **Activate environment**
-   ```bash
-   source .venv/bin/activate
-   ```
-
-4. **Add external modules to python environment**
-   ```bash
-   export PYTHONPATH="${PWD}/src:${PWD}/mast3r:${PWD}/mast3r/dust3r:${PYTHONPATH}"
-   ```
-   Note: Run this command from the project root directory
-
-5. **Download MASt3R model checkpoint** (for 3D reconstruction)
-   ```bash
-   mkdir -p checkpoints/
-   wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth -P checkpoints/
-   ```
-
-### Quick Start — 3D Reconstruction
-
-**Web Interface (Recommended)**
-```bash
-cd web_app
-python main.py
-```
-Open your browser to `http://localhost:{PORT}` to access the interactive web interface.
-
-### Docker (Alternative)
-
-For containerized deployment, especially on Jetson hardware (tested on Jetson Nano):
-
-```bash
-cd docker/
-docker compose build
-docker compose up -d
-```
-
-### Development
-
-```bash
-make dev           # Install dependencies and setup development environment
-make check         # Run all code quality checks
-make test          # Run test suite
-```
-
-## Acknowledgments
-
-This project builds upon the excellent work of [MASt3R](https://github.com/naver/mast3r) (Grounding Image Matching in 3D with MASt3R) by Naver Labs.
-
-
 ## Tell tales tracker module
 
 The tell-tale tracking module —requiring only a single camera— uses a detection-plus-tracking pipeline. A
@@ -146,3 +65,139 @@ vision model is trained on a purpose-built dataset annotated with bounding boxes
 leech tell-tales, as shown in Figure 1. A tracker then converts per-frame detections into time-series suitable for
 aerodynamic interpretation. This machine-learning-based approach offers the robustness necessary to handle
 variations in color, sail type, illumination, and object motion, showing promising behavior for reliable field use.
+
+
+## Get Started
+
+### Prerequisites
+
+- Python 3.10+
+- [uv](https://docs.astral.sh/uv/) package manager
+- ffmpeg
+- CUDA-compatible GPU (recommended, required for real-time tracking)
+
+### Installation
+
+```bash
+git clone https://github.com/estebanfoucher/sail-CV.git
+cd sail-CV
+git submodule update --init --recursive
+```
+
+Install Python dependencies:
+
+```bash
+uv sync --all-extras
+```
+
+Install ffmpeg:
+
+```bash
+# Ubuntu/Debian
+sudo apt update && sudo apt install ffmpeg
+
+# macOS
+brew install ffmpeg
+```
+
+Download model checkpoints:
+
+```bash
+mkdir -p checkpoints/
+
+# MASt3R (3D reconstruction)
+wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth -P checkpoints/
+```
+
+### Quick Start — 3D Reconstruction
+
+**CLI** — reconstruct a point cloud from a calibrated scene:
+
+```bash
+uv run python src/reconstruction/reconstruct_pair.py --scene scene_10
+```
+
+Options:
+
+| Flag | Description |
+|------|-------------|
+| `--scene <name>` | Scene directory under `assets/reconstruction/` |
+| `--subsample <n>` | Point correspondence subsample factor (default: 8) |
+| `--render-cameras` | Export camera pyramids alongside point cloud |
+| `--save-matches` | Save match correspondence renders |
+| `--sam-checkpoint <path>` | Enable SAM masking with a FastSAM checkpoint |
+
+Or use custom paths:
+
+```bash
+uv run python src/reconstruction/reconstruct_pair.py \
+  --image1 path/to/cam1.png \
+  --image2 path/to/cam2.png \
+  --calibration path/to/calibration.json \
+  --output output/my_pair
+```
+
+**Web Interface:**
+
+```bash
+cd web_app && uv run python main.py
+```
+
+### Quick Start — Tell-Tales Tracking
+
+**CLI** — run the tracking pipeline on the C1 fixture with the classifier:
+
+```bash
+uv run python src/tracking/analyze_video.py \
+  --video fixtures/C1_fixture.mp4 \
+  --layout fixtures/C1_layout.json \
+  --parameters parameters/default.yaml \
+  --output output/tracking
+```
+
+Options:
+
+| Flag | Description |
+|------|-------------|
+| `--video <path>` | Input video file |
+| `--layout <path>` | Layout JSON with tell-tale positions |
+| `--parameters <path>` | YAML config (default: `parameters/default.yaml`) |
+| `--output <path>` | Output directory (default: `output/tracking`) |
+
+The `default.yaml` config includes the classifier (`checkpoints/classifyer_224.pt`). To run without it, remove the `classifier:` section from the YAML.
+
+### Docker
+
+For containerized deployment on Jetson hardware:
+
+```bash
+make docker-build      # Build all images
+make docker-up         # Start services
+make docker-down       # Stop services
+```
+
+### Development
+
+```bash
+make dev               # Install dependencies + dev setup
+make check             # Run all code quality checks (ruff, mypy)
+make test              # Run full test suite
+make test-reconstruction   # Run reconstruction tests only
+make test-tracking         # Run tracking tests only
+```
+
+
+
+---
+
+
+## Acknowledgments
+
+This project builds upon the excellent work of [MASt3R](https://github.com/naver/mast3r) (Grounding Image Matching in 3D with MASt3R) by Naver Labs.
+
+
+## License
+
+This project is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) (Creative Commons Attribution-NonCommercial-ShareAlike 4.0), consistent with the [MASt3R](https://github.com/naver/mast3r) license from Naver Corporation.
+
+See [LICENSE](LICENSE) for full details.

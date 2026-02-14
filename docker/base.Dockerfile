@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy project files for dependency installation
-COPY pyproject.toml uv.lock* README.md /app/
+COPY pyproject.toml uv.lock* Readme.md /app/
 
 # Install setuptools explicitly for building extensions
 RUN uv pip install --system setuptools

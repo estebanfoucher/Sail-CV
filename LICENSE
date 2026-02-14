@@ -1,0 +1,32 @@
+Sail-CV
+Copyright (c) 2024-present Esteban Foucher
+
+This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
+
+A summary of the CC BY-NC-SA 4.0 license is located here:
+	https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+The full legal text of the CC BY-NC-SA 4.0 license is located here:
+	https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
+
+
+Third-Party Components
+======================
+
+This project includes or depends on the following third-party components,
+each with their own copyright and license terms:
+
+MASt3R (mast3r/)
+  Copyright (c) 2024-present Naver Corporation
+  License: CC BY-NC-SA 4.0
+  https://github.com/naver/mast3r
+
+DUSt3R (mast3r/dust3r/)
+  Copyright (c) 2024-present Naver Corporation
+  License: CC BY-NC-SA 4.0
+  https://github.com/naver/dust3r
+
+CroCo (mast3r/dust3r/croco/)
+  Copyright (c) Naver Corporation
+  License: CC BY-NC-SA 4.0
+  https://github.com/naver/croco
