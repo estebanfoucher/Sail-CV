@@ -1,4 +1,8 @@
-"""CLI script to reconstruct a 3D point cloud from a calibrated stereo image pair."""
+"""CLI script to reconstruct a 3D point cloud from a calibrated stereo image pair.
+
+Run via Makefile:
+    make reconstruct SCENE=scene_10
+"""
 
 import argparse
 import json

@@ -2,6 +2,7 @@
 
 .PHONY: help setup install install-all format lint typecheck test check clean dev \
         test-reconstruction test-tracking \
+        reconstruct track web \
         docker-build docker-up docker-down \
         pre-commit-install pre-commit-run quick-check update
 
@@ -58,6 +59,25 @@ test-reconstruction: ## Run reconstruction tests only
 test-tracking: ## Run tracking tests only
 	@echo "Running tracking tests..."
 	uv run pytest tests/tracking/ -v
+
+# ── Run ────────────────────────────────────────────────────────────
+
+RECONSTRUCTION_PYTHONPATH := src/reconstruction:mast3r:mast3r/dust3r
+TRACKING_PYTHONPATH := src/tracking
+
+SCENE ?= scene_10
+VIDEO ?= fixtures/C1_fixture.mp4
+LAYOUT ?= fixtures/C1_layout.json
+PARAMS ?= parameters/default.yaml
+
+reconstruct: ## Reconstruct 3D point cloud (SCENE=scene_10 [ARGS=...])
+	PYTHONPATH=$(RECONSTRUCTION_PYTHONPATH) uv run python src/reconstruction/reconstruct_pair.py --scene $(SCENE) $(ARGS)
+
+track: ## Run tell-tales tracking (VIDEO=... LAYOUT=... [PARAMS=...])
+	PYTHONPATH=$(TRACKING_PYTHONPATH) uv run python src/tracking/analyze_video.py --video $(VIDEO) --layout $(LAYOUT) --parameters $(PARAMS) $(ARGS)
+
+web: ## Launch reconstruction web interface
+	PYTHONPATH=$(RECONSTRUCTION_PYTHONPATH) uv run python web_app/main.py
 
 # ── Combined Checks ─────────────────────────────────────────────────
 

@@ -111,79 +111,73 @@ wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge
 
 ### Quick Start — 3D Reconstruction
 
-**CLI** — reconstruct a point cloud from a calibrated scene:
+Set up the Python path for reconstruction (run from project root):
+
+```bash
+export PYTHONPATH="${PWD}/src/reconstruction:${PWD}/mast3r:${PWD}/mast3r/dust3r"
+```
+
+Reconstruct a point cloud from a calibrated scene:
 
 ```bash
 uv run python src/reconstruction/reconstruct_pair.py --scene scene_10
 ```
 
-Options:
-
-| Flag | Description |
-|------|-------------|
-| `--scene <name>` | Scene directory under `assets/reconstruction/` |
-| `--subsample <n>` | Point correspondence subsample factor (default: 8) |
-| `--render-cameras` | Export camera pyramids alongside point cloud |
-| `--save-matches` | Save match correspondence renders |
-| `--sam-checkpoint <path>` | Enable SAM masking with a FastSAM checkpoint |
-
-Or use custom paths:
+With more options:
 
 ```bash
 uv run python src/reconstruction/reconstruct_pair.py \
-  --image1 path/to/cam1.png \
-  --image2 path/to/cam2.png \
-  --calibration path/to/calibration.json \
-  --output output/my_pair
+  --scene scene_10 --render-cameras --save-matches --subsample 4
 ```
 
-**Web Interface:**
+Launch the web interface:
 
 ```bash
-cd web_app && uv run python main.py
+uv run python web_app/main.py
 ```
 
 ### Quick Start — Tell-Tales Tracking
 
-**CLI** — run the tracking pipeline on the C1 fixture with the classifier:
+Set up the Python path for tracking (run from project root):
+
+```bash
+export PYTHONPATH="${PWD}/src/tracking"
+```
+
+Run the tracking pipeline on the C1 fixture with the classifier:
+
+```bash
+uv run python src/tracking/analyze_video.py \
+  --video fixtures/C1_fixture.mp4 \
+  --layout fixtures/C1_layout.json
+```
+
+The `default.yaml` config includes the classifier (`checkpoints/classifyer_224.pt`). To run without it, remove the `classifier:` section from the YAML or pass a different config:
 
 ```bash
 uv run python src/tracking/analyze_video.py \
   --video fixtures/C1_fixture.mp4 \
   --layout fixtures/C1_layout.json \
-  --parameters parameters/default.yaml \
-  --output output/tracking
+  --parameters parameters/test.yaml
 ```
-
-Options:
-
-| Flag | Description |
-|------|-------------|
-| `--video <path>` | Input video file |
-| `--layout <path>` | Layout JSON with tell-tale positions |
-| `--parameters <path>` | YAML config (default: `parameters/default.yaml`) |
-| `--output <path>` | Output directory (default: `output/tracking`) |
-
-The `default.yaml` config includes the classifier (`checkpoints/classifyer_224.pt`). To run without it, remove the `classifier:` section from the YAML.
 
 ### Docker
 
 For containerized deployment on Jetson hardware:
 
 ```bash
-make docker-build      # Build all images
-make docker-up         # Start services
-make docker-down       # Stop services
+cd docker/
+docker compose build
+docker compose up -d
 ```
 
 ### Development
 
 ```bash
-make dev               # Install dependencies + dev setup
-make check             # Run all code quality checks (ruff, mypy)
-make test              # Run full test suite
-make test-reconstruction   # Run reconstruction tests only
-make test-tracking         # Run tracking tests only
+uv sync --all-extras --group dev   # Install all dependencies
+uv run pytest tests/               # Run full test suite
+uv run ruff check src/ tests/      # Lint
+uv run ruff format src/ tests/     # Format
 ```
 
 

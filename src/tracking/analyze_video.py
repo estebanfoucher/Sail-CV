@@ -1,4 +1,8 @@
-"""CLI script to run crop module tracking pipeline on a video with layout."""
+"""CLI script to run crop module tracking pipeline on a video with layout.
+
+Run via Makefile:
+    make track VIDEO=fixtures/C1_fixture.mp4 LAYOUT=fixtures/C1_layout.json
+"""
 
 import argparse
 import json
