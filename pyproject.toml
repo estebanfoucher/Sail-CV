@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "sail-cv"
 version = "0.1.0"
 description = "Embedded computer vision measurement of sails aerodynamic performance"
-readme = "Readme.md"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     # Core ML/AI dependencies
