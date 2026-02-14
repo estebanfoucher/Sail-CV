@@ -1,0 +1,24 @@
+---
+alwaysApply: true
+---
+# Git Workflow Rules
+
+## Critical Restrictions
+
+**NEVER commit or push code changes.** The user maintains full control over git operations.
+
+- Do NOT run `git add`, `git commit`, `git push`, or any other git write operations
+- Do NOT use git flags like `--no-verify`, `--no-gpg-sign`, `--force`, etc.
+- Do NOT run destructive git commands (reset --hard, push --force, branch -D, etc.)
+- Read-only git operations are allowed: `git status`, `git log`, `git diff`, `git show`, `git branch -l`
+
+## User Control
+
+The user will review all changes and decide when to commit and push. Your role is to:
+- Make code changes via edit tools
+- Explain what was changed and why
+- Let the user handle git operations
+
+## Exception
+
+Only perform git operations if the user explicitly instructs you to do so with a direct command like "commit these changes" or "push to remote".

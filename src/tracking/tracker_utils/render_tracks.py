@@ -41,23 +41,18 @@ def draw_single_track(
     xyxy = track.detection.bbox.xyxy
     track_id = track.track_id
 
-    # Only use classified class_id - no fallback to detector class_id
-    # If classifier is enabled, classifications must exist for all tracks
-    if classifications is None:
-        raise RuntimeError(
-            f"Classifications dict is None but classifier is enabled. "
-            f"Cannot render track {track_id} without classification."
-        )
+    if classifications is not None:
+        # Classifier is enabled — strict: every track must have a classification
+        if track_id not in classifications:
+            raise RuntimeError(
+                f"Track {track_id} has no classification. "
+                f"Classifier must classify all tracks."
+            )
+        class_id = classifications[track_id]
+    else:
+        # No classifier — fall back to detector class_id
+        class_id = track.detection.class_id
 
-    if track_id not in classifications:
-        raise RuntimeError(
-            f"Track {track_id} has no classification. "
-            f"Classifier must classify all tracks."
-        )
-
-    class_id = classifications[track_id]
-
-    # Fail if classified class_id not in class_info
     if class_id not in class_info:
         raise RuntimeError(
             f"Track {track_id} has class_id {class_id} but it's not in class_info. "
