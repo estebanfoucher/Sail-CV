@@ -14,6 +14,7 @@ This module contains all Pydantic models used for type safety and validation:
 
 from .background_detector import BackgroundDetector
 from .bounding_box import XYXY, BoundingBox
+from .classifier import ClassifierConfig
 from .crop_module import CropModule
 from .detector import Detection, ModelSpecs
 from .image import Image
@@ -37,6 +38,7 @@ __all__ = [
     "BackgroundDetector",
     "BackgroundDetectorConfig",
     "BoundingBox",
+    "ClassifierConfig",
     "CropModule",
     "CropModuleConfig",
     "Detection",

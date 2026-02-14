@@ -629,9 +629,7 @@ if __name__ == "__main__":
             )
 
             # Draw center point
-            cv2.circle(crop_viz, (center_x, center_y), 5, (255, 0, 0), -1)
-
-            # Add text
+            cv2.circle(crop_viz, (center_x, center_y), 5, (255, 0, 0), -1)            # Add text
             mask_info = (
                 f"mask: {crop_mask.mean() * 100:.1f}%"
                 if crop_mask is not None

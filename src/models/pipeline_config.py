@@ -6,6 +6,8 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
+from .classifier import ClassifierConfig
+
 
 class DetectorConfig(BaseModel):
     """Configuration for object detector."""
@@ -93,6 +95,40 @@ class BackgroundDetectorConfig(BaseModel):
     )
 
 
+class MaskDetectorConfig(BaseModel):
+    """Configuration for mask detector."""
+
+    type: str = Field(
+        "sam",
+        description="Mask detector type: 'sam', 'morphological_snake', or 'grabcut'",
+    )
+    iterations: int = Field(
+        50, ge=1, le=1000, description="Number of iterations for mask refinement"
+    )
+    init_scale: float = Field(
+        0.5,
+        gt=0.0,
+        le=1.0,
+        description=(
+            "Morph snake initialization scale as a fraction of bbox size "
+            "(used to build an init mask within the bbox crop)"
+        ),
+    )
+    model_path: Path | None = Field(
+        None, description="Path to SAM2 model (only for SAM type)"
+    )
+
+    @field_validator("model_path", mode="before")
+    @classmethod
+    def validate_model_path(cls, v: Any) -> Path | None:
+        """Convert string to Path or None."""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return Path(v)
+        return v
+
+
 class VisualizationConfig(BaseModel):
     """Configuration for PCA vector visualization."""
 
@@ -140,8 +176,10 @@ class PipelineConfig(BaseModel):
     crop_module: CropModuleConfig
     arrow_sense: ArrowSenseConfig
     background_detector: BackgroundDetectorConfig
+    mask_detector: MaskDetectorConfig
     visualization: VisualizationConfig
     output: OutputConfig
+    classifier: ClassifierConfig | None = None
 
     @classmethod
     def from_yaml(cls, yaml_path: Path | str) -> "PipelineConfig":

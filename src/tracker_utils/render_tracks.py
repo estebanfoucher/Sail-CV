@@ -26,6 +26,7 @@ def draw_single_track(
     class_info: dict[int, dict[str, Any]],
     show_confidence: bool = False,
     show_class_name: bool = False,
+    classifications: dict[int | str, int] | None = None,
 ) -> None:
     """
     Draw a single track (bounding box, track ID, class name if enabled) on the frame.
@@ -35,12 +36,36 @@ def draw_single_track(
         class_info (dict): Mapping from class_id to {"name", "color"}.
         show_confidence (bool): Whether to display confidence score.
         show_class_name (bool): Whether to display class name.
+        classifications (dict): Optional dict mapping track_id to classified class_id.
     """
     xyxy = track.detection.bbox.xyxy
-    class_id = track.detection.class_id
+    track_id = track.track_id
+
+    # Only use classified class_id - no fallback to detector class_id
+    # If classifier is enabled, classifications must exist for all tracks
+    if classifications is None:
+        raise RuntimeError(
+            f"Classifications dict is None but classifier is enabled. "
+            f"Cannot render track {track_id} without classification."
+        )
+
+    if track_id not in classifications:
+        raise RuntimeError(
+            f"Track {track_id} has no classification. "
+            f"Classifier must classify all tracks."
+        )
+
+    class_id = classifications[track_id]
+
+    # Fail if classified class_id not in class_info
+    if class_id not in class_info:
+        raise RuntimeError(
+            f"Track {track_id} has class_id {class_id} but it's not in class_info. "
+            f"Available class_ids: {list(class_info.keys())}"
+        )
+
     color = get_color_for_class(class_id, class_info)
     text = ""
-    track_id = track.track_id
     conf = track.detection.confidence
     label = class_info[class_id]["name"] if show_class_name else ""
 
@@ -77,6 +102,7 @@ def draw_tracks(
     class_info: dict[int, dict[str, Any]],
     show_confidence: bool = False,
     show_class_name: bool = False,
+    classifications: dict[int | str, int] | None = None,
 ) -> np.ndarray:
     """
     Draw bounding boxes, track IDs, and (optionally) class names on a frame using the original class color.
@@ -86,6 +112,7 @@ def draw_tracks(
         class_info (dict): Mapping from class_id to {"name", "color"}.
         show_confidence (bool): Whether to display confidence score on the box.
         show_class_name (bool): Whether to display class name (default: False).
+        classifications (dict): Optional dict mapping track_id to classified class_id.
     Returns:
         np.ndarray: The frame with drawings.
     """
@@ -96,5 +123,6 @@ def draw_tracks(
             class_info,
             show_confidence=show_confidence,
             show_class_name=show_class_name,
+            classifications=classifications,
         )
     return frame

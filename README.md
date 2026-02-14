@@ -51,17 +51,14 @@ Track telltales with layout tracker and PCA analysis:
 ```bash
 
 # With custom parameters and output directory
-python track_c1_with_crop_module.py \
-    --video assets/C1.mp4 \
-    --layout assets/layouts/C1_layout.json \
-    --parameters parameters/default.yaml \
-    --output assets/processed
+python analyze_video.py \
+  --video assets/C1.mp4 \
+  --layout assets/layouts/C1_layout.json \
+  --parameters parameters/c1_faker.yaml \
+  --output output
 ```
 
 ### Docker
 
 jeston:
 `cd docker && docker compose -f docker-compose.yml build && docker compose -f docker-compose.yml up -d && docker exec -it docker-tell-tales-tracking-1 bash`
-
-x84_64:
-`cd docker && docker compose -f docker-compose.x86_64.yml build && docker compose -f docker-compose.x86_64.yml up -d && docker exec -it tell-tales-tracking-x86 bash`

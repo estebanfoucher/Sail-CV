@@ -11,6 +11,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
 from crop_module.background_detector import BackgroundDetectorOCV
+from crop_module.mask_detector import MaskDetectorGrabCut
 from dumper import Dumper
 from detector import FakeDetector
 from models import Layout, PipelineConfig
@@ -72,6 +73,11 @@ def test_pipeline_with_fixture():
         assert isinstance(
             pipeline.background_detector, BackgroundDetectorOCV
         ), f"Expected BackgroundDetectorOCV, got {type(pipeline.background_detector)}"
+
+        # Verify that MaskDetectorGrabCut is being used
+        assert isinstance(
+            pipeline.mask_detector, MaskDetectorGrabCut
+        ), f"Expected MaskDetectorGrabCut, got {type(pipeline.mask_detector)}"
 
         # Initialize dumper video writers
         dumper.initialize_video_writers(streamer.fps, (streamer.width, streamer.height))
