@@ -1,5 +1,5 @@
 from pathlib import Path
-from mv_utils import Scene
+from calibration import Scene
 import pytest
 
 

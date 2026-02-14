@@ -8,9 +8,9 @@ import numpy as np
 import pytest
 from loguru import logger
 
-from mv_utils.extrinsics_calibration import CharucoDetector
-from mv_utils.stereo_data_folder_structure import load_scene_folder_structure
-from mv_utils.video_utils import VideoReader, get_unique_video_name
+from calibration.extrinsics_calibration import CharucoDetector
+from calibration.stereo_data_folder_structure import load_scene_folder_structure
+from calibration.video_utils import VideoReader, get_unique_video_name
 
 # Ensure logger is configured for tests
 logger.remove()

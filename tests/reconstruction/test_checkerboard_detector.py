@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import pytest
 
-from mv_utils.intrinsics_calibration import detect_checkerboard_fast
+from calibration.intrinsics_calibration import detect_checkerboard_fast
 
 
 def test_checkerboard_detector_frame_0_should_fail():
