@@ -1,0 +1,243 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sailcv-3d-reconstruction"
+version = "0.1.0"
+description = "Multi-View Stereo application for Jetson hardware"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # Core ML/AI dependencies
+    "torch>=2.0.0,<2.3.0; sys_platform == 'darwin'",  # macOS compatibility
+    "torch>=2.0.0; sys_platform == 'linux'",          # Linux/Jetson compatibility
+    "torchvision>=0.15.0,<0.18.0; sys_platform == 'darwin'",  # macOS compatibility
+    "torchvision>=0.15.0; sys_platform == 'linux'",          # Linux/Jetson compatibility
+    "opencv-python==4.8.0.74",
+    "numpy<2.0.0", # Compatibility with OpenCV and other packages
+    # Logging and utilities
+    "loguru>=0.7.0",
+    "tqdm>=4.65.0",
+    "python-dotenv>=1.0.0",
+    # Computer vision and 3D processing
+    "ultralytics>=8.0.0",
+    "scikit-learn>=1.3.0",
+    "scipy>=1.11.0",
+    "matplotlib>=3.7.0",
+    "trimesh>=3.23.0",
+    "einops>=0.7.0",
+    "open3d>=0.19.0",
+    # MASt3R/Dust3R dependencies
+    "roma>=1.0.0",
+    "huggingface-hub[torch]>=0.22.0",
+    "tensorboard>=2.13.0",
+    "pyglet<2.0.0",
+    # Web interface
+    "gradio>=3.40.0",
+    # Optional dependencies for advanced features
+    "pillow-heif>=0.10.0", # HEIF/HEIC image support
+    "numpy-quaternion>=2023.1.0",
+    # Additional utilities
+    "pupil-apriltags>=1.0.0",
+    "setuptools>=65.0.0", # Required for building extensions
+    "pytest>=8.4.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+    "pre-commit>=3.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+    "pre-commit>=3.0.0",
+    "types-PyYAML>=6.0.0",
+]
+advanced = [
+    "pyrender>=0.1.45",     # 3D rendering
+    "kapture>=1.0.0",       # VisLoc data loading
+    "kapture-localization>=1.0.0",
+    "pycolmap>=0.4.0",      # PnP solving (x86_64 only)
+    "poselib>=0.1.0",       # PnP solving (x86_64 only)
+]
+
+[tool.ruff]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+    "mast3r",  # External dependency
+    "checkpoints",  # Model files
+    "output",  # Generated output
+]
+
+# Same as Black.
+line-length = 88
+indent-width = 4
+
+# Assume Python 3.10+
+target-version = "py310"
+
+[tool.ruff.lint]
+# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
+# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
+# McCabe complexity (`C901`) by default.
+select = [
+    "E4",      # pycodestyle errors
+    "E7",      # pycodestyle errors
+    "E9",      # pycodestyle errors
+    "F",       # pyflakes
+    "I",       # isort
+    "B",       # flake8-bugbear
+    "C4",      # flake8-comprehensions
+    "UP",      # pyupgrade
+    "ARG001",  # unused-function-args
+    "SIM",     # flake8-simplify
+    "TCH",     # flake8-type-checking
+    "PTH",     # flake8-use-pathlib
+    "ERA",     # eradicate
+    "PL",      # pylint
+    "RUF",     # ruff-specific rules
+]
+
+ignore = [
+    "E501",    # line too long, handled by black
+    "B008",    # do not perform function calls in argument defaults
+    "B006",    # do not use mutable data structures for argument defaults
+    "PLR0913", # too many arguments to function call
+    "PLR0912", # too many branches
+    "PLR0915", # too many statements
+    "PLR2004", # magic value used in comparison
+    "ARG002",  # unused-method-argument
+    "ARG001",  # unused-function-argument
+    # Path-related rules (can be addressed gradually)
+    "PTH118",  # os.path.join should be replaced by Path with / operator
+    "PTH123",  # open() should be replaced by Path.open()
+    "PTH208",  # Use pathlib.Path.iterdir() instead
+    "PTH110",  # os.path.exists() should be replaced by Path.exists()
+    "PTH113",  # os.path.isfile() should be replaced by Path.is_file()
+    "PTH112",  # os.path.isdir() should be replaced by Path.is_dir()
+    "PTH103",  # os.makedirs() should be replaced by Path.mkdir()
+    "PTH120",  # os.path.dirname() should be replaced by Path.parent
+    # Import organization (some imports are intentionally inside functions)
+    "PLC0415", # import should be at the top-level of a file
+    # Code cleanup (can be addressed gradually)
+    "ERA001",  # Found commented-out code
+    # Minor code quality issues in existing code
+    "SIM115",  # Use a context manager for opening files
+    "E722",    # Do not use bare except
+]
+
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.isort]
+known-first-party = ["src", "mv_utils", "stereo", "unitaries", "cameras"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = false  # Disable for existing codebase
+warn_unused_configs = true
+disallow_untyped_defs = false  # Set to false initially, can be enabled later
+ignore_missing_imports = true
+explicit_package_bases = true
+mypy_path = "src"
+# Allow incomplete stubs for external libraries
+no_implicit_optional = false
+# Allow Any types for existing code
+allow_any_generics = true
+allow_subclassing_any = true
+# Disable specific error types for existing codebase
+disable_error_code = [
+    "union-attr",      # Item "None" of "X | None" has no attribute
+    "return-value",    # Incompatible return value type
+    "var-annotated",   # Need type annotation for variable
+    "misc",            # Too many values to unpack
+    "arg-type",        # Argument has incompatible type
+    "attr-defined",    # Module has no attribute
+    "return",          # Missing return statement
+    "assignment",      # Incompatible types in assignment
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "cv2.*",
+    "torch.*",
+    "torchvision.*",
+    "ultralytics.*",
+    "roma.*",
+    "dust3r.*",
+    "mast3r.*",
+    "trimesh.*",
+    "einops.*",
+    "gradio.*",
+    "loguru.*",
+    "tqdm.*",
+    "numpy.*",
+    "scipy.*",
+    "sklearn.*",
+    "matplotlib.*",
+    "PIL.*",
+    "pyglet.*",
+    "tensorboard.*",
+    "huggingface_hub.*",
+    "pupil_apriltags.*",
+    "pillow_heif.*",
+    "quaternion.*",
+    "yaml.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "mast3r", "mast3r/dust3r"]
+addopts = "-v --tb=short"
