@@ -1,5 +1,7 @@
 # Sail-CV
 
+[![GitHub](https://img.shields.io/badge/GitHub-Sail--CV-181717?logo=github)](https://github.com/estebanfoucher/Sail-CV)
+
 ## Looking is measuring : embedded computer vision measurement of sails aerodynamic performance.
 
 Understanding the interaction between wind flow and sails is essential for optimizing sailing performance.
