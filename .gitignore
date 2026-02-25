@@ -23,7 +23,10 @@ weights/
 data/
 datasets/
 raw_data/
-
+assets-3d/
+assets-3d/**
+publication/
+publication/**
 # Output directories (generated content)
 output/
 output_tests/

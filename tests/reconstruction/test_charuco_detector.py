@@ -6,6 +6,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pytest
+import yaml
 from loguru import logger
 
 from calibration.extrinsics_calibration import CharucoDetector
@@ -39,6 +40,75 @@ def get_config_path(scene_name: str, project_root: Path) -> Path:
     return project_root / "data" / scene_name / "extrinsics_calibration_pattern_specs.yml"
 
 
+def get_synced_frame_for_other_camera(
+    scene_name: str,
+    camera_name: str,
+    frame_number: int,
+    project_root: Path,
+) -> tuple[str, int] | None:
+    """
+    Compute the frame number for the other camera at the same moment.
+
+    Uses time-based sync when FPS differ (parameters sync_event_time_F + both video FPS).
+    Uses frame offset when FPS are the same.
+
+    Returns:
+        (other_camera_name, other_frame_number) or None if unavailable.
+    """
+    parameters_path = project_root / "data" / scene_name / "parameters.yml"
+    if not parameters_path.exists():
+        return None
+    with open(parameters_path) as f:
+        parameters = yaml.safe_load(f)
+    cam1_sync = np.array(parameters["camera_1"]["sync_event_time_F"])
+    cam2_sync = np.array(parameters["camera_2"]["sync_event_time_F"])
+
+    video_path_1 = get_video_path(scene_name, "camera_1", project_root)
+    video_path_2 = get_video_path(scene_name, "camera_2", project_root)
+    if video_path_1 is None or video_path_2 is None:
+        return None
+    if not video_path_1.exists() or not video_path_2.exists():
+        return None
+
+    reader_1 = VideoReader.open_video_file(str(video_path_1))
+    reader_2 = VideoReader.open_video_file(str(video_path_2))
+    try:
+        fps_1 = reader_1.video.fps
+        fps_2 = reader_2.video.fps
+    finally:
+        reader_1.release()
+        reader_2.release()
+
+    if abs(fps_1 - fps_2) < 0.01:
+        # Same FPS: frame-based sync
+        diff = int(np.mean(cam1_sync - cam2_sync))
+        if camera_name == "camera_1":
+            other_camera = "camera_2"
+            other_frame = frame_number - diff
+        else:
+            other_camera = "camera_1"
+            other_frame = frame_number + diff
+    else:
+        # Different FPS: time-based sync
+        times_1 = cam1_sync / fps_1
+        times_2 = cam2_sync / fps_2
+        time_offset_seconds = float(np.mean(times_1 - times_2))
+        if camera_name == "camera_1":
+            other_camera = "camera_2"
+            time_1 = frame_number / fps_1
+            time_2 = time_1 - time_offset_seconds
+            other_frame = int(round(time_2 * fps_2))
+        else:
+            other_camera = "camera_1"
+            time_2 = frame_number / fps_2
+            time_1 = time_2 + time_offset_seconds
+            other_frame = int(round(time_1 * fps_1))
+
+    if other_frame < 0:
+        return None
+    return (other_camera, other_frame)
+
+
 def extract_frame(video_path: Path, frame_number: int) -> np.ndarray | None:
     """Extract a frame from video."""
     try:
@@ -69,6 +139,28 @@ def test_charuco_benchmark():
 
     positive_refs = references.get("positive", [])
     negative_refs = references.get("negative", [])
+
+    # Expand refs with add_sync_pair: compute other camera frame (time-based sync when FPS differ)
+    expanded = []
+    for ref in positive_refs:
+        expanded.append(ref)
+        if not ref.get("add_sync_pair"):
+            continue
+        scene_name = ref["scene_name"]
+        camera_name = ref["camera_name"]
+        frame_number = ref["frame_number"]
+        pair = get_synced_frame_for_other_camera(
+            scene_name, camera_name, frame_number, project_root
+        )
+        if pair is not None:
+            other_camera, other_frame = pair
+            expanded.append({
+                "scene_name": scene_name,
+                "frame_number": other_frame,
+                "camera_name": other_camera,
+            })
+        ref.pop("add_sync_pair", None)
+    positive_refs = expanded
 
     # Create output directories
     positive_dir = project_root / "assets" / "reconstruction" / "charuco" / "positive"
