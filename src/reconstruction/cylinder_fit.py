@@ -1435,8 +1435,8 @@ for name, params in params_dict.items():
     ax2.legend(bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
 
     plt.tight_layout()
-    output_path = plots_dir / "01_cylinder_analysis_steps.png"
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    output_path = plots_dir / "01_cylinder_analysis_steps.pdf"
+    plt.savefig(output_path, format="pdf", bbox_inches="tight")
     plt.close(fig)
     print(f"Saved: {output_path}")
 
@@ -1516,8 +1516,8 @@ for name, params in params_dict.items():
             ax.legend(fontsize=6, loc="best")
 
         plt.tight_layout()
-        output_path = plots_dir / "02_cylinder_all_projections.png"
-        plt.savefig(output_path, dpi=150, bbox_inches="tight")
+        output_path = plots_dir / "02_cylinder_all_projections.pdf"
+        plt.savefig(output_path, format="pdf", bbox_inches="tight")
         plt.close(fig_all)
         print(f"Saved: {output_path} ({len(valid_slices)} successful slices)")
 
@@ -1557,8 +1557,8 @@ for name, params in params_dict.items():
         ax2.legend()
 
         plt.tight_layout()
-        output_path = plots_dir / "03_cylinder_curvature_radius.png"
-        plt.savefig(output_path, dpi=150, bbox_inches="tight")
+        output_path = plots_dir / "03_cylinder_curvature_radius.pdf"
+        plt.savefig(output_path, format="pdf", bbox_inches="tight")
         plt.close(fig2)
         print(f"Saved: {output_path}")
 
@@ -1634,8 +1634,8 @@ for name, params in params_dict.items():
             ax3.legend()
 
             plt.tight_layout()
-            output_path = plots_dir / "04_cylinder_camber.png"
-            plt.savefig(output_path, dpi=150, bbox_inches="tight")
+            output_path = plots_dir / "04_cylinder_camber.pdf"
+            plt.savefig(output_path, format="pdf", bbox_inches="tight")
             plt.close(fig3)
             print(f"Saved: {output_path}")
 
@@ -1691,7 +1691,7 @@ for name, params in params_dict.items():
             ax5.set_ylim(top=150, bottom=0)
 
         plt.tight_layout(rect=[0, 0.04, 1, 1])
-        output_path = plots_dir / "05_cylinder_sigma_point_cloud_to_ground_truth.png"
-        plt.savefig(output_path, dpi=150, bbox_inches="tight")
+        output_path = plots_dir / "05_cylinder_sigma_point_cloud_to_ground_truth.pdf"
+        plt.savefig(output_path, format="pdf", bbox_inches="tight")
         plt.close(fig5)
         print(f"Saved: {output_path}")

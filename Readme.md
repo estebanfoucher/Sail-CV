@@ -144,6 +144,34 @@ Set up the Python path for tracking (run from project root):
 export PYTHONPATH="${PWD}/src/tracking"
 ```
 
+Create a layout by clicking telltale positions on a frame (default at \(t=3s\)) and exporting a JSON:
+
+```bash
+uv run python src/tracking/annotate_layout_opencv.py \
+  --video assets/tracking/2Ce-CKKCtV4.mp4 \
+  --time-sec 3 \
+  --output output/tracking_layouts/2Ce-CKKCtV4_layout.json
+```
+
+Then run the tracking pipeline using that layout (detector + static layout tracker + classifier are configured in `parameters/default.yaml`).
+
+For a **lightweight run** (detection + layout + classifier only, no masks, no PCA), e.g. 30 frames from second 3:
+
+```bash
+uv run python src/tracking/run_detect_layout_classify.py \
+  --video assets/tracking/2Ce-CKKCtV4.mp4 \
+  --layout output/tracking_layouts/2Ce-CKKCtV4_layout.json \
+  --start-sec 3 --num-frames 30
+```
+
+For the full pipeline (with masks and PCA):
+
+```bash
+uv run python src/tracking/analyze_video.py \
+  --video assets/tracking/2Ce-CKKCtV4.mp4 \
+  --layout output/tracking_layouts/2Ce-CKKCtV4_layout.json
+```
+
 Run the tracking pipeline on the C1 fixture with the classifier:
 
 ```bash

@@ -14,6 +14,8 @@
 *.joblib
 weights/
 
+plots*/
+
 # Allow specific checkpoint files
 !checkpoints/
 !checkpoints/rt-detr.pt
