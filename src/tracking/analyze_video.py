@@ -38,13 +38,27 @@ def main():
     parser.add_argument(
         "--parameters",
         type=Path,
-        default=PROJECT_ROOT / "parameters" / "default.yaml",
-        help="Path to parameters YAML file (default: parameters/default.yaml)",
+        default=PROJECT_ROOT / "parameters" / "default_classifier.yml",
+        help="Path to parameters YAML file (default: parameters/default_classifier.yml)",
     )
     parser.add_argument(
         "--output",
         type=Path,
         help="Path to output directory (default: output/tracking)",
+    )
+    parser.add_argument(
+        "--frame-start",
+        type=int,
+        default=0,
+        metavar="N",
+        help="First frame index to process (0-based). Default: 0",
+    )
+    parser.add_argument(
+        "--frame-end",
+        type=int,
+        default=-1,
+        metavar="N",
+        help="Last frame index to process (0-based, inclusive). -1 = up to last frame. Default: -1",
     )
 
     args = parser.parse_args()
@@ -109,26 +123,29 @@ def main():
     logger.info("=" * 60)
 
     # Stream video, process frames, and dump results
-    with Streamer(args.video) as streamer:
+    with Streamer(
+        args.video,
+        frame_start=args.frame_start,
+        frame_end=args.frame_end,
+    ) as streamer:
         # Initialize pipeline for video dimensions
         pipeline.initialize_for_video(streamer.width, streamer.height, streamer.fps)
 
         # Initialize dumper video writers
         dumper.initialize_video_writers(streamer.fps, (streamer.width, streamer.height))
 
-        # Main processing loop
-        for frame_number, frame in streamer:
+        # Main processing loop (only segment frames are iterated; output videos/JSON contain only this segment)
+        for segment_index, (frame_number, frame) in enumerate(streamer, start=1):
             # Process frame through pipeline
             result = pipeline.process_frame(frame, frame_number)
 
-            # Dump result
+            # Dump result (one frame per segment frame → output videos are the segment only)
             dumper.dump_frame(result)
 
-            if (frame_number + 1) % 10 == 0 or (
-                frame_number + 1
-            ) == streamer.total_frames:
+            if segment_index % 10 == 0 or segment_index == streamer.segment_length:
                 logger.info(
-                    f"Processed frame {frame_number + 1}/{streamer.total_frames} - "
+                    f"Processed segment {segment_index}/{streamer.segment_length} "
+                    f"(global frame {frame_number + 1}) - "
                     f"{len(result.get('tracks', []))} tracks, "
                     f"{len(result.get('pca_vectors', {}))} PCA vectors"
                 )

@@ -46,8 +46,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--parameters",
         type=Path,
-        default=PROJECT_ROOT / "parameters" / "default.yaml",
-        help="Parameters YAML (default: parameters/default.yaml)",
+        default=PROJECT_ROOT / "parameters" / "default_classifier.yml",
+        help="Parameters YAML (default: parameters/default_classifier.yml)",
     )
     parser.add_argument(
         "--start-sec",
