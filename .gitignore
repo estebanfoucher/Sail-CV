@@ -21,6 +21,8 @@ plots*/
 !checkpoints/rt-detr.pt
 !checkpoints/yolo-s.pt
 
+!README.md
+
 # Data directories (input data, not tracked)
 data/
 datasets/
