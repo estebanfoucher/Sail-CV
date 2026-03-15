@@ -1,6 +1,6 @@
 # Sail-CV Development Makefile
 
-.PHONY: help setup install install-all format lint typecheck test check clean dev \
+.PHONY: help setup install install-all format format-check lint lint-check typecheck ci-lint test check clean dev \
         test-reconstruction test-tracking \
         reconstruct track web \
         docker-build docker-up docker-down \
@@ -35,17 +35,31 @@ install-tracking: ## Install tracking dependencies
 
 # ── Code Quality ────────────────────────────────────────────────────
 
+# Paths used by ruff and mypy (single source of truth for CI and local)
+RUFF_PATHS := src/ tests/
+MYPY_PATHS := src/
+
 format: ## Format code with ruff
 	@echo "Formatting code..."
-	uv run ruff format src/ tests/
+	uv run ruff format $(RUFF_PATHS)
 
-lint: ## Lint code with ruff
+format-check: ## Check formatting only (no write); used by CI
+	uv run ruff format --check $(RUFF_PATHS)
+
+lint: ## Lint code with ruff (with auto-fix)
 	@echo "Linting code..."
-	uv run ruff check src/ tests/ --fix
+	uv run ruff check $(RUFF_PATHS) --fix
+
+lint-check: ## Lint only (no fix); used by CI
+	uv run ruff check $(RUFF_PATHS)
 
 typecheck: ## Run type checking with mypy
 	@echo "Type checking..."
-	uv run mypy --explicit-package-bases src/
+	uv run mypy --explicit-package-bases $(MYPY_PATHS)
+
+# CI: same as local checks but read-only (no format write, no lint --fix)
+ci-lint: format-check lint-check typecheck ## Run lint + typecheck as in CI
+	@echo "CI lint and typecheck complete."
 
 # ── Testing ─────────────────────────────────────────────────────────
 

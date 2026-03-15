@@ -5,8 +5,8 @@ globs: *.py
 
 ## Style
 - Python 3.10+ (use X | Y union syntax, not Optional[X])
-- PEP 8 via ruff, line-length 88, always run : uv run ruff check after a change.
-- Mypy for typechecking
+- PEP 8 via ruff, line-length 88; run `make format-check lint-check` / `make typecheck` (or `make ci-lint`).
+- Ruff and mypy versions are pinned in pyproject.toml; same versions for local, pre-commit, and CI (see .pre-commit-config.yaml revs).
 - Double quotes for strings
 - Type hints on function signatures
 - Docstrings on public functions and classes (Google or NumPy style)

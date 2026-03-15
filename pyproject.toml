@@ -62,8 +62,8 @@ tracking = [
 [dependency-groups]
 dev = [
     "pytest>=7.4.0",
-    "ruff>=0.1.0",
-    "mypy>=1.5.0",
+    "ruff==0.15.1",   # Pinned so local, pre-commit, and CI use same version
+    "mypy==1.19.1",  # Pinned so local, pre-commit, and CI use same version
     "pre-commit>=3.0.0",
     "types-PyYAML>=6.0.0",
 ]
