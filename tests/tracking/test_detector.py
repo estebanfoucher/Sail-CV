@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from model_weights import resolve_model_path
+
 
 # main class not to test but used for tests of architectures
 def detector(model_path=None, architecture=None):
@@ -50,12 +52,20 @@ def detector(model_path=None, architecture=None):
 
 
 def test_tell_tale_detector_rt_detr():
-    rt_detr_model_path = (
-        Path(__file__).resolve().parents[2] / "checkpoints" / "rt-detr.pt"
+    project_root = Path(__file__).resolve().parents[2]
+    rt_detr_model_path = resolve_model_path(
+        project_root / "checkpoints" / "sailcv-rtdetrl640.pt",
+        project_root=project_root,
     )
     detector(model_path=rt_detr_model_path, architecture="rt-detr")
 
 
 def test_tell_tale_detector_yolo():
-    yolo_model_path = Path(__file__).resolve().parents[2] / "checkpoints" / "yolo-s.pt"
+    """Requires local yolo-s.pt (not on HF). Skipped if missing."""
+    import pytest
+
+    project_root = Path(__file__).resolve().parents[2]
+    yolo_model_path = project_root / "checkpoints" / "yolo-s.pt"
+    if not yolo_model_path.exists():
+        pytest.skip("yolo-s.pt not found (not on HF); place locally to run")
     detector(model_path=yolo_model_path, architecture="yolo")

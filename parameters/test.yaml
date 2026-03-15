@@ -46,6 +46,6 @@ output:
   render_arrows: True  # Disabled for faster tests
 
 classifier:
-  model_path: checkpoints/classifyer_224.pt
+  model_path: checkpoints/sailcv-yolo11n-cls224.pt
   padding_factor: 0.15
   confidence_threshold: 0.0

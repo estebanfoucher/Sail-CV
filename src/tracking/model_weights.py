@@ -58,7 +58,6 @@ def resolve_model_path(
                 repo_id=HF_REPO_ID,
                 filename=filename,
                 subfolder=HF_WEIGHTS_SUBFOLDER,
-                local_dir_use_symlinks=False,
             )
             logger.info(f"Downloaded {filename} from Hugging Face ({HF_REPO_ID})")
             return Path(local_path)

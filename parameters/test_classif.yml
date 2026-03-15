@@ -1,0 +1,51 @@
+detector:
+  model_path: fixtures/C1_raw_detections.json
+  architecture: rt-detr  # Not used for fake detector, but kept for compatibility
+
+layout_tracker:
+  alpha: 0.7
+  beta: 0.3
+  max_distance: 0.2
+  confidence_thresh: 0.0
+
+crop_module:
+  n_components: 2
+  use_grayscale: true
+  mask_fusion_alpha: 0.7
+  sam_fail_min_coverage: 0.01
+  sam_fail_max_coverage: 0.90
+  mask_fusion_eps: 1e-6
+  use_motion_in_pca_mask: true
+  use_motion_for_direction: false
+
+arrow_sense:
+  tau_seconds: 0.2
+  eps: 1e-6
+  fusion_threshold: 0.0
+  purge_state_after_seconds: 0.5
+
+background_detector:
+  type: ocv
+  backend: cuda
+  learn_rate: 0.01
+
+mask_detector:
+  type: grabcut
+  iterations: 1
+  init_scale: 0.5
+
+visualization:
+  arrow_scale: 50.0
+  arrow_thickness: 3
+  arrow_color: [0, 255, 255]  # Yellow in BGR
+
+output:
+  generate_fgmask_video: true
+  generate_pca_visualization: true
+  render_masks: True  # Disabled for faster tests
+  render_arrows: True  # Disabled for faster tests
+
+classifier:
+  model_path: checkpoints/sailcv-yolo11n-cls224.pt
+  padding_factor: 0.15
+  confidence_threshold: 0.0

@@ -1,9 +1,14 @@
-"""Test suite for crop module with YOLO dataset."""
+"""Test suite for crop module with YOLO dataset.
+
+Requires optional dataset at project_root/home_telltale/ (images + labels).
+Skip when missing.
+"""
 
 from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 
 # Project root (pythonpath configured in pyproject.toml)
 project_root = Path(__file__).resolve().parents[3]
@@ -16,10 +21,20 @@ from dataset import YOLODatasetLoader  # noqa: E402
 from models import ModelSpecs  # noqa: E402
 
 
+def _require_home_telltale():
+    dataset_path = project_root / "home_telltale"
+    images_dir = dataset_path / "images"
+    if not images_dir.is_dir():
+        pytest.skip(
+            "home_telltale/images not found; add optional dataset to run these tests"
+        )
+    return dataset_path
+
+
 def test_loader():
     """Step 1: Test dataset loading and verify with detector rendering."""
     project_root = Path(__file__).resolve().parents[3]
-    dataset_path = project_root / "home_telltale"
+    dataset_path = _require_home_telltale()
     output_dir = project_root / "output_tests" / "dataset" / "step1_loader"
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -29,8 +44,11 @@ def test_loader():
 
     print(f"Loaded {len(pairs)} image-detection pairs")
 
-    # Initialize true detector (YOLO)
-    model_path = project_root / "checkpoints" / "yolo-s.pt"
+    # YOLO detector not on HF; require local yolo-s.pt when running dataset tests
+    yolo_path = project_root / "checkpoints" / "yolo-s.pt"
+    if not yolo_path.exists():
+        pytest.skip("yolo-s.pt not found (not on HF); place locally to run")
+    model_path = yolo_path
     specs = ModelSpecs(model_path=model_path, architecture="yolo")
     detector = Detector(specs)
 
@@ -51,7 +69,7 @@ def test_loader():
 def test_crop_extraction():
     """Step 2: Test crop extraction pipeline."""
     project_root = Path(__file__).resolve().parents[3]
-    dataset_path = project_root / "home_telltale"
+    dataset_path = _require_home_telltale()
     output_dir = project_root / "output_tests" / "dataset" / "step2_crops"
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -80,7 +98,7 @@ def test_crop_extraction():
 def test_mask_generation():
     """Step 2.5: Test mask generation with SAM."""
     project_root = Path(__file__).resolve().parents[3]
-    dataset_path = project_root / "home_telltale"
+    dataset_path = _require_home_telltale()
     output_dir = project_root / "output_tests" / "dataset" / "step2_mask"
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -162,7 +180,7 @@ def test_mask_generation():
 def test_pca_results():
     """Step 3: Test PCA analysis and visualize results."""
     project_root = Path(__file__).resolve().parents[3]
-    dataset_path = project_root / "home_telltale"
+    dataset_path = _require_home_telltale()
     output_dir = project_root / "output_tests" / "dataset" / "step3_pca"
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -287,7 +305,7 @@ def test_pca_results():
 def test_full_crop_module_pipeline():
     """Full pipeline test: Load -> Mask -> PCA on same examples."""
     project_root = Path(__file__).resolve().parents[3]
-    dataset_path = project_root / "home_telltale"
+    dataset_path = _require_home_telltale()
     output_dir = project_root / "output_tests" / "dataset" / "step4_full_pipeline"
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -491,176 +509,3 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("✓ All tests completed!")
     print("=" * 60)
-    """Full pipeline test: Load -> Mask -> PCA on same examples."""
-    project_root = Path(__file__).resolve().parents[3]
-    dataset_path = project_root / "home_telltale"
-    output_dir = project_root / "output_tests" / "dataset" / "step4_full_pipeline"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Load dataset - use same pairs for consistency
-    loader = YOLODatasetLoader(dataset_path)
-    pairs = loader.get_random_pairs(10)
-
-    print(f"Running full pipeline on {len(pairs)} image-detection pairs")
-
-    # Initialize mask detector (SAM)
-    mask_detector = None
-    try:
-        mask_detector = MaskDetectorSAM(device="cpu")
-        print("✓ MaskDetectorSAM initialized")
-    except Exception as e:
-        print(f"⚠ Warning: Could not initialize MaskDetectorSAM: {e}")
-        print("  Running pipeline without masks.")
-
-    # Initialize PCA module with mask detector
-    pca_module = CropModulePCA(
-        n_components=2, use_grayscale=True, mask_detector=mask_detector
-    )
-
-    # Process each pair through full pipeline
-    for idx, (image_name, image, detections) in enumerate(pairs):
-        print(f"Processing {idx + 1}/10: {image_name} ({len(detections)} detections)")
-
-        if not detections:
-            continue
-
-        # Step 1: Generate masks on full image
-        bboxes = [det.bbox for det in detections]
-        bbox_list = [bbox.to_numpy() for bbox in bboxes]
-
-        all_masks = None
-        if mask_detector is not None:
-            try:
-                all_masks = mask_detector.generate_masks(image.image, bbox_list)
-                print(f"  Generated {len(all_masks)} masks")
-            except Exception as e:
-                print(f"  ⚠ Error generating masks: {e}")
-                all_masks = None
-
-        # Step 2: Run PCA analysis (which will use masks if available)
-        pca_results = pca_module.analyze_crop(image, bboxes)
-
-        # Step 3: Create comprehensive visualization
-        # Full image with masks and bboxes
-        full_viz = image.image.copy()
-
-        # Draw bounding boxes
-        for det in detections:
-            x1, y1, x2, y2 = (
-                int(det.bbox.xyxy.x1),
-                int(det.bbox.xyxy.y1),
-                int(det.bbox.xyxy.x2),
-                int(det.bbox.xyxy.y2),
-            )
-            cv2.rectangle(full_viz, (x1, y1), (x2, y2), (255, 0, 0), 2)
-
-        # Overlay masks if available
-        if all_masks is not None:
-            full_viz = mask_detector.render_masks(full_viz, all_masks, alpha=0.3)
-
-        # Save full image visualization
-        full_output_path = output_dir / f"{idx:02d}_{image_name}_full.jpg"
-        cv2.imwrite(str(full_output_path), full_viz)
-
-        # Step 4: Create individual crop visualizations with mask and PCA
-        for det_idx, (detection, pca_result) in enumerate(
-            zip(detections, pca_results, strict=True)
-        ):
-            # Extract crop
-            crop = extract_crop_from_bbox(image, detection.bbox)
-
-            if crop.size == 0:
-                continue
-
-            # Extract mask for this crop
-            crop_mask = None
-            if all_masks is not None and det_idx < len(all_masks):
-                full_mask = all_masks[det_idx]
-                x1 = max(0, detection.bbox.xyxy.x1)
-                y1 = max(0, detection.bbox.xyxy.y1)
-                x2 = min(image.image.shape[1], detection.bbox.xyxy.x2)
-                y2 = min(image.image.shape[0], detection.bbox.xyxy.y2)
-                crop_mask = full_mask[y1:y2, x1:x2]
-
-                # Ensure mask matches crop size
-                crop_h, crop_w = crop.shape[:2]
-                if crop_mask.shape != (crop_h, crop_w):
-                    crop_mask = cv2.resize(
-                        crop_mask, (crop_w, crop_h), interpolation=cv2.INTER_NEAREST
-                    )
-
-            # Create visualization: crop with mask overlay and PCA axis
-            crop_viz = crop.copy()
-
-            # Overlay mask if available
-            if crop_mask is not None:
-                # Apply mask overlay
-                mask_normalized = (
-                    crop_mask.astype(np.float32) / 255.0
-                    if crop_mask.max() > 1
-                    else crop_mask.astype(np.float32)
-                )
-                overlay = crop_viz.copy()
-                overlay[mask_normalized > 0.5] = [0, 255, 0]  # Green
-                crop_viz = cv2.addWeighted(crop_viz, 0.7, overlay, 0.3, 0)
-
-            # Draw PCA axis
-            h, w = crop.shape[:2]
-            center_x, center_y = w // 2, h // 2
-
-            if len(pca_result) >= 2:
-                axis_x, axis_y = pca_result[0], pca_result[1]
-            else:
-                axis_x, axis_y = (
-                    pca_result[0] if len(pca_result) > 0 else 1.0,
-                    0.0,
-                )
-
-            # Normalize the direction vector
-            axis_length = np.sqrt(axis_x**2 + axis_y**2)
-            if axis_length > 1e-6:
-                axis_x_norm = axis_x / axis_length
-                axis_y_norm = axis_y / axis_length
-            else:
-                axis_x_norm, axis_y_norm = 1.0, 0.0
-
-            # Draw principal axis arrow
-            arrow_length = min(w, h) * 0.4
-            end_x = int(center_x + axis_x_norm * arrow_length)
-            end_y = int(center_y + axis_y_norm * arrow_length)
-
-            cv2.arrowedLine(
-                crop_viz,
-                (center_x, center_y),
-                (end_x, end_y),
-                (0, 0, 255),  # Red arrow
-                thickness=3,
-                tipLength=0.2,
-                line_type=cv2.LINE_AA,
-            )
-
-            # Draw center point
-            cv2.circle(crop_viz, (center_x, center_y), 5, (255, 0, 0), -1)  # Add text
-            mask_info = (
-                f"mask: {crop_mask.mean() * 100:.1f}%"
-                if crop_mask is not None
-                else "no mask"
-            )
-            cv2.putText(
-                crop_viz,
-                f"PCA: ({axis_x:.2f}, {axis_y:.2f}) | {mask_info}",
-                (5, 20),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                (255, 255, 255),
-                2,
-            )
-
-            # Save crop visualization
-            crop_filename = (
-                f"{idx:02d}_{image_name}_crop_{det_idx:02d}_full_pipeline.jpg"
-            )
-            crop_output_path = output_dir / crop_filename
-            cv2.imwrite(str(crop_output_path), crop_viz)
-
-    print(f"✓ Full pipeline complete: Saved visualizations to {output_dir}")
