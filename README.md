@@ -211,37 +211,36 @@ uv run python src/tracking/analyze_video.py \
 
 ### Finetuning the detector
 
-You can finetune the telltale detector on your own data by (1) creating a small annotated dataset with the annotator, (2) splitting it by source and reducing to one class, (3) fusing with the main Hugging Face dataset and training for a few epochs. The result is a 1-class (telltale) model you can use as the detector in the pipeline.
+Finetune the telltale detector on your own data: create a small YOLO dataset with the annotator, split it (by source) and reduce to one class with the script, then run the notebook to fuse with the main dataset and train for a few epochs. You get a 1-class (telltale) detector to use in the pipeline.
 
-**Step 1: Create your custom dataset**
+Tools live under `finetuning/`: annotator app, `split_yolo_by_source.py`, and `finetune_rtdetr.ipynb`.
 
-1. Open the annotation app in a browser: open `finetuning/annotator/index.html` from the project root (or serve the folder with any static server).
-2. Load photos and/or videos. For videos, seek to a frame and click **Add current frame**; frames are named with a time prefix so they can be grouped by source when splitting.
-3. Annotate bounding boxes and assign one of the three classes: **attached**, **detached**, **leech**.
-4. Click **Export YOLO zip** and save the zip. It contains `images/`, `labels/`, and `data.yaml` (non-split, 3-class YOLO).
+**1. Create your custom dataset**
 
-**Step 2: Split and reduce to one class**
+- Open `finetuning/annotator/index.html` in a browser (or serve the `finetuning/annotator/` folder).
+- Load photos and/or videos. For video: seek to a frame, click **Add current frame** (frames get a time prefix for grouping).
+- Annotate boxes with the three classes: **attached**, **detached**, **leech**.
+- **Export YOLO zip** — you get `images/`, `labels/`, and `data.yaml` (non-split, 3-class).
 
-Unzip the export, then run the split script so that images from the same video stay in the same split and all labels are reduced to a single class (`telltale`):
+**2. Split and reduce to one class**
+
+Unzip the export, then run (from project root):
 
 ```bash
 uv run python finetuning/split_yolo_by_source.py /path/to/export --output /path/to/custom_split
 ```
 
-Optional: `--train-ratio 0.8` (default), `--seed 42` for reproducibility.
+Options: `--train-ratio 0.8`, `--seed 42`. Output: `custom_split/train/`, `custom_split/val/`, `data.yaml` with `nc: 1`, `names: ['telltale']`.
 
-Output: `custom_split/train/`, `custom_split/val/`, and `data.yaml` with `nc: 1`, `names: ['telltale']`.
+**3. Finetune**
 
-**Step 3: Finetune**
+- Open `finetuning/finetune_rtdetr.ipynb` (Colab or local Jupyter).
+- Run all cells. On Colab: enable GPU (Runtime → Change runtime type → GPU), then when prompted upload the zip of your **split** custom dataset (Step 2 output).
+- The notebook downloads the main dataset ([estefoucher/sail-cv-telltales](https://huggingface.co/datasets/estefoucher/sail-cv-telltales)), fuses it with your data, downloads the 640 checkpoint ([estefoucher/tell-tale-detector](https://huggingface.co/estefoucher/tell-tale-detector)), and trains 10–15 epochs. Best weights: `runs/train/finetune_rtdetr/weights/best.pt`.
 
-1. Open `finetuning/finetune_rtdetr.ipynb` (e.g. in Colab or locally with Jupyter).
-2. Run the cells in order. On Colab, when prompted, upload the zip of your **split** custom dataset (the folder produced in Step 2, zipped).
-3. The notebook will: download the main dataset from [estefoucher/sail-cv-telltales](https://huggingface.co/datasets/estefoucher/sail-cv-telltales), reduce it to one class if needed, fuse it with your custom data, download the 640 checkpoint from [estefoucher/tell-tale-detector](https://huggingface.co/estefoucher/tell-tale-detector), and train for 10–15 epochs (configurable in the notebook).
-4. Best weights are saved under `runs/train/finetune_rtdetr/weights/best.pt`.
+**4. Use the new weights**
 
-**Step 4: Use the new weights**
-
-Point `model_path` in your parameters YAML to the new checkpoint (e.g. `runs/train/finetune_rtdetr/weights/best.pt`), or copy that file to `checkpoints/` and reference it by name.
+Set `model_path` in your parameters YAML to that `best.pt`, or copy it to `checkpoints/` and reference by filename.
 
 ### Docker
 
