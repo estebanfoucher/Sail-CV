@@ -152,6 +152,8 @@ uv run python web_app/main.py
 
 ### Quick Start — Tell-Tales Tracking
 
+**Try in Colab:** [notebooks/telltale_tracker_colab.ipynb](notebooks/telltale_tracker_colab.ipynb) — clone, install, then run the pipeline (classifier or vector) on built-in samples or your own video and layout, without a local setup.
+
 When you have a **new video and no layout** (e.g. `assets/tracking/DS_6/C4.mp4`), follow these two steps. All commands are run from the project root.
 
 **Step 1: Create the layout**
