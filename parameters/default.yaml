@@ -1,5 +1,5 @@
 detector:
-  model_path: checkpoints/best_1_class.pt
+  model_path: checkpoints/sailcv-rtdetrl640.pt
   architecture: rt-detr
 
 layout_tracker:
@@ -41,10 +41,11 @@ visualization:
 output:
   generate_fgmask_video: true
   generate_pca_visualization: true
+  output_tracking_video: true
   render_masks: true
   render_arrows: true
 
 classifier:
-  model_path: checkpoints/classifyer_224.pt
+  model_path: checkpoints/sailcv-yolo11n-cls224.pt
   padding_factor: 0.25
   confidence_threshold: 0.0

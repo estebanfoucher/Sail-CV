@@ -3375,6 +3375,7 @@ name = "sail-cv"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "huggingface-hub" },
     { name = "loguru" },
     { name = "matplotlib" },
     { name = "numpy" },
@@ -3432,6 +3433,7 @@ dev = [
 requires-dist = [
     { name = "einops", marker = "extra == 'reconstruction'", specifier = ">=0.7.0" },
     { name = "gradio", marker = "extra == 'reconstruction'", specifier = ">=3.40.0" },
+    { name = "huggingface-hub", specifier = ">=0.22.0" },
     { name = "huggingface-hub", extras = ["torch"], marker = "extra == 'reconstruction'", specifier = ">=0.22.0" },
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "matplotlib", specifier = ">=3.7.0" },

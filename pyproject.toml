@@ -28,6 +28,8 @@ dependencies = [
     "matplotlib>=3.7.0",
     # Configuration
     "pyyaml>=6.0.0",
+    # Model weights (local or Hugging Face)
+    "huggingface-hub>=0.22.0",
     # Additional utilities
     "setuptools>=65.0.0",
 ]
@@ -169,6 +171,7 @@ known-first-party = [
     "unitaries",
     "cameras",
     "models",
+    "model_weights",
     "crop_module",
     "tracker_utils",
     "classifyer",

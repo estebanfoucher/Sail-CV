@@ -1,6 +1,7 @@
 # Sail-CV
 
 [![GitHub](https://img.shields.io/badge/GitHub-Sail--CV-181717?logo=github)](https://github.com/estebanfoucher/Sail-CV)
+[![Hugging Face](https://img.shields.io/badge/Hugging%20Face-Weights-yellow)](https://huggingface.co/estefoucher/tell-tale-detector)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
 ## Looking is measuring : embedded computer vision measurement of sails aerodynamic performance.
@@ -60,8 +61,21 @@ a model wind-powered vessel, comparing with another tell-tales detection method 
 
 ## Tell tales tracker module
 
-The tell-tale tracking module —requiring only a single camera— uses a detection-plus-tracking pipeline. A
-vision model is trained on a purpose-built dataset annotated with bounding boxes for attached, detached, and
+The tell-tale tracking module —requiring only a single camera— uses a detection-plus-tracking pipeline.
+
+### Model weights (Detector & Classifier)
+
+Tracking model weights can be used in two ways:
+
+- **Local path** — Place checkpoint files in `checkpoints/` (or any path) and set `model_path` in your parameters YAML (e.g. `parameters/default.yaml`) to that path. Relative paths are resolved from the project root.
+- **Hugging Face** — If the file is not found locally, the code will try to download it from [estefoucher/tell-tale-detector](https://huggingface.co/estefoucher/tell-tale-detector) (folder `weights/`). Use the exact filename in your config, e.g.:
+  - **Classifier:** `sailcv-yolo11n-cls224.pt`
+  - **Detector:** `sailcv-rtdetrl1088.pt`, `sailcv-rtdetrl640.pt`
+
+So you can either keep weights in `checkpoints/` or rely on automatic download from Hugging Face by using these filenames (with or without a local directory prefix).
+
+
+A vision model is trained on a purpose-built dataset annotated with bounding boxes for attached, detached, and
 leech tell-tales, as shown in Figure 1. A tracker then converts per-frame detections into time-series suitable for
 aerodynamic interpretation. This machine-learning-based approach offers the robustness necessary to handle
 variations in color, sail type, illumination, and object motion, showing promising behavior for reliable field use.

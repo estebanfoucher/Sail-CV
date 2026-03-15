@@ -25,6 +25,8 @@ from loguru import logger
 from pipeline import make_json_serializable
 from video import FFmpegVideoWriter, VideoReader
 
+from model_weights import resolve_model_path
+
 if TYPE_CHECKING:
     import numpy as np
 
@@ -123,25 +125,21 @@ def main() -> None:
     with args.layout.open() as f:
         layout = Layout.from_json_dict(json.load(f))
 
-    # Detector
-    model_path = config.detector.model_path
-    if not model_path.is_absolute():
-        model_path = PROJECT_ROOT / model_path
+    # Detector: resolve path locally or from Hugging Face
+    model_path = resolve_model_path(
+        config.detector.model_path,
+        project_root=PROJECT_ROOT,
+    )
     detector = Detector(
         ModelSpecs(model_path=model_path, architecture=config.detector.architecture)
     )
     logger.info("Detector initialized")
 
-    # Classifier (optional)
+    # Classifier (optional): path resolved inside Classifier (local or Hugging Face)
     classifier = None
     padding_factor = 0.25
     if config.classifier is not None:
-        cp = config.classifier.model_path
-        if not cp.is_absolute():
-            cp = PROJECT_ROOT / cp
-        cfg = config.classifier.model_copy()
-        cfg.model_path = cp
-        classifier = Classifier(cfg)
+        classifier = Classifier(config.classifier, project_root=PROJECT_ROOT)
         padding_factor = config.classifier.padding_factor
         logger.info("Classifier initialized")
 

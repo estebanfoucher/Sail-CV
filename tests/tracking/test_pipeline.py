@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from detector import FakeDetector
 from dumper import Dumper
 from pipeline import Pipeline
@@ -16,24 +17,31 @@ from models import Layout, PipelineConfig
 project_root = Path(__file__).resolve().parents[2]
 
 
-def test_pipeline_with_fixture():
-    """Test pipeline using the C1 fixture (20 frames)."""
+@pytest.mark.parametrize(
+    "parameters_file",
+    ["parameters/test_classif.yml", "parameters/test_vector.yml"],
+)
+def test_pipeline_with_fixture(parameters_file: str):
+    """Test pipeline using the C1 fixture (20 frames) with classif or vector config."""
+    parameters_path = project_root / parameters_file
+    config_stem = Path(parameters_file).stem  # test_classif or test_vector
+
     # Paths
     fixture_video = project_root / "fixtures" / "C1_fixture.mp4"
     fixture_layout = project_root / "fixtures" / "C1_layout.json"
-    parameters_file = project_root / "parameters" / "test.yaml"
     output_folder = project_root / "output_tests" / "pipeline"
 
     # Validate fixture exists
     assert fixture_video.exists(), f"Fixture video not found: {fixture_video}"
     assert fixture_layout.exists(), f"Fixture layout not found: {fixture_layout}"
-    assert parameters_file.exists(), f"Parameters file not found: {parameters_file}"
+    assert parameters_path.exists(), f"Parameters file not found: {parameters_path}"
 
     # Create output directory
     output_folder.mkdir(parents=True, exist_ok=True)
 
     # Load configuration
-    config = PipelineConfig.from_yaml(parameters_file)
+    config = PipelineConfig.from_yaml(parameters_path)
+    has_classifier = config.classifier is not None
 
     # Load layout
     with fixture_layout.open() as f:
@@ -48,20 +56,20 @@ def test_pipeline_with_fixture():
         f"Expected FakeDetector, got {type(pipeline.detector)}"
     )
 
-    # Prepare output paths
-    output_json_path = output_folder / "C1_fixture_tracked.json"
-    output_video_path = output_folder / "C1_fixture_tracked.mp4"
+    # Output paths per config so runs do not overwrite each other
+    output_json_path = output_folder / f"C1_fixture_tracked_{config_stem}.json"
+    output_video_path = output_folder / f"C1_fixture_tracked_{config_stem}.mp4"
     output_fgmask_path = (
-        output_folder / "C1_fixture_fgmask.mp4"
+        output_folder / f"C1_fixture_fgmask_{config_stem}.mp4"
         if config.output.generate_fgmask_video
         else None
     )
 
-    # Initialize dumper
+    # Initialize dumper (main tracking video when output_tracking_video is true)
     dumper = Dumper(
         output_json_path=output_json_path,
         output_video_path=output_video_path
-        if config.output.render_masks or config.output.render_arrows
+        if config.output.output_tracking_video
         else None,
         output_fgmask_path=output_fgmask_path,
     )
@@ -99,7 +107,11 @@ def test_pipeline_with_fixture():
     assert output_json_path.exists(), f"Output JSON not created: {output_json_path}"
 
     # Verify output video has correct frame count (20 frames) if it was created
-    if output_video_path and output_video_path.exists():
+    if (
+        config.output.output_tracking_video
+        and output_video_path
+        and output_video_path.exists()
+    ):
         reader = VideoReader.open_video_file(str(output_video_path))
         assert reader.specs.frame_count == 20, (
             f"Output video has {reader.specs.frame_count} frames, expected 20"
@@ -131,6 +143,39 @@ def test_pipeline_with_fixture():
             "PCA vectors should be a dict"
         )
 
+    # Config-specific assertions: classifier vs vector-only
+    if has_classifier:
+        # test_classif: require classifications in every frame that has tracks
+        for frame_result in results:
+            if frame_result.get("tracks"):
+                assert "classifications" in frame_result, (
+                    "Classifier config must produce classifications for frames with tracks"
+                )
+                classifications = frame_result["classifications"]
+                assert isinstance(classifications, dict), (
+                    "classifications should be a dict"
+                )
+                tracks = frame_result["tracks"]
+                assert len(classifications) == len(tracks), (
+                    f"Expected one classification per track, "
+                    f"got {len(classifications)} for {len(tracks)} tracks"
+                )
+                for track in tracks:
+                    track_id = track.get("track_id")
+                    assert track_id is not None
+                    assert track_id in classifications, (
+                        f"Track {track_id} missing from classifications"
+                    )
+                    assert isinstance(classifications[track_id], int), (
+                        f"Classification for track {track_id} should be int"
+                    )
+    else:
+        # test_vector: no classifier, so classifications should be absent
+        for frame_result in results:
+            assert "classifications" not in frame_result or not frame_result.get(
+                "classifications"
+            ), "Vector config should not produce classifications"
+
     # Check PCA vectors format (should be 2D unit vectors)
     for frame_result in results:
         pca_vectors = frame_result["pca_vectors"]
@@ -148,12 +193,16 @@ def test_pipeline_with_fixture():
             )
 
     print("✓ Pipeline test passed")
+    print(f"  - Config: {parameters_file}")
     print(f"  - Output JSON: {output_json_path}")
     if output_video_path and output_video_path.exists():
         print(f"  - Output video: {output_video_path}")
     print(f"  - Frames with tracks: {frames_with_tracks}/20")
     print(f"  - Frames with PCA vectors: {frames_with_pca}/20")
+    if has_classifier:
+        frames_with_class = sum(1 for frame in results if frame.get("classifications"))
+        print(f"  - Frames with classifications: {frames_with_class}/20")
 
 
 if __name__ == "__main__":
-    test_pipeline_with_fixture()
+    pytest.main([__file__, "-v", "-k", "test_pipeline_with_fixture"])

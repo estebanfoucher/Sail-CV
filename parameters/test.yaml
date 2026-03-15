@@ -42,10 +42,11 @@ visualization:
 output:
   generate_fgmask_video: true
   generate_pca_visualization: true
-  render_masks: True  # Disabled for faster tests
-  render_arrows: True  # Disabled for faster tests
+  output_tracking_video: true
+  render_masks: true
+  render_arrows: true
 
 classifier:
-  model_path: checkpoints/classifyer_224.pt
+  model_path: checkpoints/sailcv-yolo11n-cls224.pt
   padding_factor: 0.15
   confidence_threshold: 0.0

@@ -6,6 +6,7 @@ from detector import Detector
 from pydantic import ValidationError
 from tracker import Tracker
 
+from model_weights import resolve_model_path
 from models import (
     XYXY,
     BoundingBox,
@@ -106,16 +107,15 @@ def test_tracker_update():
 
 
 def test_tracker_integration_with_detector():
-    """Test integration between Detector and Tracker"""
-    # This test requires model files, so we'll skip if they don't exist
+    """Test integration between Detector and Tracker (uses HF-backed rt-detr)."""
     project_root = Path(__file__).resolve().parents[2]
-    yolo_model_path = project_root / "checkpoints" / "yolo-s.pt"
-
-    if not yolo_model_path.exists():
-        pytest.skip(f"Model file not found: {yolo_model_path}")
+    model_path = resolve_model_path(
+        project_root / "checkpoints" / "sailcv-rtdetrl640.pt",
+        project_root=project_root,
+    )
 
     # Initialize Detector
-    specs = ModelSpecs(model_path=yolo_model_path, architecture="yolo")
+    specs = ModelSpecs(model_path=model_path, architecture="rt-detr")
     detector = Detector(specs)
 
     # Initialize Tracker

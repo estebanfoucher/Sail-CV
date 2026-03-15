@@ -4,6 +4,7 @@ from detector import Detector
 from track_video import track_video
 from tracker import Tracker
 
+from model_weights import resolve_model_path
 from models import ModelSpecs, TrackerConfig
 
 
@@ -14,11 +15,12 @@ def test_track_video_yolo():
     output_video_path = output_folder / "output_test_tracker_yolo.mp4"
     output_json_path = output_folder / "output_test_tracker_yolo_tracks.json"
 
-    # Check if model exists
+    # YOLO detector not on HF; skip if not present locally
     yolo_model_path = project_root / "checkpoints" / "yolo-s.pt"
     if not yolo_model_path.exists():
-        print(f"Skipping test: Model file not found: {yolo_model_path}")
-        return
+        import pytest
+
+        pytest.skip("yolo-s.pt not found (not on HF); place locally to run")
 
     # Initialize detector
     specs = ModelSpecs(model_path=yolo_model_path, architecture="yolo")
@@ -52,11 +54,10 @@ def test_track_video_rt_detr():
     output_video_path = output_folder / "output_test_tracker_rt_detr.mp4"
     output_json_path = output_folder / "output_test_tracker_rt_detr_tracks.json"
 
-    # Check if model exists
-    rt_detr_model_path = project_root / "checkpoints" / "rt-detr.pt"
-    if not rt_detr_model_path.exists():
-        print(f"Skipping test: Model file not found: {rt_detr_model_path}")
-        return
+    rt_detr_model_path = resolve_model_path(
+        project_root / "checkpoints" / "sailcv-rtdetrl640.pt",
+        project_root=project_root,
+    )
 
     # Initialize detector
     specs = ModelSpecs(model_path=rt_detr_model_path, architecture="rt-detr")
