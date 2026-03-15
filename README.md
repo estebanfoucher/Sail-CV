@@ -78,6 +78,8 @@ You can keep weights in `checkpoints/` or rely on automatic download by using th
 
 To run the tracker on a new video, create a layout with the layout annotator, then run `analyze_video.py` with a chosen parameters file. **Get Started → Quick Start — Tell-Tales Tracking** below gives the full steps and example commands (layout creation, pipeline run, and config options).
 
+**Colab:** Open [notebooks/telltale_tracker_colab.ipynb](notebooks/telltale_tracker_colab.ipynb) in Google Colab to run the pipeline with default parameters: choose classifier or vector mode, use built-in samples (C1 or C4) or upload your own video and layout.
+
 ## Get Started
 
 ### Prerequisites
