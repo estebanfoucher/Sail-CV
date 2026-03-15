@@ -139,7 +139,7 @@ class SceneViz:
         mask = to_numpy(mask)
         if not isinstance(pts3d, list):
             pts3d = [pts3d.reshape(-1,3)]
-            if mask is not None: 
+            if mask is not None:
                 mask = [mask.ravel()]
         if not isinstance(color, (tuple,list)):
             color = [color.reshape(-1,3)]
@@ -179,7 +179,7 @@ class SceneViz:
 
         # compute 3d points
         pts3d, mask2 = depthmap_to_absolute_camera_coordinates(depth, intrinsics, cam2world)
-        mask2 &= (depth<zfar) 
+        mask2 &= (depth<zfar)
 
         # combine with provided mask if any
         if mask is not None:
@@ -195,7 +195,7 @@ class SceneViz:
             focal = (intrinsics[0,0] * intrinsics[1,1]) ** 0.5
             if imsize is None:
                 imsize = (2*intrinsics[0,2], 2*intrinsics[1,2])
-        
+
         add_scene_cam(self.scene, pose_c2w, color, image, focal, imsize=imsize, screen_width=cam_size, marker=None)
         return self
 
@@ -243,7 +243,7 @@ def show_raw_pointcloud_with_cams(imgs, pts3d, mask, focals, cams2world,
     scene.show(line_settings={'point_size': point_size})
 
 
-def add_scene_cam(scene, pose_c2w, edge_color, image=None, focal=None, imsize=None, 
+def add_scene_cam(scene, pose_c2w, edge_color, image=None, focal=None, imsize=None,
                   screen_width=0.03, marker=None):
     if image is not None:
         image = np.asarray(image)

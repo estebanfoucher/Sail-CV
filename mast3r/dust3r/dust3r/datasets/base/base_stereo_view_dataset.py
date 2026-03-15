@@ -182,7 +182,7 @@ class BaseStereoViewDataset (EasyDataset):
 
 
 def is_good_type(key, v):
-    """ returns (is_good, err_msg) 
+    """ returns (is_good, err_msg)
     """
     if isinstance(v, (str, int, tuple)):
         return True, None

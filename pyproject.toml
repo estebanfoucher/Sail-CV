@@ -133,6 +133,7 @@ ignore = [
     "PLR0913", # too many arguments to function call
     "PLR0912", # too many branches
     "PLR0915", # too many statements
+    "PLR0911", # too many return statements
     "PLR2004", # magic value used in comparison
     "ARG002",  # unused-method-argument
     "ARG001",  # unused-function-argument

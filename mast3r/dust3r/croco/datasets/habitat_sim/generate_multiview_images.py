@@ -16,10 +16,10 @@ import shutil
 def generate_multiview_images_for_scene(scene_dataset_config_file,
                                         scene,
                                         navmesh,
-                                        output_dir, 
+                                        output_dir,
                                         views_count,
-                                        size, 
-                                        exist_ok=False, 
+                                        size,
+                                        exist_ok=False,
                                         generate_depth=False,
                                         **kwargs):
     """
@@ -36,7 +36,7 @@ def generate_multiview_images_for_scene(scene_dataset_config_file,
         metadata_filename = os.path.join(output_dir, "metadata.json")
 
         metadata_template = dict(scene_dataset_config_file=scene_dataset_config_file,
-            scene=scene, 
+            scene=scene,
             navmesh=navmesh,
             views_count=views_count,
             size=size,
@@ -125,11 +125,11 @@ def create_commandline(scene_data, generate_depth, exist_ok=False):
             return '""'
         else:
             return val
-    commandline = f"""python {__file__} --scene {my_formatting(scene_data.scene)} 
-    --scene_dataset_config_file {my_formatting(scene_data.scene_dataset_config_file)} 
-    --navmesh {my_formatting(scene_data.navmesh)} 
-    --output_dir {my_formatting(scene_data.output_dir)} 
-    --generate_depth {int(generate_depth)} 
+    commandline = f"""python {__file__} --scene {my_formatting(scene_data.scene)}
+    --scene_dataset_config_file {my_formatting(scene_data.scene_dataset_config_file)}
+    --navmesh {my_formatting(scene_data.navmesh)}
+    --output_dir {my_formatting(scene_data.output_dir)}
+    --generate_depth {int(generate_depth)}
     --exist_ok {int(exist_ok)}
     """
     commandline = " ".join(commandline.split())
@@ -141,13 +141,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="""Example of use -- listing commands to generate data for scenes available:
     > python datasets/habitat_sim/generate_multiview_habitat_images.py --list_commands
     """)
-    
+
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--list_commands", action='store_true', help="list commandlines to run if true")
     parser.add_argument("--scene", type=str, default="")
     parser.add_argument("--scene_dataset_config_file", type=str, default="")
     parser.add_argument("--navmesh", type=str, default="")
-    
+
     parser.add_argument("--generate_depth", type=int, default=1)
     parser.add_argument("--exist_ok", type=int, default=0)
 
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     if args.list_commands:
         # Listing scenes available...
         scenes_data = list_scenes_available(base_output_dir=args.output_dir)
-        
+
         for scene_data in scenes_data:
             print(create_commandline(scene_data, generate_depth=generate_depth, exist_ok=exist_ok))
     else:

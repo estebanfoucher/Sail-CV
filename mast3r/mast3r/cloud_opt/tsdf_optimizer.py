@@ -246,7 +246,7 @@ class TSDFPostProcess:
 
     def _get_pts3d(self, TSDF_filtering_thresh=None, **kw):
         """
-        return 3D points (possibly filtering depths with TSDF) 
+        return 3D points (possibly filtering depths with TSDF)
         """
         return self._backproj_pts3d(in_depths=self._get_depthmaps(TSDF_filtering_thresh=TSDF_filtering_thresh), **kw)
 

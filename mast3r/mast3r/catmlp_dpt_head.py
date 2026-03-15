@@ -105,11 +105,11 @@ class MLP_MiniConv_Head(nn.Module):
 
     Input : [B, S, D]  # S = (H//p) * (W//p)
 
-    MLP: 
-        D -> (mlp_hidden_dim) -> out_mlp_dim * (p/2)*2 
+    MLP:
+        D -> (mlp_hidden_dim) -> out_mlp_dim * (p/2)*2
         reshape to [out_mlp_dim, H/2, W/2] (MLP predicts in half-res)
 
-    MiniConv head from DPT: 
+    MiniConv head from DPT:
         Upsample x2 -> [out_mlp_dim,H,W]
         Conv 3x3 -> [conv_inner_dim,H,W]
         ReLU
@@ -206,7 +206,7 @@ class Cat_MLP_LocalFeatures_MiniConv_Pts3d(nn.Module):
 
 
 def mast3r_head_factory(head_type, output_mode, net, has_conf=False):
-    """" build a prediction head for the decoder 
+    """" build a prediction head for the decoder
     """
     if head_type == 'catmlp+dpt' and output_mode.startswith('pts3d+desc'):
         local_feat_dim = int(output_mode[10:])

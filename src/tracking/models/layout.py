@@ -14,7 +14,9 @@ class LayoutPosition(BaseModel):
     Origin (0, 0) is top-left corner.
     """
 
-    id: str = Field(..., description="Unique identifier for this layout position (e.g., 'TL', 'TR')")
+    id: str = Field(
+        ..., description="Unique identifier for this layout position (e.g., 'TL', 'TR')"
+    )
     name: str = Field(..., description="Human-readable name (e.g., 'top left')")
     x: float = Field(..., ge=0.0, le=1.0, description="Normalized X coordinate (0-1)")
     y: float = Field(..., ge=0.0, le=1.0, description="Normalized Y coordinate (0-1)")
@@ -37,12 +39,14 @@ class Layout(BaseModel):
     )
     direction: tuple[float, float] | None = Field(
         default=None,
-        description="Optional 2D unitary vector indicating most likely direction (dx, dy). Normalized to unit length."
+        description="Optional 2D unitary vector indicating most likely direction (dx, dy). Normalized to unit length.",
     )
 
     @field_validator("direction")
     @classmethod
-    def normalize_direction(cls, v: tuple[float, float] | None) -> tuple[float, float] | None:
+    def normalize_direction(
+        cls, v: tuple[float, float] | None
+    ) -> tuple[float, float] | None:
         """Normalize direction vector to unit length."""
         if v is None:
             return None
@@ -66,5 +70,6 @@ class Layout(BaseModel):
             if direction is not None:
                 direction = tuple(direction)
             return cls(positions=positions, direction=direction)
-        raise ValueError("Invalid layout format: expected 'layout' key with list of positions")
-
+        raise ValueError(
+            "Invalid layout format: expected 'layout' key with list of positions"
+        )

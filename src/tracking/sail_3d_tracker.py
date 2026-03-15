@@ -15,11 +15,11 @@ import logging
 import math
 
 import numpy as np
+from projection import project_telltales
 from scipy.optimize import linear_sum_assignment, minimize_scalar
 
 from models import Detection, Track
 from models.sail_3d import Sail3DConfig
-from projection import project_telltales
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +103,12 @@ class Sail3DTracker:
         )
 
         if not valid_detections or not self.config.sail.telltales:
-            return [], self._last_angle if self._last_angle is not None else self.config.angle_min
+            return (
+                [],
+                self._last_angle
+                if self._last_angle is not None
+                else self.config.angle_min,
+            )
 
         # 1. Coarse search: evaluate discrete angles
         best_angle, best_cost = self._coarse_search(valid_detections)
@@ -154,7 +159,7 @@ class Sail3DTracker:
             angles = np.linspace(angle_min, angle_max, steps + 1)
 
         best_angle = angles[0]
-        best_cost = float('inf')
+        best_cost = float("inf")
 
         for angle in angles:
             cost, _ = self._compute_cost_at_angle(detections, angle)
@@ -180,9 +185,7 @@ class Sail3DTracker:
             Tuple of (total_cost, (row_indices, col_indices))
         """
         # Project telltales at this angle
-        projected = project_telltales(
-            self.config.sail, self.config.camera, angle_deg
-        )
+        projected = project_telltales(self.config.sail, self.config.camera, angle_deg)
 
         # Build cost matrix
         cost_matrix = self._build_cost_matrix(detections, projected)
@@ -224,7 +227,7 @@ class Sail3DTracker:
             for j, (proj_x, proj_y) in enumerate(projected):
                 # Skip invalid projections (behind camera)
                 if math.isnan(proj_x) or math.isnan(proj_y):
-                    cost_matrix[i, j] = float('inf')
+                    cost_matrix[i, j] = float("inf")
                     continue
 
                 # Euclidean distance normalized by diagonal
@@ -270,8 +273,8 @@ class Sail3DTracker:
         result = minimize_scalar(
             objective,
             bounds=(lower_bound, upper_bound),
-            method='bounded',
-            options={'xatol': 0.1},  # 0.1 degree tolerance
+            method="bounded",
+            options={"xatol": 0.1},  # 0.1 degree tolerance
         )
 
         return float(result.x)
@@ -292,9 +295,7 @@ class Sail3DTracker:
             List of Track objects
         """
         # Project telltales
-        projected = project_telltales(
-            self.config.sail, self.config.camera, angle_deg
-        )
+        projected = project_telltales(self.config.sail, self.config.camera, angle_deg)
 
         # Build cost matrix and solve assignment
         cost_matrix = self._build_cost_matrix(detections, projected)
@@ -340,7 +341,9 @@ class Sail3DTracker:
 
         return tracks
 
-    def get_projected_positions(self, angle_deg: float) -> list[tuple[str, float, float]]:
+    def get_projected_positions(
+        self, angle_deg: float
+    ) -> list[tuple[str, float, float]]:
         """
         Get projected 2D positions of all telltales at a given angle.
 
@@ -352,9 +355,7 @@ class Sail3DTracker:
         Returns:
             List of (telltale_id, x, y) tuples
         """
-        projected = project_telltales(
-            self.config.sail, self.config.camera, angle_deg
-        )
+        projected = project_telltales(self.config.sail, self.config.camera, angle_deg)
         return [
             (t.id, p[0], p[1])
             for t, p in zip(self.config.sail.telltales, projected, strict=False)

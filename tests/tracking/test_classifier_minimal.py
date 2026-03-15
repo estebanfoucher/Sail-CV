@@ -4,21 +4,21 @@ import json
 from pathlib import Path
 
 import cv2
-import numpy as np
-
-# Project root (pythonpath configured in pyproject.toml)
-project_root = Path(__file__).resolve().parents[2]
 
 from classifyer import Classifier
+from models.bounding_box import XYXY, BoundingBox
 from models.classifier import ClassifierConfig
-from models.bounding_box import BoundingBox, XYXY
+
+project_root = Path(__file__).resolve().parents[2]
 
 
 def test_classifier_minimal():
     """Test classifier on crops extracted from first frame of fixture."""
     # Paths
     fixture_video = project_root / "fixtures" / "C1_fixture.mp4"
-    fixture_results_json = project_root / "output_tests" / "pipeline" / "C1_fixture_tracked.json"
+    fixture_results_json = (
+        project_root / "output_tests" / "pipeline" / "C1_fixture_tracked.json"
+    )
     output_dir = project_root / "output_tests" / "classifier_test"
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -149,7 +149,9 @@ def test_classifier_minimal():
         )
         cv2.putText(
             frame_with_bbox,
-            f"{idx}: class={class_id} conf={confidence:.2f}" if class_id is not None else f"{idx}: no detection",
+            f"{idx}: class={class_id} conf={confidence:.2f}"
+            if class_id is not None
+            else f"{idx}: no detection",
             (x1_padded, y1_padded - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
@@ -169,18 +171,26 @@ def test_classifier_minimal():
 
     # Summary
     total_crops = len(classifications_results)
-    crops_with_class = sum(1 for r in classifications_results if r["class_id"] is not None)
-    unique_classes = set(r["class_id"] for r in classifications_results if r["class_id"] is not None)
+    crops_with_class = sum(
+        1 for r in classifications_results if r["class_id"] is not None
+    )
+    unique_classes = {
+        r["class_id"] for r in classifications_results if r["class_id"] is not None
+    }
 
-    print(f"\nSummary:")
+    print("\nSummary:")
     print(f"  Total crops processed: {total_crops}")
     print(f"  Crops with classification: {crops_with_class}")
     print(f"  Unique class IDs: {sorted(unique_classes)}")
 
     if crops_with_class == 0:
-        print("\n⚠ WARNING: No crops were classified! The classifier may not be working correctly.")
+        print(
+            "\n⚠ WARNING: No crops were classified! The classifier may not be working correctly."
+        )
     elif len(unique_classes) == 1 and 0 in unique_classes:
-        print("\n⚠ WARNING: All classifications returned class_id=0. This might indicate an issue.")
+        print(
+            "\n⚠ WARNING: All classifications returned class_id=0. This might indicate an issue."
+        )
     else:
         print("\n✓ Classifier appears to be working correctly with multiple class IDs.")
 

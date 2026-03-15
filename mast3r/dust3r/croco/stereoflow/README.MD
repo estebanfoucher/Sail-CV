@@ -201,7 +201,7 @@ Please find below on the file structure should look for each dataset:
 
 ### CroCo-Stereo
 
-##### Main model 
+##### Main model
 
 The main training of CroCo-Stereo was performed on a series of datasets, and it was used as it for Middlebury v3 benchmark.
 
@@ -221,33 +221,33 @@ For evaluation of validation set, we also provide the model trained on the `subt
 ```
 # Download the model
 bash stereoflow/download_model.sh crocostereo_subtrain.pth
-# Evaluation on validation sets 
+# Evaluation on validation sets
 python stereoflow/test.py --model stereoflow_models/crocostereo_subtrain.pth --dataset "MdEval3('subval_full')+ETH3DLowRes('subval')+SceneFlow('test_finalpass')+SceneFlow('test_cleanpass')" --save metrics --tile_overlap 0.9
 # Training command that was used (same as above but on subtrain, using checkpoint-best.pth), can also be launched on multiple gpus
 python -u stereoflow/train.py stereo --criterion "LaplacianLossBounded2()" --dataset "CREStereo('train')+SceneFlow('train_allpass')+30*ETH3DLowRes('subtrain')+50*Md05('subtrain')+50*Md06('subtrain')+50*Md14('subtrain')+50*Md21('subtrain')+50*MdEval3('subtrain_full')+Booster('subtrain_balanced')" --val_dataset "SceneFlow('test1of100_finalpass')+SceneFlow('test1of100_cleanpass')+ETH3DLowRes('subval')+Md05('subval')+Md06('subval')+Md14('subval')+Md21('subval')+MdEval3('subval_full')+Booster('subval_balanced')" --lr 3e-5 --batch_size 6 --epochs 32 --pretrained pretrained_models/CroCo_V2_ViTLarge_BaseDecoder.pth --output_dir xps/crocostereo/main_subtrain/
 ```
 
-##### Other models 
+##### Other models
 
 <details>
-	<summary>Model for ETH3D</summary> 
+	<summary>Model for ETH3D</summary>
 	The model used for the submission on ETH3D is trained with the same command but using an unbounded Laplacian loss.
-	
+
 	# Download the model
 	bash stereoflow/download_model.sh crocostereo_eth3d.pth
 	# ETH3D submission
 	python stereoflow/test.py --model stereoflow_models/crocostereo_eth3d.pth --dataset "ETH3DLowRes('all')" --save submission --tile_overlap 0.9
 	# Training command that was used
 	python -u stereoflow/train.py stereo --criterion "LaplacianLoss()" --tile_conf_mode conf_expbeta3 --dataset "CREStereo('train')+SceneFlow('train_allpass')+30*ETH3DLowRes('train')+50*Md05('train')+50*Md06('train')+50*Md14('train')+50*Md21('train')+50*MdEval3('train_full')+Booster('train_balanced')" --val_dataset "SceneFlow('test1of100_finalpass')+SceneFlow('test1of100_cleanpass')+ETH3DLowRes('subval')+Md05('subval')+Md06('subval')+Md14('subval')+Md21('subval')+MdEval3('subval_full')+Booster('subval_balanced')" --lr 3e-5 --batch_size 6 --epochs 32 --pretrained pretrained_models/CroCo_V2_ViTLarge_BaseDecoder.pth --output_dir xps/crocostereo/main_eth3d/
-	
+
 </details>
 
 <details>
 	<summary>Main model finetuned on Kitti</summary>
-	
+
 	# Download the model
 	bash stereoflow/download_model.sh crocostereo_finetune_kitti.pth
-	# Kitti submission 
+	# Kitti submission
 	python stereoflow/test.py --model stereoflow_models/crocostereo_finetune_kitti.pth --dataset "Kitti15('test')" --save submission --tile_overlap 0.9
 	# Training that was used
 	python -u stereoflow/train.py stereo --crop 352 1216 --criterion "LaplacianLossBounded2()" --dataset "Kitti12('train')+Kitti15('train')" --lr 3e-5 --batch_size 1 --accum_iter 6 --epochs 20 --pretrained pretrained_models/CroCo_V2_ViTLarge_BaseDecoder.pth --start_from stereoflow_models/crocostereo.pth --output_dir xps/crocostereo/finetune_kitti/ --save_every 5
@@ -255,10 +255,10 @@ python -u stereoflow/train.py stereo --criterion "LaplacianLossBounded2()" --dat
 
 <details>
 	<summary>Main model finetuned on Spring</summary>
-	
+
 	# Download the model
 	bash stereoflow/download_model.sh crocostereo_finetune_spring.pth
-	# Spring submission 
+	# Spring submission
 	python stereoflow/test.py --model stereoflow_models/crocostereo_finetune_spring.pth --dataset "Spring('test')" --save submission --tile_overlap 0.9
 	# Training command that was used
 	python -u stereoflow/train.py stereo --criterion "LaplacianLossBounded2()" --dataset "Spring('train')" --lr 3e-5 --batch_size 6 --epochs 8 --pretrained pretrained_models/CroCo_V2_ViTLarge_BaseDecoder.pth --start_from stereoflow_models/crocostereo.pth --output_dir xps/crocostereo/finetune_spring/
@@ -268,7 +268,7 @@ python -u stereoflow/train.py stereo --criterion "LaplacianLossBounded2()" --dat
 	<summary>Smaller models</summary>
 	To train CroCo-Stereo with smaller CroCo pretrained models, simply replace the <code>--pretrained</code> argument. To download the smaller CroCo-Stereo models based on CroCo v2 pretraining with ViT-Base encoder and Small encoder, use <code>bash stereoflow/download_model.sh crocostereo_subtrain_vitb_smalldecoder.pth</code>, and for the model with a ViT-Base encoder and a Base decoder, use <code>bash stereoflow/download_model.sh crocostereo_subtrain_vitb_basedecoder.pth</code>.
 </details>
-	
+
 
 ### CroCo-Flow
 
@@ -278,9 +278,9 @@ The main training of CroCo-Flow was performed on the FlyingThings, FlyingChairs,
 It was used for our submission to the MPI-Sintel benchmark.
 
 ```
-# Download the model 
+# Download the model
 bash stereoflow/download_model.sh crocoflow.pth
-# Evaluation 
+# Evaluation
 python stereoflow/test.py --model stereoflow_models/crocoflow.pth --dataset "MPISintel('subval_cleanpass')+MPISintel('subval_finalpass')" --save metrics --tile_overlap 0.9
 # Sintel submission
 python stereoflow/test.py --model stereoflow_models/crocoflow.pth --dataset "MPISintel('test_allpass')" --save submission --tile_overlap 0.9
@@ -288,14 +288,14 @@ python stereoflow/test.py --model stereoflow_models/crocoflow.pth --dataset "MPI
 python -u stereoflow/train.py flow --criterion "LaplacianLossBounded()" --dataset "40*MPISintel('subtrain_cleanpass')+40*MPISintel('subtrain_finalpass')+4*FlyingThings('train_allpass')+4*FlyingChairs('train')+TartanAir('train')" --val_dataset "MPISintel('subval_cleanpass')+MPISintel('subval_finalpass')" --lr 2e-5 --batch_size 8 --epochs 240 --img_per_epoch 30000 --pretrained pretrained_models/CroCo_V2_ViTLarge_BaseDecoder.pth --output_dir xps/crocoflow/main/
 ```
 
-##### Other models 
+##### Other models
 
 <details>
 	<summary>Main model finetuned on Kitti</summary>
-	
+
 	# Download the model
 	bash stereoflow/download_model.sh crocoflow_finetune_kitti.pth
-	# Kitti submission 
+	# Kitti submission
 	python stereoflow/test.py --model stereoflow_models/crocoflow_finetune_kitti.pth --dataset "Kitti15('test')" --save submission --tile_overlap 0.99
 	# Training that was used, with checkpoint-last.pth
 	python -u stereoflow/train.py flow --crop 352 1216 --criterion "LaplacianLossBounded()" --dataset "Kitti15('train')+Kitti12('train')" --lr 2e-5 --batch_size 1 --accum_iter 8 --epochs 150 --save_every 5 --pretrained pretrained_models/CroCo_V2_ViTLarge_BaseDecoder.pth --start_from stereoflow_models/crocoflow.pth --output_dir xps/crocoflow/finetune_kitti/
@@ -303,10 +303,10 @@ python -u stereoflow/train.py flow --criterion "LaplacianLossBounded()" --datase
 
 <details>
 	<summary>Main model finetuned on Spring</summary>
-	
+
 	# Download the model
 	bash stereoflow/download_model.sh crocoflow_finetune_spring.pth
-	# Spring submission 
+	# Spring submission
 	python stereoflow/test.py --model stereoflow_models/crocoflow_finetune_spring.pth --dataset "Spring('test')" --save submission --tile_overlap 0.9
 	# Training command that was used, with checkpoint-last.pth
 	python -u stereoflow/train.py flow --criterion "LaplacianLossBounded()" --dataset "Spring('train')" --lr 2e-5 --batch_size 8 --epochs 12 --pretrained pretrained_models/CroCo_V2_ViTLarge_BaseDecoder.pth --start_from stereoflow_models/crocoflow.pth --output_dir xps/crocoflow/finetune_spring/

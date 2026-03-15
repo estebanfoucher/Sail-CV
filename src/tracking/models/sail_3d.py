@@ -17,10 +17,22 @@ class TelltalePoint(BaseModel):
     v = 0 is at the foot, v = 1 is at the head.
     """
 
-    id: str = Field(..., description="Unique identifier for this telltale (e.g., 'TL', 'TR')")
+    id: str = Field(
+        ..., description="Unique identifier for this telltale (e.g., 'TL', 'TR')"
+    )
     name: str = Field(..., description="Human-readable name (e.g., 'top left')")
-    u: float = Field(..., ge=0.0, le=1.0, description="Normalized position along sail width [0=luff, 1=leech]")
-    v: float = Field(..., ge=0.0, le=1.0, description="Normalized position along sail height [0=foot, 1=head]")
+    u: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Normalized position along sail width [0=luff, 1=leech]",
+    )
+    v: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Normalized position along sail height [0=foot, 1=head]",
+    )
 
 
 class SailGeometry(BaseModel):
@@ -37,11 +49,10 @@ class SailGeometry(BaseModel):
     height: float = Field(..., gt=0, description="Sail height in meters (foot to head)")
     mast_position: tuple[float, float, float] = Field(
         default=(0.0, 0.0, 0.0),
-        description="Mast base position (x, y, z) in world coordinates"
+        description="Mast base position (x, y, z) in world coordinates",
     )
     telltales: list[TelltalePoint] = Field(
-        default_factory=list,
-        description="List of telltale points on the sail"
+        default_factory=list, description="List of telltale points on the sail"
     )
 
     @classmethod
@@ -71,9 +82,7 @@ class CameraConfig(BaseModel):
     look_at: tuple[float, float, float] = Field(
         ..., description="Point the camera is looking at (x, y, z) in world coordinates"
     )
-    focal_length: float = Field(
-        ..., gt=0, description="Focal length in pixels"
-    )
+    focal_length: float = Field(..., gt=0, description="Focal length in pixels")
     principal_point: tuple[float, float] = Field(
         ..., description="Principal point (cx, cy) in pixels"
     )
@@ -82,7 +91,7 @@ class CameraConfig(BaseModel):
     )
     up_vector: tuple[float, float, float] = Field(
         default=(0.0, 0.0, 1.0),
-        description="Up vector for camera orientation (default: Z-up)"
+        description="Up vector for camera orientation (default: Z-up)",
     )
 
     @classmethod
@@ -108,14 +117,14 @@ class Sail3DConfig(BaseModel):
 
     sail: SailGeometry = Field(..., description="Sail geometry and telltale positions")
     camera: CameraConfig = Field(..., description="Camera configuration")
-    
+
     # Angle (rotation) parameters
     angle_min: float = Field(default=0.0, description="Minimum sail angle in degrees")
     angle_max: float = Field(default=45.0, description="Maximum sail angle in degrees")
     coarse_steps: int = Field(
         default=10, ge=1, description="Number of discrete angle steps for coarse search"
     )
-    
+
     # Twist parameters (2-DOF tracking)
     twist_min: float = Field(default=0.0, description="Minimum twist angle in degrees")
     twist_max: float = Field(default=30.0, description="Maximum twist angle in degrees")
@@ -143,6 +152,7 @@ class Sail3DConfig(BaseModel):
     def from_json_file(cls, path: str) -> "Sail3DConfig":
         """Load Sail3DConfig from a JSON file."""
         import json
+
         with open(path) as f:
             data = json.load(f)
         return cls.from_json_dict(data)

@@ -38,7 +38,7 @@ class StereoAugmentor(object):
         self.v_flip_prob = v_flip_prob
         self.color_aug_asym = color_aug_asym
         self.color_choice_prob = color_choice_prob
-        
+
     def _random_scale(self, img1, img2, disp):
         ch,cw = self.crop_size
         h,w = img1.shape[:2]
@@ -53,7 +53,7 @@ class StereoAugmentor(object):
             img1 = cv2.resize(img1, None, fx=scale_x, fy=scale_y, interpolation=cv2.INTER_LINEAR)
             img2 = cv2.resize(img2, None, fx=scale_x, fy=scale_y, interpolation=cv2.INTER_LINEAR)
             disp = cv2.resize(disp, None, fx=scale_x, fy=scale_y, interpolation=cv2.INTER_LINEAR if not self.scale_interp_nearest else cv2.INTER_NEAREST) * scale_x
-        else: # check if we need to resize to be able to crop 
+        else: # check if we need to resize to be able to crop
             h,w = img1.shape[:2]
             clip_scale = (cw+8) / float(w)
             if clip_scale>1.:
@@ -62,9 +62,9 @@ class StereoAugmentor(object):
                 img1 = cv2.resize(img1, None, fx=scale_x, fy=scale_y, interpolation=cv2.INTER_LINEAR)
                 img2 = cv2.resize(img2, None, fx=scale_x, fy=scale_y, interpolation=cv2.INTER_LINEAR)
                 disp = cv2.resize(disp, None, fx=scale_x, fy=scale_y, interpolation=cv2.INTER_LINEAR if not self.scale_interp_nearest else cv2.INTER_NEAREST) * scale_x
-        return img1, img2, disp 
-                
-    def _random_crop(self, img1, img2, disp): 
+        return img1, img2, disp
+
+    def _random_crop(self, img1, img2, disp):
         h,w = img1.shape[:2]
         ch,cw = self.crop_size
         assert ch<=h and cw<=w, (img1.shape, h,w,ch,cw)
@@ -74,7 +74,7 @@ class StereoAugmentor(object):
         img2 = img2[offset_y:offset_y+ch,offset_x:offset_x+cw]
         disp = disp[offset_y:offset_y+ch,offset_x:offset_x+cw]
         return img1, img2, disp
-    
+
     def _random_vflip(self, img1, img2, disp):
         # vertical flip
         if self.v_flip_prob>0 and np.random.rand() < self.v_flip_prob:
@@ -82,7 +82,7 @@ class StereoAugmentor(object):
             img2 = np.copy(np.flipud(img2))
             disp = np.copy(np.flipud(disp))
         return img1, img2, disp
-        
+
     def _random_rotate_shift_right(self, img2):
         if self.rightjitterprob>0. and np.random.rand()<self.rightjitterprob:
             angle, pixel = 0.1, 2
@@ -94,7 +94,7 @@ class StereoAugmentor(object):
             trans_mat = np.float32([[1, 0, 0], [0, 1, px]])
             img2 = cv2.warpAffine(img2, trans_mat, img2.shape[1::-1], flags=cv2.INTER_LINEAR)
         return img2
-            
+
     def _random_color_contrast(self, img1, img2):
         if np.random.random() < 0.5:
             contrast_factor = np.random.uniform(0.8, 1.2)
@@ -129,7 +129,7 @@ class StereoAugmentor(object):
             img1 = FF.adjust_saturation(img1, saturation)
             if self.color_aug_asym and np.random.random() < 0.5: saturation = np.random.uniform(-0.8,1.2)
             img2 = FF.adjust_saturation(img2, saturation)
-        return img1, img2   
+        return img1, img2
     def _random_color(self, img1, img2):
         trfs = [self._random_color_contrast,self._random_color_gamma,self._random_color_brightness,self._random_color_hue,self._random_color_saturation]
         img1 = Image.fromarray(img1.astype('uint8'))
@@ -147,7 +147,7 @@ class StereoAugmentor(object):
         img1 = np.array(img1).astype(np.float32)
         img2 = np.array(img2).astype(np.float32)
         return img1, img2
-                    
+
     def __call__(self, img1, img2, disp, dataset_name):
         img1, img2, disp = self._random_scale(img1, img2, disp)
         img1, img2, disp = self._random_crop(img1, img2, disp)
@@ -161,7 +161,7 @@ class StereoAugmentor(object):
 class FlowAugmentor:
 
     def __init__(self, crop_size, min_scale=-0.2, max_scale=0.5, spatial_aug_prob=0.8, stretch_prob=0.8, max_stretch=0.2, h_flip_prob=0.5, v_flip_prob=0.1, asymmetric_color_aug_prob=0.2):
-    
+
         # spatial augmentation params
         self.crop_size = crop_size
         self.min_scale = min_scale
@@ -178,7 +178,7 @@ class FlowAugmentor:
         self.photo_aug = ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.5 / 3.14)
 
         self.asymmetric_color_aug_prob = asymmetric_color_aug_prob
-        
+
     def color_transform(self, img1, img2):
         """ Photometric augmentation """
 
@@ -214,7 +214,7 @@ class FlowAugmentor:
 
             ht1 = int(round(ht * fy/factor))
             wd1 = int(round(wd * fx/factor))
-            
+
             rescale = np.expand_dims(np.array([fx, fy]), axis=0)
             coords1 = coords0 * rescale / factor
             flow1 = flow0 * rescale
@@ -230,9 +230,9 @@ class FlowAugmentor:
             flow = np.inf * np.ones([ht1, wd1, 2], dtype=np.float32) # invalid value every where, before we fill it with the correct ones
             flow[yy, xx] = flow1
         return flow
-        
+
     def spatial_transform(self, img1, img2, flow, dname):
-    
+
         if np.random.rand() < self.spatial_aug_prob:
             # randomly sample scale
             ht, wd = img1.shape[:2]
@@ -264,7 +264,7 @@ class FlowAugmentor:
             img1 = img1[::-1, :]
             img2 = img2[::-1, :]
             flow = flow[::-1, :] * [1.0, -1.0]
-                
+
         # In case no cropping
         if img1.shape[0] - self.crop_size[0] > 0:
             y0 = np.random.randint(0, img1.shape[0] - self.crop_size[0])

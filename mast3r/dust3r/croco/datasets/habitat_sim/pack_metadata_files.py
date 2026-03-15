@@ -24,7 +24,7 @@ if __name__ == "__main__":
     input_metadata_filenames = glob.iglob(f"{input_dirname}/**/metadata.json", recursive=True)
 
     images_count = collections.defaultdict(lambda : 0)
-    
+
     os.makedirs(output_dirname)
     for input_filename in tqdm(input_metadata_filenames):
         # Ignore empty files
@@ -57,7 +57,7 @@ if __name__ == "__main__":
         scene_split = metadata["scene"].split("/")
         upper_level = "/".join(scene_split[:2]) if scene_split[0] == "hm3d" else scene_split[0]
         images_count[upper_level] += len(metadata["multiviews"])
-        
+
         output_filename = os.path.join(output_dirname, relpath)
         os.makedirs(os.path.dirname(output_filename), exist_ok=True)
         with open(output_filename, "w") as f:

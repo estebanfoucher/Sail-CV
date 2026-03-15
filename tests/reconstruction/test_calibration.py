@@ -1,6 +1,8 @@
 from pathlib import Path
-from calibration import Scene
+
 import pytest
+
+from calibration import Scene
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -11,7 +13,7 @@ def _is_raw_data_available():
         stereo_data_folder_path = str(PROJECT_ROOT / "data")
 
         # Create scene and calibrate intrinsics for both cameras
-        scene = Scene(scene_name, stereo_data_folder_path)
+        Scene(scene_name, stereo_data_folder_path)
         return True
     except Exception:
         return False

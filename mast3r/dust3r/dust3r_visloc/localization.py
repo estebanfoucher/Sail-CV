@@ -26,7 +26,7 @@ try:
         HAS_PYCOLMAP = True
 except Exception as e:
     HAS_PYCOLMAP = False
-    
+
 def run_pnp(pts2D, pts3D, K, distortion = None, mode='cv2', reprojectionError=5, img_size = None):
     """
     use OPENCV model for distortion (4 values)
@@ -70,7 +70,7 @@ def run_pnp(pts2D, pts3D, K, distortion = None, mode='cv2', reprojectionError=5,
             else:
                 camera = {'model': 'OPENCV', 'width': width, 'height': height,
                           'params': [fx, fy, cx, cy] + distortion}
-            
+
             pts2D = np.copy(pts2D)
             pts2D[:, 0] += 0.5
             pts2D[:, 1] += 0.5
@@ -86,7 +86,7 @@ def run_pnp(pts2D, pts3D, K, distortion = None, mode='cv2', reprojectionError=5,
         elif len(pts2D) > 4 and mode == "pycolmap":
             assert HAS_PYCOLMAP
             assert img_size is not None
-            
+
             pts2D = np.copy(pts2D)
             pts2D[:, 0] += 0.5
             pts2D[:, 1] += 0.5
@@ -124,7 +124,7 @@ def run_pnp(pts2D, pts3D, K, distortion = None, mode='cv2', reprojectionError=5,
                     retmat = ret['cam_from_world'].matrix
                 ret['qvec'] = quaternion.from_rotation_matrix(retmat[:3, :3])
                 ret['tvec'] = retmat[:3, 3]
-                
+
             if not (ret['success'] and ret['num_inliers'] > 0):
                 success = False
                 pose = None

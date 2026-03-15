@@ -2,7 +2,7 @@
 
 The instructions below allow to generate the crops used for pre-training CroCo v2 from the following real-world datasets: ARKitScenes, MegaDepth, 3DStreetView and IndoorVL.
 
-### Download the metadata of the crops to generate 
+### Download the metadata of the crops to generate
 
 First, download the metadata and put them in `./data/`:
 ```
@@ -14,7 +14,7 @@ rm crop_metadata.zip
 cd ..
 ```
 
-### Prepare the original datasets 
+### Prepare the original datasets
 
 Second, download the original datasets in `./data/original_datasets/`.
 ```
@@ -32,7 +32,7 @@ The resulting file structure should be like:
      │  │   ultrawide
      │  │   ...
      └───40753686
-     │   
+     │
       ...
 ```
 
@@ -49,7 +49,7 @@ The resulting file structure should be like:
 │    │      └ ...
 │    └─── ...
 └───0001
-│   │   
+│   │
 │   └ ...
 └─── ...
 ```
@@ -59,7 +59,7 @@ The resulting file structure should be like:
 Download `3D_Street_View` dataset from https://github.com/amir32002/3D_Street_View and put it in `./data/original_datasets/3DStreetView/`.
 The resulting file structure should be like:
 
-``` 
+```
 ./data/original_datasets/3DStreetView/
 └───dataset_aligned
 │   └───0002
@@ -91,8 +91,8 @@ cd -
 
 Now, extract the crops for each of the dataset:
 ```
-for dataset in ARKitScenes MegaDepth 3DStreetView IndoorVL; 
-do 
+for dataset in ARKitScenes MegaDepth 3DStreetView IndoorVL;
+do
   python3 datasets/crops/extract_crops_from_images.py --crops ./data/crop_metadata/${dataset}/crops_release.txt --root-dir ./data/original_datasets/${dataset}/ --output-dir ./data/${dataset}_crops/ --imsize 256 --nthread 8 --max-subdir-levels 5 --ideal-number-pairs-in-dir 500;
 done
 ```

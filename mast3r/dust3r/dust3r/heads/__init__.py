@@ -9,7 +9,7 @@ from .dpt_head import create_dpt_head
 
 
 def head_factory(head_type, output_mode, net, has_conf=False):
-    """" build a prediction head for the decoder 
+    """" build a prediction head for the decoder
     """
     if head_type == 'linear' and output_mode == 'pts3d':
         return LinearPts3d(net, has_conf)

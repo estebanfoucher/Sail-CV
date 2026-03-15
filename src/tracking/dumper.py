@@ -5,7 +5,6 @@ from pathlib import Path
 
 import cv2
 from loguru import logger
-
 from pipeline import make_json_serializable
 from video import FFmpegVideoWriter
 

@@ -33,9 +33,9 @@ class BasePCOptimizer (nn.Module):
     def __init__(self, *args, **kwargs):
         if len(args) == 1 and len(kwargs) == 0:
             other = deepcopy(args[0])
-            attrs = '''edges is_symmetrized dist n_imgs pred_i pred_j imshapes 
+            attrs = '''edges is_symmetrized dist n_imgs pred_i pred_j imshapes
                         min_conf_thr conf_thr conf_i conf_j im_conf
-                        base_scale norm_pw_scale POSE_DIM pw_poses 
+                        base_scale norm_pw_scale POSE_DIM pw_poses
                         pw_adaptors pw_adaptors has_im_poses rand_pose imgs verbose'''.split()
             self.__dict__.update({k: other[k] for k in attrs})
         else:
@@ -367,9 +367,9 @@ def global_alignment_iter(net, cur_iter, niter, lr_base, lr_min, optimizer, sche
 
 
 @torch.no_grad()
-def clean_pointcloud( im_confs, K, cams, depthmaps, all_pts3d, 
+def clean_pointcloud( im_confs, K, cams, depthmaps, all_pts3d,
                       tol=0.001, bad_conf=0, dbg=()):
-    """ Method: 
+    """ Method:
     1) express all 3d points in each camera coordinate frame
     2) if they're in front of a depthmap --> then lower their confidence
     """
@@ -380,7 +380,7 @@ def clean_pointcloud( im_confs, K, cams, depthmaps, all_pts3d,
     # reshape appropriately
     all_pts3d = [p.view(*c.shape,3) for p,c in zip(all_pts3d, im_confs)]
     depthmaps = [d.view(*c.shape) for d,c in zip(depthmaps, im_confs)]
-    
+
     for i, pts3d in enumerate(all_pts3d):
         for j in range(len(all_pts3d)):
             if i == j: continue

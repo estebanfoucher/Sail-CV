@@ -49,11 +49,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module, metrics:
         len_data_loader, iter_per_epoch = len(data_loader), None
 
     for data_iter_step, (image1, image2, gt, pairname) in enumerate(metric_logger.log_every(data_loader, print_freq, header, max_iter=iter_per_epoch)):
-        
+
         image1 = image1.to(device, non_blocking=True)
         image2 = image2.to(device, non_blocking=True)
         gt = gt.to(device, non_blocking=True)
-        
+
         # we use a per iteration (instead of per epoch) lr scheduler
         if data_iter_step % accum_iter == 0:
             misc.adjust_learning_rate(optimizer, data_iter_step / len_data_loader + epoch, args)
@@ -63,7 +63,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module, metrics:
             prediction, conf = split_prediction_conf(prediction, criterion.with_conf)
             batch_metrics = metrics(prediction.detach(), gt)
             loss = criterion(prediction, gt) if conf is None else criterion(prediction, gt, conf)
-            
+
         loss_value = loss.item()
         if not math.isfinite(loss_value):
             print("Loss is {}, stopping training".format(loss_value))
@@ -76,7 +76,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module, metrics:
             optimizer.zero_grad()
 
         torch.cuda.synchronize()
-        
+
         metric_logger.update(loss=loss_value)
         for k,v in batch_metrics.items():
             metric_logger.update(**{k: v.item()})
@@ -117,7 +117,7 @@ def validate_one_epoch(model: torch.nn.Module,
 
     conf_mode = args.tile_conf_mode
     crop = args.crop
-    
+
     if log_writer is not None:
         print('log_dir: {}'.format(log_writer.log_dir))
 
@@ -145,12 +145,12 @@ def validate_one_epoch(model: torch.nn.Module,
                 metric_loggers[didx].update(**{f'loss': loss_value})
                 for k,v in batch_metrics.items():
                     metric_loggers[didx].update(**{dname+'_' + k: v.item()})
-        
+
     results = {k: meter.global_avg for ml in metric_loggers for k, meter in ml.meters.items()}
     if len(dnames)>1:
         for k in batch_metrics.keys():
             results['AVG_'+k] = sum(results[dname+'_'+k] for dname in dnames) / len(dnames)
-            
+
     if log_writer is not None :
         epoch_1000x = int((1 + epoch) * 1000)
         for k,v in results.items():
@@ -169,19 +169,19 @@ def _resize_stereo_or_flow(data, new_size):
     out = F.interpolate(data, size=new_size, mode='bicubic', align_corners=False)
     out[:,0,:,:] *= scale_x
     if out.size(1)==2:
-        scale_y = new_size[0]/float(data.size(2))        
+        scale_y = new_size[0]/float(data.size(2))
         out[:,1,:,:] *= scale_y
         print(scale_x, new_size, data.shape)
     return out
-    
+
 
 @torch.no_grad()
 def tiled_pred(model, criterion, img1, img2, gt,
                overlap=0.5, bad_crop_thr=0.05,
                downscale=False, crop=512, ret='loss',
-               conf_mode='conf_expsigmoid_10_5', with_conf=False, 
+               conf_mode='conf_expsigmoid_10_5', with_conf=False,
                return_time=False):
-                     
+
     # for each image, we are going to run inference on many overlapping patches
     # then, all predictions will be weighted-averaged
     if gt is not None:
@@ -190,10 +190,10 @@ def tiled_pred(model, criterion, img1, img2, gt,
         B, _, H, W = img1.shape
         C = model.head.num_channels-int(with_conf)
     win_height, win_width = crop[0], crop[1]
-    
+
     # upscale to be larger than the crop
     do_change_scale =  H<win_height or W<win_width
-    if do_change_scale: 
+    if do_change_scale:
         upscale_factor = max(win_width/W, win_height/W)
         original_size = (H,W)
         new_size = (round(H*upscale_factor),round(W*upscale_factor))
@@ -202,7 +202,7 @@ def tiled_pred(model, criterion, img1, img2, gt,
         # resize gt just for the computation of tiled losses
         if gt is not None: gt = _resize_stereo_or_flow(gt, new_size)
         H,W = img1.shape[2:4]
-        
+
     if conf_mode.startswith('conf_expsigmoid_'): # conf_expsigmoid_30_10
         beta, betasigmoid = map(float, conf_mode[len('conf_expsigmoid_'):].split('_'))
     elif conf_mode.startswith('conf_expbeta'): # conf_expbeta3
@@ -216,12 +216,12 @@ def tiled_pred(model, criterion, img1, img2, gt,
             yield sy, sx, sy, sx, True
 
     # keep track of weighted sum of prediction*weights and weights
-    accu_pred = img1.new_zeros((B, C, H, W)) # accumulate the weighted sum of predictions 
-    accu_conf = img1.new_zeros((B, H, W)) + 1e-16 # accumulate the weights 
+    accu_pred = img1.new_zeros((B, C, H, W)) # accumulate the weighted sum of predictions
+    accu_conf = img1.new_zeros((B, H, W)) + 1e-16 # accumulate the weights
     accu_c = img1.new_zeros((B, H, W)) # accumulate the weighted sum of confidences ; not so useful except for computing some losses
 
     tiled_losses = []
-    
+
     if return_time:
         start = torch.cuda.Event(enable_timing=True)
         end = torch.cuda.Event(enable_timing=True)
@@ -231,22 +231,22 @@ def tiled_pred(model, criterion, img1, img2, gt,
         # compute optical flow there
         pred =  model(_crop(img1,sy1,sx1), _crop(img2,sy2,sx2))
         pred, predconf = split_prediction_conf(pred, with_conf=with_conf)
-        
+
         if gt is not None: gtcrop = _crop(gt,sy1,sx1)
-        if criterion is not None and gt is not None: 
+        if criterion is not None and gt is not None:
             tiled_losses.append( criterion(pred, gtcrop).item() if predconf is None else criterion(pred, gtcrop, predconf).item() )
-        
+
         if conf_mode.startswith('conf_expsigmoid_'):
             conf = torch.exp(- beta * 2 * (torch.sigmoid(predconf / betasigmoid) - 0.5)).view(B,win_height,win_width)
         elif conf_mode.startswith('conf_expbeta'):
             conf = torch.exp(- beta * predconf).view(B,win_height,win_width)
         else:
             raise NotImplementedError
-                        
+
         accu_pred[...,sy1,sx1] += pred * conf[:,None,:,:]
         accu_conf[...,sy1,sx1] += conf
-        accu_c[...,sy1,sx1] += predconf.view(B,win_height,win_width) * conf 
-        
+        accu_c[...,sy1,sx1] += predconf.view(B,win_height,win_width) * conf
+
     pred = accu_pred / accu_conf[:, None,:,:]
     c = accu_c / accu_conf
     assert not torch.any(torch.isnan(pred))
@@ -258,7 +258,7 @@ def tiled_pred(model, criterion, img1, img2, gt,
 
     if do_change_scale:
         pred = _resize_stereo_or_flow(pred, original_size)
-    
+
     if return_time:
         return pred, torch.mean(torch.tensor(tiled_losses)), c, time
     return pred, torch.mean(torch.tensor(tiled_losses)), c

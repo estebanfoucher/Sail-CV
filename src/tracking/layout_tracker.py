@@ -5,8 +5,8 @@ Uses weighted distance + confidence scoring with Hungarian (1-to-1) assignment.
 Track IDs are the layout position IDs (e.g., "TL", "TR").
 """
 
-import math
 import logging
+import math
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
@@ -66,9 +66,7 @@ class LayoutTracker:
         self.diagonal = math.sqrt(width**2 + height**2)
 
         # Precompute layout positions in pixels
-        self._layout_pixels = [
-            pos.to_pixel(width, height) for pos in layout.positions
-        ]
+        self._layout_pixels = [pos.to_pixel(width, height) for pos in layout.positions]
 
         logger.info(
             f"[LayoutTracker] Initialized with {len(layout.positions)} layout positions, "
@@ -191,4 +189,3 @@ class LayoutTracker:
             if pos.id == layout_id:
                 return pos
         return None
-

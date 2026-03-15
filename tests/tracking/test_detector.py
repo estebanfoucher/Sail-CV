@@ -3,9 +3,10 @@ from pathlib import Path
 
 # main class not to test but used for tests of architectures
 def detector(model_path=None, architecture=None):
-    from models import ModelSpecs, Image
     from detector import Detector
     from video import FFmpegVideoWriter, VideoReader
+
+    from models import Image, ModelSpecs
 
     project_root = Path(__file__).resolve().parents[2]
 
@@ -49,7 +50,9 @@ def detector(model_path=None, architecture=None):
 
 
 def test_tell_tale_detector_rt_detr():
-    rt_detr_model_path = Path(__file__).resolve().parents[2] / "checkpoints" / "rt-detr.pt"
+    rt_detr_model_path = (
+        Path(__file__).resolve().parents[2] / "checkpoints" / "rt-detr.pt"
+    )
     detector(model_path=rt_detr_model_path, architecture="rt-detr")
 
 

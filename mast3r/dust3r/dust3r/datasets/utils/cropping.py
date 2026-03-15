@@ -54,7 +54,7 @@ class ImageList:
 
 
 def rescale_image_depthmap(image, depthmap, camera_intrinsics, output_resolution, force=True):
-    """ Jointly rescale a (image, depthmap) 
+    """ Jointly rescale a (image, depthmap)
         so that (out_width, out_height) >= output_res
     """
     image = ImageList(image)

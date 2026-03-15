@@ -17,8 +17,8 @@ Cambridge_Landmarks
 ├─ kapture
 │   ├─ GreatCourt
 │   │  └─ query  # https://github.com/naver/kapture/blob/main/doc/datasets.adoc#cambridge-landmarks
-│   ... 
-├─ GreatCourt 
+│   ...
+├─ GreatCourt
 │   ├─ pairsfile/query
 │   │     └─ AP-GeM-LM18_top50.txt  # https://github.com/naver/deep-image-retrieval/blob/master/dirtorch/extract_kapture.py followed by https://github.com/naver/kapture-localization/blob/main/tools/kapture_compute_image_pairs.py
 │   ├─ seq1

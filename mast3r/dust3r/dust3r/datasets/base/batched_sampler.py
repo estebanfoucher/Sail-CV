@@ -9,7 +9,7 @@ import torch
 
 
 class BatchedRandomSampler:
-    """ Random sampling under a constraint: each sample in the batch has the same feature, 
+    """ Random sampling under a constraint: each sample in the batch has the same feature,
     which is chosen randomly from a known pool of 'features' for each batch.
 
     For instance, the 'feature' could be the image aspect-ratio.

@@ -113,7 +113,7 @@ class ResizedDataset (EasyDataset):
 
 
 class CatDataset (EasyDataset):
-    """ Concatenation of several datasets 
+    """ Concatenation of several datasets
     """
 
     def __init__(self, datasets):

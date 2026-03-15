@@ -52,7 +52,7 @@ class AsymmetricCroCo3DStereo (
 ):
     """ Two siamese encoders, followed by two decoders.
     The goal is to output 3d points directly, both images in view1's frame
-    (hence the asymmetry).   
+    (hence the asymmetry).
     """
 
     def __init__(self,

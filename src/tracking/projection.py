@@ -73,11 +73,13 @@ def sail_to_world(
 
     # Add mast position offset
     mast_x, mast_y, mast_z = sail.mast_position
-    world_point = np.array([
-        mast_x + rotated_x,
-        mast_y + rotated_y,
-        mast_z + rotated_z,
-    ])
+    world_point = np.array(
+        [
+            mast_x + rotated_x,
+            mast_y + rotated_y,
+            mast_z + rotated_z,
+        ]
+    )
 
     return world_point
 
@@ -168,7 +170,7 @@ def camera_to_pixel(
 
     # Avoid division by zero for points behind camera
     if z <= 0:
-        return (float('nan'), float('nan'))
+        return (float("nan"), float("nan"))
 
     # Pinhole projection (assuming fx = fy = focal_length)
     fx = fy = camera.focal_length
@@ -311,25 +313,25 @@ def get_sail_mesh_world(
         List of 4x3 numpy arrays, each representing a quad's corners
     """
     quads = []
-    
+
     for i in range(num_strips):
         v_bottom = i / num_strips
         v_top = (i + 1) / num_strips
-        
+
         # Four corners of this strip
         corners_uv = [
             (0.0, v_bottom),  # bottom-luff
             (1.0, v_bottom),  # bottom-leech
-            (1.0, v_top),     # top-leech
-            (0.0, v_top),     # top-luff
+            (1.0, v_top),  # top-leech
+            (0.0, v_top),  # top-luff
         ]
-        
+
         quad_corners = []
         for u, v in corners_uv:
             temp_point = TelltalePoint(id="mesh", name="mesh", u=u, v=v)
             world_pos = sail_to_world(temp_point, sail, base_angle_deg, twist_deg)
             quad_corners.append(world_pos)
-        
+
         quads.append(np.array(quad_corners))
-    
+
     return quads

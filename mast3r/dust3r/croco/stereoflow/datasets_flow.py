@@ -10,7 +10,7 @@ import os.path as osp
 import pickle
 import numpy as np
 import struct
-from PIL import Image 
+from PIL import Image
 import json
 import h5py
 import torch
@@ -34,10 +34,10 @@ def flow_to_tensor(disp):
     return torch.from_numpy(disp).float().permute(2, 0, 1)
 
 class FlowDataset(data.Dataset):
-    
+
     def __init__(self, split, augmentor=False, crop_size=None, totensor=True):
         self.split = split
-        if not augmentor: assert crop_size is None 
+        if not augmentor: assert crop_size is None
         if crop_size is not None: assert augmentor
         self.crop_size = crop_size
         self.augmentor_str = augmentor
@@ -47,24 +47,24 @@ class FlowDataset(data.Dataset):
         self.has_constant_resolution = True # whether the dataset has constant resolution or not (=> don't use batch_size>1 at test time)
         self._prepare_data()
         self._load_or_build_cache()
-        
+
     def prepare_data(self):
         """
-        to be defined for each dataset 
+        to be defined for each dataset
         """
-        raise NotImplementedError 
-        
+        raise NotImplementedError
+
     def __len__(self):
-        return len(self.pairnames) # each pairname is typically of the form (str, int1, int2) 
-        
+        return len(self.pairnames) # each pairname is typically of the form (str, int1, int2)
+
     def __getitem__(self, index):
         pairname = self.pairnames[index]
-        
-        # get filenames 
+
+        # get filenames
         img1name = self.pairname_to_img1name(pairname)
         img2name = self.pairname_to_img2name(pairname)
         flowname = self.pairname_to_flowname(pairname) if self.pairname_to_flowname is not None else None
-        
+
         # load images and disparities
         img1 = _read_img(img1name)
         img2 = _read_img(img2name)
@@ -73,26 +73,26 @@ class FlowDataset(data.Dataset):
         # apply augmentations
         if self.augmentor is not None:
             img1, img2, flow = self.augmentor(img1, img2, flow, self.name)
-        
+
         if self.totensor:
             img1 = img_to_tensor(img1)
             img2 = img_to_tensor(img2)
-            if flow is not None: 
+            if flow is not None:
                 flow = flow_to_tensor(flow)
             else:
                 flow = torch.tensor([]) # to allow dataloader batching with default collate_gn
             pairname = str(pairname) # transform potential tuple to str to be able to batch it
 
         return img1, img2, flow, pairname
-        
+
     def __rmul__(self, v):
         self.rmul *= v
         self.pairnames = v * self.pairnames
         return self
-        
+
     def __str__(self):
         return f'{self.__class__.__name__}_{self.split}'
-        
+
     def __repr__(self):
         s = f'{self.__class__.__name__}(split={self.split}, augmentor={self.augmentor_str}, crop_size={str(self.crop_size)}, totensor={self.totensor})'
         if self.rmul==1:
@@ -103,7 +103,7 @@ class FlowDataset(data.Dataset):
 
     def _set_root(self):
         self.root = dataset_to_root[self.name]
-        assert os.path.isdir(self.root), f"could not find root directory for dataset {self.name}: {self.root}"       
+        assert os.path.isdir(self.root), f"could not find root directory for dataset {self.name}: {self.root}"
 
     def _load_or_build_cache(self):
         cache_file = osp.join(cache_dir, self.name+'.pkl')
@@ -128,14 +128,14 @@ class TartanAirDataset(FlowDataset):
         self.pairname_to_flowname = lambda pairname: osp.join(self.root, pairname[0], 'flow/{:06d}_{:06d}_flow.npy'.format(pairname[1],pairname[2]))
         self.pairname_to_str = lambda pairname: os.path.join(pairname[0][pairname[0].find('/')+1:], '{:06d}_{:06d}'.format(pairname[1], pairname[2]))
         self.load_flow = _read_numpy_flow
-        
+
     def _build_cache(self):
         seqs = sorted(os.listdir(self.root))
         pairs = [(osp.join(s,s,difficulty,Pxxx),int(a[:6]),int(a[:6])+1) for s in seqs for difficulty in ['Easy','Hard'] for Pxxx in sorted(os.listdir(osp.join(self.root,s,s,difficulty))) for a in sorted(os.listdir(osp.join(self.root,s,s,difficulty,Pxxx,'image_left/')))[:-1]]
         assert len(pairs)==306268, "incorrect parsing of pairs in TartanAir"
         tosave = {'train': pairs}
         return tosave
-        
+
 class FlyingChairsDataset(FlowDataset):
 
     def _prepare_data(self):
@@ -147,7 +147,7 @@ class FlyingChairsDataset(FlowDataset):
         self.pairname_to_flowname = lambda pairname: osp.join(self.root, 'data', pairname+'_flow.flo')
         self.pairname_to_str = lambda pairname: pairname
         self.load_flow = _read_flo_file
-        
+
     def _build_cache(self):
         split_file = osp.join(self.root, 'chairs_split.txt')
         split_list = np.loadtxt(split_file, dtype=np.int32)
@@ -156,9 +156,9 @@ class FlyingChairsDataset(FlowDataset):
         assert len(trainpairs)==22232 and len(valpairs)==640, "incorrect parsing of pairs in MPI-Sintel"
         tosave = {'train': trainpairs, 'val': valpairs}
         return tosave
-        
+
 class FlyingThingsDataset(FlowDataset):
-    
+
     def _prepare_data(self):
         self.name = "FlyingThings"
         self._set_root()
@@ -168,10 +168,10 @@ class FlyingThingsDataset(FlowDataset):
         self.pairname_to_flowname = lambda pairname: osp.join(self.root, 'optical_flow', pairname[0], 'OpticalFlowInto{f:s}_{i:04d}_{c:s}.pfm'.format(f='Future' if 'future' in pairname[0] else 'Past', i=pairname[1], c='L' if 'left' in pairname[0] else 'R' ))
         self.pairname_to_str = lambda pairname: os.path.join(pairname[3]+'pass', pairname[0], 'Into{f:s}_{i:04d}_{c:s}'.format(f='Future' if 'future' in pairname[0] else 'Past',  i=pairname[1], c='L' if 'left' in pairname[0] else 'R' ))
         self.load_flow = _read_pfm_flow
-        
+
     def _build_cache(self):
         tosave = {}
-        # train and test splits for the different passes 
+        # train and test splits for the different passes
         for set_ in ['train', 'test']:
             sroot = osp.join(self.root, 'optical_flow', set_.upper())
             fname_to_i = lambda f: int(f[len('OpticalFlowIntoFuture_'):-len('_L.pfm')])
@@ -197,10 +197,10 @@ class FlyingThingsDataset(FlowDataset):
             assert len(tosave['test1024_cleanpass'])==1024, "incorrect parsing of pairs in Flying Things"
             tosave[f'test1024_allpass{camstr}'] = tosave[f'test1024_cleanpass{camstr}'] + tosave[f'test1024_finalpass{camstr}']
         return tosave
-        
-      
+
+
 class MPISintelDataset(FlowDataset):
-    
+
     def _prepare_data(self):
         self.name = "MPISintel"
         self._set_root()
@@ -210,7 +210,7 @@ class MPISintelDataset(FlowDataset):
         self.pairname_to_flowname = lambda pairname: None if pairname[0].startswith('test/') else osp.join(self.root, pairname[0].replace('/clean/','/flow/').replace('/final/','/flow/'), 'frame_{:04d}.flo'.format(pairname[1]))
         self.pairname_to_str = lambda pairname: osp.join(pairname[0], 'frame_{:04d}'.format(pairname[1]))
         self.load_flow = _read_flo_file
-        
+
     def _build_cache(self):
         trainseqs = sorted(os.listdir(self.root+'training/clean'))
         trainpairs = [ (osp.join('training/clean', s),i) for s in trainseqs for i in range(1, len(os.listdir(self.root+'training/clean/'+s)))]
@@ -225,18 +225,18 @@ class MPISintelDataset(FlowDataset):
         tosave['train_cleanpass'] = trainpairs
         tosave['test_cleanpass'] = testpairs
         tosave['subval_cleanpass'] = subvalpairs
-        tosave['subtrain_cleanpass'] = subtrainpairs         
-        for t in ['train','test','subval','subtrain']: 
+        tosave['subtrain_cleanpass'] = subtrainpairs
+        for t in ['train','test','subval','subtrain']:
             tosave[t+'_finalpass'] = [(p.replace('/clean/','/final/'),i) for p,i in tosave[t+'_cleanpass']]
-            tosave[t+'_allpass'] = tosave[t+'_cleanpass'] + tosave[t+'_finalpass'] 
+            tosave[t+'_allpass'] = tosave[t+'_cleanpass'] + tosave[t+'_finalpass']
         return tosave
-        
+
     def submission_save_pairname(self, pairname, prediction, outdir, _time):
         assert prediction.shape[2]==2
         outfile = os.path.join(outdir, 'submission', self.pairname_to_str(pairname)+'.flo')
         os.makedirs( os.path.dirname(outfile), exist_ok=True)
         writeFlowFile(prediction, outfile)
-        
+
     def finalize_submission(self, outdir):
         assert self.split == 'test_allpass'
         bundle_exe = "/nfs/data/ffs-3d/datasets/StereoFlow/MPI-Sintel/bundler/linux-x64/bundler" # eg <bundle_exe> <path_to_results_for_clean> <path_to_results_for_final> <output/bundled.lzma>
@@ -249,7 +249,7 @@ class MPISintelDataset(FlowDataset):
             print('Could not find bundler executable for submission.')
             print('Please download it and run:')
             print(f'<bundle_exe> "{outdir}/submission/test/clean/" "{outdir}/submission/test/final" "{outdir}/submission/bundled.lzma"')
-        
+
 class SpringDataset(FlowDataset):
 
     def _prepare_data(self):
@@ -263,13 +263,13 @@ class SpringDataset(FlowDataset):
         self.load_flow = _read_hdf5_flow
 
     def _build_cache(self):
-        # train 
+        # train
         trainseqs = sorted(os.listdir( osp.join(self.root,'train')))
         trainpairs = []
         for leftright in ['left','right']:
             for fwbw in ['FW','BW']:
                 trainpairs += [('train',s,fwbw,leftright,int(f[len(f'flow_{fwbw}_{leftright}_'):-len('.flo5')])) for s in trainseqs for f in sorted(os.listdir(osp.join(self.root,'train',s,f'flow_{fwbw}_{leftright}')))]
-        # test 
+        # test
         testseqs = sorted(os.listdir( osp.join(self.root,'test')))
         testpairs = []
         for leftright in ['left','right']:
@@ -281,7 +281,7 @@ class SpringDataset(FlowDataset):
         assert len(trainpairs)==19852 and len(testpairs)==3960 and len(subtrainpairs)==19472 and len(subvalpairs)==380, "incorrect parsing of pairs in Spring"
         tosave = {'train': trainpairs, 'test': testpairs, 'subtrain': subtrainpairs, 'subval': subvalpairs}
         return tosave
-        
+
     def submission_save_pairname(self, pairname, prediction, outdir, time):
         assert prediction.ndim==3
         assert prediction.shape[2]==2
@@ -289,7 +289,7 @@ class SpringDataset(FlowDataset):
         outfile = osp.join(outdir, pairname[0], pairname[1], f'flow_{pairname[2]}_{pairname[3]}', f'flow_{pairname[2]}_{pairname[3]}_{pairname[4]:04d}.flo5')
         os.makedirs( os.path.dirname(outfile), exist_ok=True)
         writeFlo5File(prediction, outfile)
-        
+
     def finalize_submission(self, outdir):
         assert self.split=='test'
         exe = "{self.root}/flow_subsampling"
@@ -303,7 +303,7 @@ class SpringDataset(FlowDataset):
             print('Please download it and run:')
             print(f'cd "{outdir}/test"; <flow_subsampling_exe> .')
 
-        
+
 class Kitti12Dataset(FlowDataset):
 
     def _prepare_data(self):
@@ -315,13 +315,13 @@ class Kitti12Dataset(FlowDataset):
         self.pairname_to_flowname = None if self.split=='test' else lambda pairname: osp.join(self.root, pairname.replace('/colored_0/','/flow_occ/')+'_10.png')
         self.pairname_to_str = lambda pairname: pairname.replace('/colored_0/','/')
         self.load_flow = _read_kitti_flow
-        
+
     def _build_cache(self):
         trainseqs = ["training/colored_0/%06d"%(i) for i in range(194)]
         testseqs = ["testing/colored_0/%06d"%(i) for i in range(195)]
         assert len(trainseqs)==194 and len(testseqs)==195, "incorrect parsing of pairs in Kitti12"
         tosave = {'train': trainseqs, 'test': testseqs}
-        return tosave 
+        return tosave
 
     def submission_save_pairname(self, pairname, prediction, outdir, time):
         assert prediction.ndim==3
@@ -339,7 +339,7 @@ class Kitti12Dataset(FlowDataset):
 
 
 class Kitti15Dataset(FlowDataset):
-    
+
     def _prepare_data(self):
         self.name = "Kitti15"
         self._set_root()
@@ -349,7 +349,7 @@ class Kitti15Dataset(FlowDataset):
         self.pairname_to_flowname = None if self.split=='test' else lambda pairname: osp.join(self.root, pairname.replace('/image_2/','/flow_occ/')+'_10.png')
         self.pairname_to_str = lambda pairname: pairname.replace('/image_2/','/')
         self.load_flow = _read_kitti_flow
-        
+
     def _build_cache(self):
         trainseqs = ["training/image_2/%06d"%(i) for i in range(200)]
         subtrainseqs = trainseqs[:-10]
@@ -357,7 +357,7 @@ class Kitti15Dataset(FlowDataset):
         testseqs = ["testing/image_2/%06d"%(i) for i in range(200)]
         assert len(trainseqs)==200 and len(subtrainseqs)==190 and len(subvalseqs)==10 and len(testseqs)==200, "incorrect parsing of pairs in Kitti15"
         tosave = {'train': trainseqs, 'subtrain': subtrainseqs, 'subval': subvalseqs, 'test': testseqs}
-        return tosave 
+        return tosave
 
     def submission_save_pairname(self, pairname, prediction, outdir, time):
         assert prediction.ndim==3
@@ -375,9 +375,9 @@ class Kitti15Dataset(FlowDataset):
 
 
 import cv2
-def _read_numpy_flow(filename): 
+def _read_numpy_flow(filename):
     return np.load(filename)
-    
+
 def _read_pfm_flow(filename):
     f, _ = _read_pfm(filename)
     assert np.all(f[:,:,2]==0.0)
@@ -399,11 +399,11 @@ def readFlowFile(filename):
     ---- OUTPUTS ----
         a np.array of dimension (height x width x 2) containing the flow of type 'float32'
     """
-        
+
     # check filename
     if not filename.endswith(".flo"):
         raise Exception("readFlowFile({:s}): filename must finish with '.flo'".format(filename))
-    
+
     # open the file and read it
     with open(filename,'rb') as f:
         # check tag
@@ -431,11 +431,11 @@ def writeFlowFile(flow,filename):
         flow: np.array of dimension (height x width x 2) containing the flow to write
         filename: string containg the name of the file to write a flow
     """
-    
+
     # check filename
     if not filename.endswith(".flo"):
         raise Exception("flow_utils.writeFlowFile(<flow>,{:s}): filename must finish with '.flo'".format(filename))
-    
+
     if not flow.shape[2:] == (2,):
         raise Exception("flow_utils.writeFlowFile(<flow>,{:s}): <flow> must have 2 bands".format(filename))
 
@@ -447,9 +447,9 @@ def writeFlowFile(flow,filename):
         # write dimension
         f.write( struct.pack('ii',flow.shape[1],flow.shape[0]) )
         # write the flow
-        
+
         flow.astype(np.float32).tofile(f)
-        
+
 _read_flo_file = readFlowFile
 
 def _read_kitti_flow(filename):
@@ -462,8 +462,8 @@ def _read_kitti_flow(filename):
     flow[~valid,1] = np.inf
     return flow
 _read_hd1k_flow = _read_kitti_flow
-    
-        
+
+
 def writeFlowKitti(filename, uv):
     uv = 64.0 * uv + 2 ** 15
     valid = np.ones([uv.shape[0], uv.shape[1], 1])
@@ -473,7 +473,7 @@ def writeFlowKitti(filename, uv):
 def writeFlo5File(flow, filename):
     with h5py.File(filename, "w") as f:
         f.create_dataset("flow", data=flow, compression="gzip", compression_opts=5)
-    
+
 def _read_hdf5_flow(filename):
     flow = np.asarray(h5py.File(filename)['flow'])
     flow[np.isnan(flow)] = np.inf # make invalid values as +inf
@@ -505,7 +505,7 @@ def colorTest():
     plt.axis('off')
     plt.axhline(round(h/2),color='k')
     plt.axvline(round(w/2),color='k')
-    
+
 def flowToColor(flow, maxflow=None, maxmaxflow=None, saturate=False):
     """
     flow_utils.flowToColor(flow): return a color code flow field, normalized based on the maximum l2-norm of the flow
@@ -533,7 +533,7 @@ def flowToColor(flow, maxflow=None, maxmaxflow=None, saturate=False):
     # compute the flow
     img = _computeColor(flow/(maxflow+eps), saturate=saturate)
     # put black pixels in unknown location
-    img[ np.tile( unknown_idx[:,:,np.newaxis],[1,1,3]) ] = 0.0 
+    img[ np.tile( unknown_idx[:,:,np.newaxis],[1,1,3]) ] = 0.0
     return img
 
 def flowMaxNorm(flow):
@@ -541,7 +541,7 @@ def flowMaxNorm(flow):
     flow_utils.flowMaxNorm(flow): return the maximum of the l2-norm of the given flow
     ---- PARAMETERS ----
         flow: the flow
-        
+
     ---- OUTPUT ----
         a float containing the maximum of the l2-norm of the flow
     """
@@ -550,7 +550,7 @@ def flowMaxNorm(flow):
 def _computeColor(flow, saturate=True):
     """
     flow_utils._computeColor(flow): compute color codes for the flow field flow
-    
+
     ---- PARAMETERS ----
         flow: np.array of dimension (height x width x 2) containing the flow to display
     ---- OUTPUTS ----
@@ -559,7 +559,7 @@ def _computeColor(flow, saturate=True):
     # set nan to 0
     nanidx = np.isnan(flow[:,:,0])
     flow[nanidx] = 0.0
-    
+
     # colorwheel
     ncols = RY + YG + GC + CB + BM + MR
     nchans = 3
@@ -569,7 +569,7 @@ def _computeColor(flow, saturate=True):
     colorwheel[:RY,0] = 255
     colorwheel[:RY,1] = [(255*i) // RY for i in range(RY)]
     col += RY
-    # YG    
+    # YG
     colorwheel[col:col+YG,0] = [255 - (255*i) // YG for i in range(YG)]
     colorwheel[col:col+YG,1] = 255
     col += YG
@@ -614,9 +614,9 @@ def _computeColor(flow, saturate=True):
         img[:,:,i] = (255*col*(1-nanidx.astype('float'))).astype('uint8')
 
     return img
-    
-# flow dataset getter 
-    
+
+# flow dataset getter
+
 def get_train_dataset_flow(dataset_str, augmentor=True, crop_size=None):
     dataset_str = dataset_str.replace('(','Dataset(')
     if augmentor:
@@ -624,7 +624,7 @@ def get_train_dataset_flow(dataset_str, augmentor=True, crop_size=None):
     if crop_size is not None:
         dataset_str = dataset_str.replace(')',', crop_size={:s})'.format(str(crop_size)))
     return eval(dataset_str)
-    
+
 def get_test_datasets_flow(dataset_str):
     dataset_str = dataset_str.replace('(','Dataset(')
     return [eval(s) for s in dataset_str.split('+')]

@@ -6,6 +6,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
+from detector import Detector, FakeDetector
+from layout_tracker import LayoutTracker
 from loguru import logger
 
 from classifyer import Classifier
@@ -16,8 +18,6 @@ from crop_module import (
     MaskDetectorSAM,
 )
 from crop_module.background_detector import BackgroundDetectorOCV, BackgroundDetectorVPI
-from detector import Detector, FakeDetector
-from layout_tracker import LayoutTracker
 from models import Image, Layout, ModelSpecs, PipelineConfig
 from tracker_utils.render_tracks import draw_tracks
 

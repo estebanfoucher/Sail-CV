@@ -18,11 +18,11 @@ import logging
 import math
 
 import numpy as np
+from projection import project_telltales
 from scipy.optimize import linear_sum_assignment, minimize
 
 from models import Detection, Track
 from models.sail_3d import Sail3DConfig
-from projection import project_telltales
 
 logger = logging.getLogger(__name__)
 
@@ -110,8 +110,16 @@ class Sail3DTrackerV2:
         )
 
         if not valid_detections or not self.config.sail.telltales:
-            default_angle = self._last_angle if self._last_angle is not None else self.config.angle_min
-            default_twist = self._last_twist if self._last_twist is not None else self.config.twist_min
+            default_angle = (
+                self._last_angle
+                if self._last_angle is not None
+                else self.config.angle_min
+            )
+            default_twist = (
+                self._last_twist
+                if self._last_twist is not None
+                else self.config.twist_min
+            )
             return [], default_angle, default_twist
 
         # 1. Coarse 2D grid search over (angle, twist)
@@ -123,7 +131,9 @@ class Sail3DTrackerV2:
         )
 
         # 2. Continuous 2D refinement around best parameters
-        refined_angle, refined_twist = self._refine_2d(valid_detections, best_angle, best_twist)
+        refined_angle, refined_twist = self._refine_2d(
+            valid_detections, best_angle, best_twist
+        )
 
         logger.debug(
             f"[Sail3DTrackerV2] Frame {self.frame_id}: Refined to "
@@ -144,7 +154,9 @@ class Sail3DTrackerV2:
 
         return tracks, refined_angle, refined_twist
 
-    def _coarse_search_2d(self, detections: list[Detection]) -> tuple[float, float, float]:
+    def _coarse_search_2d(
+        self, detections: list[Detection]
+    ) -> tuple[float, float, float]:
         """
         Evaluate cost on a 2D grid of (angle, twist) and return the best combination.
 
@@ -175,7 +187,7 @@ class Sail3DTrackerV2:
 
         best_angle = angles[0]
         best_twist = twists[0]
-        best_cost = float('inf')
+        best_cost = float("inf")
 
         for angle in angles:
             for twist in twists:
@@ -249,7 +261,7 @@ class Sail3DTrackerV2:
             for j, (proj_x, proj_y) in enumerate(projected):
                 # Skip invalid projections (behind camera)
                 if math.isnan(proj_x) or math.isnan(proj_y):
-                    cost_matrix[i, j] = float('inf')
+                    cost_matrix[i, j] = float("inf")
                     continue
 
                 # Euclidean distance normalized by diagonal
@@ -304,9 +316,9 @@ class Sail3DTrackerV2:
         result = minimize(
             objective,
             x0,
-            method='L-BFGS-B',
+            method="L-BFGS-B",
             bounds=bounds,
-            options={'maxiter': 20, 'ftol': 1e-4},
+            options={"maxiter": 20, "ftol": 1e-4},
         )
 
         return float(result.x[0]), float(result.x[1])

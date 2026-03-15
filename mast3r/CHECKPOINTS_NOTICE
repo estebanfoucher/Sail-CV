@@ -1,7 +1,7 @@
 MASt3R
 Copyright 2024-present NAVER Corp.
 
-This project's checkpoints were trained on datasets with separate license terms. 
+This project's checkpoints were trained on datasets with separate license terms.
 Your use of theses checkpoints is subject to the terms and conditions of the following licenses.
 
 ===
@@ -24,9 +24,9 @@ This dataset is made freely available to academic and non-academic entities for 
 4. That you may not use the dataset or any derivative work for commercial purposes as, for example, licensing or selling the data, or using the data with a purpose to procure a commercial gain.
 That all rights not expressly granted to you are reserved by us.
 
-In addition, using the dataset is subject to the following standard terms:                         
-                        
-                                 
+In addition, using the dataset is subject to the following standard terms:
+
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -711,13 +711,13 @@ Habitat-Sim
 HM3D
 https://matterport.com/fr/legal/matterport-end-user-license-agreement-academic-use-model-data
 
-ScanNet 
+ScanNet
 https://kaldir.vc.in.tum.de/scannet/ScanNet_TOS.pdf
 
 Replica
 Before Facebook Technologies, LLC (“FB”) is able to offer you (“Researcher” or
 “You”) access to the Replica Dataset (the “Dataset”), please read the following
-agreement (“Agreement”). 
+agreement (“Agreement”).
 
 By accessing, and in exchange for receiving permission to access, the Dataset,
 Researcher hereby agrees to the following terms and conditions:
@@ -741,11 +741,11 @@ ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE DATASET OR THE USE OR OTHER DEALINGS IN THE DATASET.
 1.  The law of the State of California shall apply to all disputes related to
 this Dataset.
- 
+
 ReplicaCAD
 Creative Commons Attribution 4.0 International (CC BY 4.0): https://creativecommons.org/licenses/by/4.0/
 
-habitat-sim 
+habitat-sim
 MIT License
 
 Copyright (c) Meta Platforms, Inc. and its affiliates.
@@ -970,7 +970,7 @@ StaticThings3D
 
 ===
 WildRGB-D
-https://github.com/wildrgbd/wildrgbd/ 
+https://github.com/wildrgbd/wildrgbd/
 MIT License
 
 Copyright (c) 2024 rowdataset
@@ -1373,4 +1373,3 @@ By clicking “I Accept” below or by using or distributing any portion or elem
     Term and Termination. The term of this Agreement will commence upon your acceptance of this Agreement or access to the Software Products and will continue in full force and effect until terminated in accordance with the terms and conditions herein. Stability AI may terminate this Agreement if you are in breach of any term or condition of this Agreement. Upon termination of this Agreement, you shall delete and cease use of any Software Products or Derivative Works. Sections 2-4 shall survive the termination of this Agreement.
     Governing Law. This Agreement will be governed by and construed in accordance with the laws of the United States and the State of California without regard to choice of law
     principles.
-

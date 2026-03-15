@@ -1,18 +1,20 @@
 from pathlib import Path
+
 import numpy as np
 import pytest
+from detector import Detector
+from pydantic import ValidationError
+from tracker import Tracker
 
 from models import (
-    Detection,
-    BoundingBox,
     XYXY,
-    Track,
-    TrackerConfig,
+    BoundingBox,
+    Detection,
     Image,
     ModelSpecs,
+    Track,
+    TrackerConfig,
 )
-from tracker import Tracker
-from detector import Detector
 
 
 def test_track_model():
@@ -31,11 +33,7 @@ def test_track_model():
 
 def test_tracker_config_model():
     """Test TrackerConfig Pydantic model creation and validation"""
-    config = TrackerConfig(
-        track_thresh=0.5,
-        track_buffer=30,
-        match_thresh=0.8
-    )
+    config = TrackerConfig(track_thresh=0.5, track_buffer=30, match_thresh=0.8)
 
     assert config.track_thresh == 0.5
     assert config.track_buffer == 30
@@ -45,31 +43,28 @@ def test_tracker_config_model():
 def test_tracker_config_validation():
     """Test TrackerConfig validation constraints"""
     # Test invalid track_thresh (should be 0-1)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         TrackerConfig(
             track_thresh=1.5,  # Invalid: > 1
             track_buffer=30,
             match_thresh=0.8,
-            frame_rate=30.0
+            frame_rate=30.0,
         )
 
     # Test invalid track_buffer (should be >= 1)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         TrackerConfig(
             track_thresh=0.5,
             track_buffer=0,  # Invalid: < 1
             match_thresh=0.8,
-            frame_rate=30.0
+            frame_rate=30.0,
         )
 
 
 def test_tracker_initialization():
     """Test Tracker service class initialization"""
     config = TrackerConfig(
-        track_thresh=0.5,
-        track_buffer=30,
-        match_thresh=0.8,
-        frame_rate=30.0
+        track_thresh=0.5, track_buffer=30, match_thresh=0.8, frame_rate=30.0
     )
 
     tracker = Tracker(config)
@@ -84,7 +79,7 @@ def test_tracker_update():
         track_thresh=0.3,  # Low threshold for testing
         track_buffer=30,
         match_thresh=0.5,
-        frame_rate=30.0
+        frame_rate=30.0,
     )
 
     tracker = Tracker(config)
@@ -92,13 +87,9 @@ def test_tracker_update():
     # Create test detections
     detections = []
     for i in range(3):
-        xyxy = XYXY(x1=10 + i*50, y1=20, x2=30 + i*50, y2=40)
+        xyxy = XYXY(x1=10 + i * 50, y1=20, x2=30 + i * 50, y2=40)
         bbox = BoundingBox(xyxy=xyxy)
-        detection = Detection(
-            bbox=bbox,
-            confidence=0.8,
-            class_id=0
-        )
+        detection = Detection(bbox=bbox, confidence=0.8, class_id=0)
         detections.append(detection)
 
     # First update - should create new tracks
@@ -129,10 +120,7 @@ def test_tracker_integration_with_detector():
 
     # Initialize Tracker
     tracker_config = TrackerConfig(
-        track_thresh=0.5,
-        track_buffer=30,
-        match_thresh=0.8,
-        frame_rate=30.0
+        track_thresh=0.5, track_buffer=30, match_thresh=0.8, frame_rate=30.0
     )
     tracker = Tracker(tracker_config)
 
@@ -170,6 +158,6 @@ def test_track_serialization():
     # Test model_dump
     track_dict = track.model_dump()
     assert isinstance(track_dict, dict)
-    assert track_dict['track_id'] == 1
-    assert track_dict['frame_id'] == 5
-    assert 'detection' in track_dict
+    assert track_dict["track_id"] == 1
+    assert track_dict["frame_id"] == 5
+    assert "detection" in track_dict

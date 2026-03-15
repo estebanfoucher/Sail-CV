@@ -146,17 +146,17 @@ def iou(track1, track2):
     # Extract coordinates
     x1, y1, x2, y2 = track1.bbox.xyxy
     x1g, y1g, x2g, y2g = track2.bbox.xyxy
-    
+
     # Calculate intersection
     xa, ya = max(x1, x1g), max(y1, y1g)
     xb, yb = min(x2, x2g), min(y2, y2g)
     inter = max(0, xb - xa) * max(0, yb - ya)
-    
+
     # Calculate union
     area1 = (x2 - x1) * (y2 - y1)
     area2 = (x2g - x1g) * (y2g - y1g)
     union = area1 + area2 - inter
-    
+
     return inter / union if union > 0 else 0.0
 ```
 

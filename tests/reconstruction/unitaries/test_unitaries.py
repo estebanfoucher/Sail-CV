@@ -2,12 +2,20 @@ from pathlib import Path
 
 
 def sam(model_path=None):
-    from unitaries.sam import SAM
     from video import FFmpegVideoWriter, VideoReader
+
+    from unitaries.sam import SAM
 
     project_root = Path(__file__).resolve().parents[3]
 
-    video_path = str(project_root / "assets" / "reconstruction" / "scene_8" / "camera_1" / "camera_1.mp4")
+    video_path = str(
+        project_root
+        / "assets"
+        / "reconstruction"
+        / "scene_8"
+        / "camera_1"
+        / "camera_1.mp4"
+    )
     output_folder = project_root / "output_tests" / "sam"
     output_name = "output_test_sam.mp4"
     reader = VideoReader.open_video_file(video_path)

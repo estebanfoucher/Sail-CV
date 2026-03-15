@@ -1,7 +1,7 @@
 ![banner](assets/mast3r.jpg)
 
-Official implementation of `Grounding Image Matching in 3D with MASt3R`  
-[[Project page](https://europe.naverlabs.com/blog/mast3r-matching-and-stereo-3d-reconstruction/)], [[MASt3R arxiv](https://arxiv.org/abs/2406.09756)], [[DUSt3R arxiv](https://arxiv.org/abs/2312.14132)]  
+Official implementation of `Grounding Image Matching in 3D with MASt3R`
+[[Project page](https://europe.naverlabs.com/blog/mast3r-matching-and-stereo-3d-reconstruction/)], [[MASt3R arxiv](https://arxiv.org/abs/2406.09756)], [[DUSt3R arxiv](https://arxiv.org/abs/2312.14132)]
 
 ![Example of matching results obtained from MASt3R](assets/examples.jpg)
 
@@ -9,14 +9,14 @@ Official implementation of `Grounding Image Matching in 3D with MASt3R`
 
 ```bibtex
 @misc{mast3r_eccv24,
-      title={Grounding Image Matching in 3D with MASt3R}, 
+      title={Grounding Image Matching in 3D with MASt3R},
       author={Vincent Leroy and Yohann Cabon and Jerome Revaud},
       booktitle = {ECCV},
       year = {2024}
 }
 
 @misc{mast3r_arxiv24,
-      title={Grounding Image Matching in 3D with MASt3R}, 
+      title={Grounding Image Matching in 3D with MASt3R},
       author={Vincent Leroy and Yohann Cabon and Jerome Revaud},
       year={2024},
       eprint={2406.09756},
@@ -25,7 +25,7 @@ Official implementation of `Grounding Image Matching in 3D with MASt3R`
 }
 
 @inproceedings{dust3r_cvpr24,
-      title={DUSt3R: Geometric 3D Vision Made Easy}, 
+      title={DUSt3R: Geometric 3D Vision Made Easy},
       author={Shuzhe Wang and Vincent Leroy and Yohann Cabon and Boris Chidlovskii and Jerome Revaud},
       booktitle = {CVPR},
       year = {2024}
@@ -38,7 +38,7 @@ Official implementation of `Grounding Image Matching in 3D with MASt3R`
     booktitle={International Conference on 3D Vision 2025},
     year={2025},
     url={https://openreview.net/forum?id=5uw1GRBFoT}
-} 
+}
 ```
 
 ## Table of Contents
@@ -90,7 +90,7 @@ cd mast3r
 2. Create the environment, here we show an example using conda.
 ```bash
 conda create -n mast3r python=3.11 cmake=3.14.0
-conda activate mast3r 
+conda activate mast3r
 conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia  # use the correct version of cuda for your system
 pip install -r requirements.txt
 pip install -r dust3r/requirements.txt
@@ -134,7 +134,7 @@ You can obtain the model checkpoints by two ways:
 | [`MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric`](https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth) | 512x384, 512x336, 512x288, 512x256, 512x160 | CatMLP+DPT | ViT-L | ViT-B |
 
 You can check the hyperparameters we used to train these models in the [section: Our Hyperparameters](#our-hyperparameters)
-Make sure to check license of the datasets we used. 
+Make sure to check license of the datasets we used.
 
 To download `MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth`:
 ```bash
@@ -142,15 +142,15 @@ mkdir -p checkpoints/
 wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth -P checkpoints/
 ```
 
-Make sure to agree to the license of all the training datasets we used, in addition to CC-BY-NC-SA 4.0. 
+Make sure to agree to the license of all the training datasets we used, in addition to CC-BY-NC-SA 4.0.
 The mapfree dataset license in particular is very restrictive. For more information, check [CHECKPOINTS_NOTICE](CHECKPOINTS_NOTICE).
 
 #### Retrieval Model
 This retrieval model is for `MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric` only.
 You need to download both the `trainingfree.pth` and `codebook.pkl` files, and put them in the same directory.
 
-[`MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree`](https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree.pth)  
-[`MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_codebook`](https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_codebook.pkl)  
+[`MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree`](https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree.pth)
+[`MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_codebook`](https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_codebook.pkl)
 
 ```bash
 mkdir -p checkpoints/
@@ -160,11 +160,11 @@ wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge
 
 #### Dune Model
 
-We added partial support of the [Dune](https://github.com/naver/dune) encoder. Check the associated [Dune License](https://github.com/naver/dune/blob/main/Project%20NLE%20DUNE%20LICENSE.txt).  
+We added partial support of the [Dune](https://github.com/naver/dune) encoder. Check the associated [Dune License](https://github.com/naver/dune/blob/main/Project%20NLE%20DUNE%20LICENSE.txt).
 You can find the MASt3R decoder that goes with it here:
 
-[`dunemast3r_cvpr25_vitbase`](https://download.europe.naverlabs.com/dune/dunemast3r_cvpr25_vitbase.pth)  
-[`dunemast3r_cvpr25_vitsmall`](https://download.europe.naverlabs.com/dune/dunemast3r_cvpr25_vitsmall.pth)  
+[`dunemast3r_cvpr25_vitbase`](https://download.europe.naverlabs.com/dune/dunemast3r_cvpr25_vitbase.pth)
+[`dunemast3r_cvpr25_vitsmall`](https://download.europe.naverlabs.com/dune/dunemast3r_cvpr25_vitsmall.pth)
 
 ```bash
 mkdir -p checkpoints/
@@ -176,9 +176,9 @@ Make sure to check the [Usage DUNE+MASt3R](#usage-dune-mast3r) section if you ar
 
 ### MASt3R-SfM
 
-A few words about the addition of MASt3R-SfM to this repository. 
+A few words about the addition of MASt3R-SfM to this repository.
 
-MASt3R-SfM refers to the make_pairs (retrieval) + sparse_global_alignment that you can find here: [demo.py#L142](mast3r/demo.py#L142). 
+MASt3R-SfM refers to the make_pairs (retrieval) + sparse_global_alignment that you can find here: [demo.py#L142](mast3r/demo.py#L142).
 
 In this repository, you will also find `kapture_mast3r_mapping.py` and `demo_glomap.py`. These two scripts are unrelated to MASt3R-SfM. They are "toys" that attempt to use mast3r matches to do standard Sfm reconstructions with colmap/glomap. As such, they were not extensively tested, and may fail on edge cases.
 
@@ -212,7 +212,7 @@ To run MASt3R using Docker, including with NVIDIA CUDA support, follow these ins
 
 2. **Install NVIDIA Docker Toolkit**: For GPU support, install the NVIDIA Docker toolkit from the [Nvidia website](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 
-3. **Build the Docker image and run it**: `cd` into the `./docker` directory and run the following commands: 
+3. **Build the Docker image and run it**: `cd` into the `./docker` directory and run the following commands:
 
 ```bash
 cd docker
@@ -221,13 +221,13 @@ bash run.sh --with-cuda --model_name="MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_
 
 Or if you want to run the demo without CUDA support, run the following command:
 
-```bash 
+```bash
 cd docker
 bash run.sh --model_name="MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric"
 ```
 
-By default, `demo.py` is launched with the option `--local_network`.  
-Visit `http://localhost:7860/` to access the web UI (or replace `localhost` with the machine's name to access it from the network).  
+By default, `demo.py` is launched with the option `--local_network`.
+Visit `http://localhost:7860/` to access the web UI (or replace `localhost` with the machine's name to access it from the network).
 
 `run.sh` will launch docker-compose using either the [docker-compose-cuda.yml](docker/docker-compose-cuda.yml) or [docker-compose-cpu.ym](docker/docker-compose-cpu.yml) config file, then it starts the demo using [entrypoint.sh](docker/files/entrypoint.sh).
 
