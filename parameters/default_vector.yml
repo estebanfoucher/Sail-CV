@@ -41,11 +41,6 @@ visualization:
 output:
   generate_fgmask_video: true
   generate_pca_visualization: true
-  output_tracking_video: true
-  render_masks: true
-  render_arrows: true
-
-classifier:
-  model_path: checkpoints/sailcv-yolo11n-cls224.pt
-  padding_factor: 0.25
-  confidence_threshold: 0.0
+  output_tracking_video: true  # Produce main video (bboxes + labels)
+  render_masks: true            # Vector run: mask overlay
+  render_arrows: true           # Vector run: PCA arrows

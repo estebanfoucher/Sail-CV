@@ -67,7 +67,7 @@ The tell-tale tracking module uses a single-camera, detection-plus-tracking pipe
 
 Weights can be supplied in two ways:
 
-- **Local path** — Put checkpoint files in `checkpoints/` (or another path) and set `model_path` in your parameters YAML (e.g. `parameters/default.yaml`). Paths are resolved from the project root.
+- **Local path** — Put checkpoint files in `checkpoints/` (or another path) and set `model_path` in your parameters YAML (e.g. `parameters/default_classifier.yml`). Paths are resolved from the project root.
 - **Hugging Face** — If a file is not found locally, the code tries to download it from [estefoucher/tell-tale-detector](https://huggingface.co/estefoucher/tell-tale-detector) (folder `weights/`). Use the exact filename in your config:
   - **Classifier:** `sailcv-yolo11n-cls224.pt`
   - **Detector:** `sailcv-rtdetrl1088.pt`, `sailcv-rtdetrl640.pt`
@@ -153,11 +153,9 @@ When you have a **new video and no layout** (e.g. `assets/tracking/DS_6/C4.mp4`)
 
 **Step 1: Create the layout**
 
-Set the Python path and run the layout annotator:
+Run the layout annotator (from project root):
 
 ```bash
-export PYTHONPATH="${PWD}/src/tracking"
-
 uv run python src/tracking/annotate_layout_opencv.py \
   --video assets/tracking/DS_6/C4.mp4 \
   --time-sec 3 \
@@ -180,18 +178,27 @@ uv run python src/tracking/analyze_video.py \
   --layout output/tracking_layouts/DS_6/C4_layout.json
 ```
 
-This uses the default config `parameters/default.yaml`. To use another config (e.g. `test_classif.yml` or `test_vector.yml`):
+This uses the default config `parameters/default_classifier.yml` (bboxes + classifier labels, no masks/arrows). For masks and PCA arrows without the classifier, use `parameters/default_vector.yml`:
 
 ```bash
 uv run python src/tracking/analyze_video.py \
   --video assets/tracking/DS_6/C4.mp4 \
   --layout output/tracking_layouts/DS_6/C4_layout.json \
-  --parameters parameters/test_classif.yml
+  --parameters parameters/default_vector.yml
 ```
+
+The `test_classif.yml` and `test_vector.yml` configs use fixture detections for fast runs (e.g. CI).
 
 Output is written to `output/tracking/` by default (JSON plus optional tracking video and fgmask). Use `--output` to change the directory.
 
-**Parameters:** Files in `parameters/` (e.g. `default.yaml`, `test_classif.yml`, `test_vector.yml`) define the detector, classifier, crop module, and output options (main tracking video, mask overlay, PCA arrows). See `parameters/` for available configs.
+**Frame range:** By default all frames are processed (`--frame-start 0`, `--frame-end -1`; `-1` means last frame). To analyze only the first 10 frames (optionally with a specific config):
+
+```bash
+uv run python src/tracking/analyze_video.py --video assets/tracking/DS_6/C4.mp4 --layout output/tracking_layouts/DS_6/C4_layout.json --frame-start 0 --frame-end 9 --parameters parameters/default_vector.yml
+```
+
+
+**Parameters:** Files in `parameters/` (`default_classifier.yml`, `default_vector.yml`, and test configs) define the detector, classifier, crop module, and output options (main tracking video, mask overlay, PCA arrows). See `parameters/` for available configs.
 
 If you already have a layout (e.g. from the fixtures):
 
