@@ -61,25 +61,22 @@ a model wind-powered vessel, comparing with another tell-tales detection method 
 
 ## Tell tales tracker module
 
-The tell-tale tracking module —requiring only a single camera— uses a detection-plus-tracking pipeline.
+The tell-tale tracking module uses a single-camera, detection-plus-tracking pipeline. A vision model trained on a purpose-built dataset (bounding boxes for attached, detached, and leech tell-tales) feeds a tracker that turns per-frame detections into time-series for aerodynamic interpretation. The approach is robust to variations in color, sail type, illumination, and motion.
 
-### Model weights (Detector & Classifier)
+### Model weights (detector & classifier)
 
-Tracking model weights can be used in two ways:
+Weights can be supplied in two ways:
 
-- **Local path** — Place checkpoint files in `checkpoints/` (or any path) and set `model_path` in your parameters YAML (e.g. `parameters/default.yaml`) to that path. Relative paths are resolved from the project root.
-- **Hugging Face** — If the file is not found locally, the code will try to download it from [estefoucher/tell-tale-detector](https://huggingface.co/estefoucher/tell-tale-detector) (folder `weights/`). Use the exact filename in your config, e.g.:
+- **Local path** — Put checkpoint files in `checkpoints/` (or another path) and set `model_path` in your parameters YAML (e.g. `parameters/default.yaml`). Paths are resolved from the project root.
+- **Hugging Face** — If a file is not found locally, the code tries to download it from [estefoucher/tell-tale-detector](https://huggingface.co/estefoucher/tell-tale-detector) (folder `weights/`). Use the exact filename in your config:
   - **Classifier:** `sailcv-yolo11n-cls224.pt`
   - **Detector:** `sailcv-rtdetrl1088.pt`, `sailcv-rtdetrl640.pt`
 
-So you can either keep weights in `checkpoints/` or rely on automatic download from Hugging Face by using these filenames (with or without a local directory prefix).
+You can keep weights in `checkpoints/` or rely on automatic download by using these filenames in your config.
 
+### User guide
 
-A vision model is trained on a purpose-built dataset annotated with bounding boxes for attached, detached, and
-leech tell-tales, as shown in Figure 1. A tracker then converts per-frame detections into time-series suitable for
-aerodynamic interpretation. This machine-learning-based approach offers the robustness necessary to handle
-variations in color, sail type, illumination, and object motion, showing promising behavior for reliable field use.
-
+To run the tracker on a new video, create a layout with the layout annotator, then run `analyze_video.py` with a chosen parameters file. **Get Started → Quick Start — Tell-Tales Tracking** below gives the full steps and example commands (layout creation, pipeline run, and config options).
 
 ## Get Started
 
@@ -152,55 +149,56 @@ uv run python web_app/main.py
 
 ### Quick Start — Tell-Tales Tracking
 
-Set up the Python path for tracking (run from project root):
+When you have a **new video and no layout** (e.g. `assets/tracking/DS_6/C4.mp4`), follow these two steps. All commands are run from the project root.
+
+**Step 1: Create the layout**
+
+Set the Python path and run the layout annotator:
 
 ```bash
 export PYTHONPATH="${PWD}/src/tracking"
-```
 
-Create a layout by clicking telltale positions on a frame (default at \(t=3s\)) and exporting a JSON:
-
-```bash
 uv run python src/tracking/annotate_layout_opencv.py \
-  --video assets/tracking/2Ce-CKKCtV4.mp4 \
+  --video assets/tracking/DS_6/C4.mp4 \
   --time-sec 3 \
-  --output output/tracking_layouts/2Ce-CKKCtV4_layout.json
+  --output output/tracking_layouts/DS_6/C4_layout.json
 ```
 
-Then run the tracking pipeline using that layout (detector + static layout tracker + classifier are configured in `parameters/default.yaml`).
+- **Left-click** on the frame to add a tell-tale position; the terminal will prompt for **id** (e.g. `TL`) and **name** (e.g. `top left`). Repeat for every tell-tale.
+- **s** — save layout to the output file and exit.
+- **q** or **Esc** — quit without saving.
+- **u** — undo last point; **c** — clear all points.
+- Optionally use `--direction dx dy` to set a direction prior in the JSON. Use `--frame N` instead of `--time-sec` to pick a frame by index.
 
-For a **lightweight run** (detection + layout + classifier only, no masks, no PCA), e.g. 30 frames from second 3:
+**Step 2: Run the tracking pipeline**
 
-```bash
-uv run python src/tracking/run_detect_layout_classify.py \
-  --video assets/tracking/2Ce-CKKCtV4.mp4 \
-  --layout output/tracking_layouts/2Ce-CKKCtV4_layout.json \
-  --start-sec 3 --num-frames 30
-```
-
-For the full pipeline (with masks and PCA):
+Behavior (detector, classifier, masks, PCA arrows, output options) is controlled by the **parameters file**. The single entry point is `analyze_video.py`:
 
 ```bash
 uv run python src/tracking/analyze_video.py \
-  --video assets/tracking/2Ce-CKKCtV4.mp4 \
-  --layout output/tracking_layouts/2Ce-CKKCtV4_layout.json
+  --video assets/tracking/DS_6/C4.mp4 \
+  --layout output/tracking_layouts/DS_6/C4_layout.json
 ```
 
-Run the tracking pipeline on the C1 fixture with the classifier:
+This uses the default config `parameters/default.yaml`. To use another config (e.g. `test_classif.yml` or `test_vector.yml`):
+
+```bash
+uv run python src/tracking/analyze_video.py \
+  --video assets/tracking/DS_6/C4.mp4 \
+  --layout output/tracking_layouts/DS_6/C4_layout.json \
+  --parameters parameters/test_classif.yml
+```
+
+Output is written to `output/tracking/` by default (JSON plus optional tracking video and fgmask). Use `--output` to change the directory.
+
+**Parameters:** Files in `parameters/` (e.g. `default.yaml`, `test_classif.yml`, `test_vector.yml`) define the detector, classifier, crop module, and output options (main tracking video, mask overlay, PCA arrows). See `parameters/` for available configs.
+
+If you already have a layout (e.g. from the fixtures):
 
 ```bash
 uv run python src/tracking/analyze_video.py \
   --video fixtures/C1_fixture.mp4 \
   --layout fixtures/C1_layout.json
-```
-
-The `default.yaml` config includes the classifier (`checkpoints/classifyer_224.pt`). To run without it, remove the `classifier:` section from the YAML or pass a different config:
-
-```bash
-uv run python src/tracking/analyze_video.py \
-  --video fixtures/C1_fixture.mp4 \
-  --layout fixtures/C1_layout.json \
-  --parameters parameters/test.yaml
 ```
 
 ### Docker
