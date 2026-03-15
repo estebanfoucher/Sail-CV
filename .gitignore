@@ -14,16 +14,23 @@
 *.joblib
 weights/
 
+plots*/
+
 # Allow specific checkpoint files
 !checkpoints/
 !checkpoints/rt-detr.pt
 !checkpoints/yolo-s.pt
 
+!README.md
+
 # Data directories (input data, not tracked)
 data/
 datasets/
 raw_data/
-
+assets-3d/
+assets-3d/**
+publication/
+publication/**
 # Output directories (generated content)
 output/
 output_tests/

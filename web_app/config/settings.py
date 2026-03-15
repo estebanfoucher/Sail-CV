@@ -103,22 +103,22 @@ def get_config() -> Dict[str, Any]:
 def setup_logging():
     """Setup logging configuration"""
     config = LOGGING_CONFIG
-    
+
     # Create handlers
     handlers = []
-    
+
     if 'console' in config['handlers']:
         handlers.append(logging.StreamHandler())
-    
+
     if 'file' in config['handlers']:
         log_file = WEB_APP_DIR / config['log_file']
         handlers.append(logging.FileHandler(log_file))
-    
+
     # Configure logging
     logging.basicConfig(
         level=config['level'],
         format=config['format'],
         handlers=handlers
     )
-    
+
     return logging.getLogger(__name__)

@@ -12,9 +12,9 @@ from typing import Tuple, Optional, Callable, Dict, Any
 import numpy as np
 from PIL import Image
 
-# Import from src/ as requested
+# Add reconstruction source to path for flat imports (process_pairs, stereo, etc.)
 import sys
-sys.path.append(str(Path(__file__).parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src" / "reconstruction"))
 
 from process_pairs import instantiate_mast3r_engine, process_pair
 from stereo.convert_calibration import convert_calibration_parameters

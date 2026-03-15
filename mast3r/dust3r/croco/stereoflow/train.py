@@ -35,7 +35,7 @@ from stereoflow.criterion import *
 
 
 def get_args_parser():
-    # prepare subparsers 
+    # prepare subparsers
     parser = argparse.ArgumentParser('Finetuning CroCo models on stereo or flow', add_help=False)
     subparsers = parser.add_subparsers(title="Task (stereo or flow)", dest="task", required=True)
     parser_stereo = subparsers.add_parser('stereo', help='Training stereo model')
@@ -44,17 +44,17 @@ def get_args_parser():
         if default is not None: assert default_stereo is None and default_flow is None, "setting default makes default_stereo and default_flow disabled"
         parser_stereo.add_argument(name_or_flags, default=default if default is not None else default_stereo, **kwargs)
         parser_flow.add_argument(name_or_flags, default=default if default is not None else default_flow, **kwargs)
-    # output dir 
+    # output dir
     add_arg('--output_dir', required=True, type=str, help='path where to save, if empty, automatically created')
     # model
     add_arg('--crop', type=int, nargs = '+', default_stereo=[352, 704], default_flow=[320, 384], help = "size of the random image crops used during training.")
     add_arg('--pretrained', required=True, type=str, help="Load pretrained model (required as croco arguments come from there)")
-    # criterion  
+    # criterion
     add_arg('--criterion', default_stereo='LaplacianLossBounded2()', default_flow='LaplacianLossBounded()', type=str, help='string to evaluate to get criterion')
     add_arg('--bestmetric', default_stereo='avgerr', default_flow='EPE', type=str)
-    # dataset 
+    # dataset
     add_arg('--dataset', type=str, required=True, help="training set")
-    # training 
+    # training
     add_arg('--seed', default=0, type=int, help='seed')
     add_arg('--batch_size', default_stereo=6, default_flow=8, type=int, help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
     add_arg('--epochs', default=32, type=int, help='number of training epochs')
@@ -80,8 +80,8 @@ def get_args_parser():
     add_arg('--dist_url', default='env://', help='url used to set up distributed training')
 
     return parser
-    
-        
+
+
 def main(args):
     misc.init_distributed_mode(args)
     global_rank = misc.get_rank()
@@ -97,7 +97,7 @@ def main(args):
     np.random.seed(seed)
     cudnn.benchmark = True
 
-    # Metrics / criterion 
+    # Metrics / criterion
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     metrics = (StereoMetrics if args.task=='stereo' else FlowMetrics)().to(device)
     criterion = eval(args.criterion).to(device)
@@ -109,8 +109,8 @@ def main(args):
     croco_args = croco_args_from_ckpt(ckpt)
     croco_args['img_size'] = (args.crop[0], args.crop[1])
     print('Croco args: '+str(croco_args))
-    args.croco_args = croco_args # saved for test time 
-    # prepare head 
+    args.croco_args = croco_args # saved for test time
+    # prepare head
     num_channels = {'stereo': 1, 'flow': 2}[args.task]
     if criterion.with_conf: num_channels += 1
     print(f'Building head PixelwiseTaskWithDPT() with {num_channels} channel(s)')
@@ -136,13 +136,13 @@ def main(args):
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], static_graph=True)
         model_without_ddp = model.module
-    
-    # following timm: set wd as 0 for bias and norm layers   
+
+    # following timm: set wd as 0 for bias and norm layers
     param_groups = misc.get_parameter_groups(model_without_ddp, args.weight_decay)
     optimizer = eval(f"torch.optim.{args.optimizer}")
     print(optimizer)
     loss_scaler = NativeScaler()
-    
+
     # automatic restart
     last_ckpt_fname = os.path.join(args.output_dir, f'checkpoint-last.pth')
     args.resume = last_ckpt_fname if os.path.isfile(last_ckpt_fname) else None
@@ -158,13 +158,13 @@ def main(args):
         best_so_far = misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
 
     if best_so_far is None: best_so_far = np.inf
-    
+
     # tensorboard
     log_writer = None
     if global_rank == 0 and args.output_dir is not None:
         log_writer = SummaryWriter(log_dir=args.output_dir, purge_step=args.start_epoch*1000)
 
-    #  dataset and loader 
+    #  dataset and loader
     print('Building Train Data loader for dataset: ', args.dataset)
     train_dataset = (get_train_dataset_stereo if args.task=='stereo' else get_train_dataset_flow)(args.dataset, crop_size=args.crop)
     def _print_repr_dataset(d):
@@ -196,14 +196,14 @@ def main(args):
         for val_dataset in val_datasets: print(repr(val_dataset))
         data_loaders_val = [DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=args.num_workers, pin_memory=True, drop_last=False) for val_dataset in val_datasets]
         bestmetric = ("AVG_" if len(data_loaders_val)>1 else str(data_loaders_val[0].dataset)+'_')+args.bestmetric
-       
+
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
     # Training Loop
     for epoch in range(args.start_epoch, args.epochs):
 
         if args.distributed: data_loader_train.sampler.set_epoch(epoch)
-            
+
         # Train
         epoch_start = time.time()
         train_stats = train_one_epoch(model, criterion, metrics, data_loader_train, optimizer, device, epoch, loss_scaler, log_writer=log_writer, args=args)
@@ -218,21 +218,21 @@ def main(args):
             val_epoch_time = time.time() - val_epoch_start
 
             val_best = val_stats[bestmetric]
-            
+
             # Save best of all
             if val_best <= best_so_far:
                 best_so_far = val_best
                 misc.save_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler, epoch=epoch, best_so_far=best_so_far, fname='best')
-        
+
             log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                          'epoch': epoch,
                          **{f'val_{k}': v for k, v in val_stats.items()}}
         else:
             log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                          'epoch': epoch,}
-                             
+
         if args.distributed: dist.barrier()
-        
+
         # Save stuff
         if args.output_dir and ((epoch+1) % args.save_every == 0 or epoch + 1 == args.epochs):
             misc.save_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler, epoch=epoch, best_so_far=best_so_far, fname='last')
@@ -242,11 +242,11 @@ def main(args):
                 log_writer.flush()
             with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
                 f.write(json.dumps(log_stats) + "\n")
-        
+
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
-    
+
 if __name__ == '__main__':
     args = get_args_parser()
     args = args.parse_args()

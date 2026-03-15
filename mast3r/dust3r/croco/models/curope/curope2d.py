@@ -32,9 +32,9 @@ class cuRoPE2D_func (torch.autograd.Function):
 class cuRoPE2D(torch.nn.Module):
     def __init__(self, freq=100.0, F0=1.0):
         super().__init__()
-        self.base = freq 
+        self.base = freq
         self.F0 = F0
 
-    def forward(self, tokens, positions): 
+    def forward(self, tokens, positions):
         cuRoPE2D_func.apply( tokens.transpose(1,2), positions, self.base, self.F0 )
         return tokens

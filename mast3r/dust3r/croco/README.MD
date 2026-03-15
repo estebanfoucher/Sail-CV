@@ -16,7 +16,7 @@ This repository contains the code for our CroCo model presented in our NeurIPS'2
 
 @inproceedings{croco_v2,
   title={{CroCo v2: Improved Cross-view Completion Pre-training for Stereo Matching and Optical Flow}},
-  author={Weinzaepfel, Philippe and Lucas, Thomas and Leroy, Vincent and Cabon, Yohann and Arora, Vaibhav and Br{\'e}gier, Romain and Csurka, Gabriela and Antsfeld, Leonid and Chidlovskii, Boris and Revaud, J{\'e}r{\^o}me}, 
+  author={Weinzaepfel, Philippe and Lucas, Thomas and Leroy, Vincent and Cabon, Yohann and Arora, Vaibhav and Br{\'e}gier, Romain and Csurka, Gabriela and Antsfeld, Leonid and Chidlovskii, Boris and Revaud, J{\'e}r{\^o}me},
   booktitle={ICCV},
   year={2023}
 }
@@ -93,9 +93,9 @@ Then, run the Notebook demo `interactive_demo.ipynb`.
 In this demo, you should be able to sample a random reference viewpoint from an [Habitat](https://github.com/facebookresearch/habitat-sim) test scene. Use the sliders to change viewpoint and select a masked target view to reconstruct using CroCo.
 ![croco_interactive_demo](https://user-images.githubusercontent.com/1822210/200516576-7937bc6a-55f8-49ed-8618-3ddf89433ea4.jpg)
 
-## Pre-training 
+## Pre-training
 
-### CroCo 
+### CroCo
 
 To pre-train CroCo, please first generate the pre-training data from the Habitat simulator, following the instructions in [datasets/habitat_sim/README.MD](datasets/habitat_sim/README.MD) and then run the following command:
 ```
@@ -107,7 +107,7 @@ It should take around 10 days with A100 or 15 days with V100 to do the 400 pre-t
 Note that, while the code contains the same scaling rule of the learning rate as MAE when changing the effective batch size, we did not experimented if it is valid in our case.
 The first run can take a few minutes to start, to parse all available pre-training pairs.
 
-### CroCo v2 
+### CroCo v2
 
 For CroCo v2 pre-training, in addition to the generation of the pre-training data from the Habitat simulator above, please pre-extract the crops from the real datasets following the instructions in [datasets/crops/README.MD](datasets/crops/README.MD).
 Then, run the following command for the largest model (ViT-L encoder, Base decoder):

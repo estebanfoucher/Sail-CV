@@ -1,8 +1,8 @@
 # Copyright (C) 2022-present Naver Corporation. All rights reserved.
 # Licensed under CC BY-NC-SA 4.0 (non-commercial use only).
-# 
+#
 # --------------------------------------------------------
-# Pre-training CroCo 
+# Pre-training CroCo
 # --------------------------------------------------------
 # References:
 # MAE: https://github.com/facebookresearch/mae
@@ -16,7 +16,7 @@ import numpy as np
 import os
 import sys
 import time
-import math 
+import math
 from pathlib import Path
 from typing import Iterable
 
@@ -39,10 +39,10 @@ def get_args_parser():
     # model and criterion
     parser.add_argument('--model', default='CroCoNet()', type=str, help="string containing the model to build")
     parser.add_argument('--norm_pix_loss', default=1, choices=[0,1], help="apply per-patch mean/std normalization before applying the loss")
-    # dataset 
+    # dataset
     parser.add_argument('--dataset', default='habitat_release', type=str, help="training set")
     parser.add_argument('--transforms', default='crop224+acolor', type=str, help="transforms to apply") # in the paper, we also use some homography and rotation, but find later that they were not useful or even harmful
-    # training 
+    # training
     parser.add_argument('--seed', default=0, type=int, help="Random seed")
     parser.add_argument('--batch_size', default=64, type=int, help="Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus")
     parser.add_argument('--epochs', default=800, type=int, help="Maximum number of epochs for the scheduler")
@@ -52,9 +52,9 @@ def get_args_parser():
     parser.add_argument('--lr', type=float, default=None, metavar='LR', help='learning rate (absolute lr)')
     parser.add_argument('--blr', type=float, default=1.5e-4, metavar='LR', help='base learning rate: absolute_lr = base_lr * total_batch_size / 256')
     parser.add_argument('--min_lr', type=float, default=0., metavar='LR', help='lower lr bound for cyclic schedulers that hit 0')
-    parser.add_argument('--warmup_epochs', type=int, default=40, metavar='N', help='epochs to warmup LR')              
+    parser.add_argument('--warmup_epochs', type=int, default=40, metavar='N', help='epochs to warmup LR')
     parser.add_argument('--amp', type=int, default=1, choices=[0,1], help="Use Automatic Mixed Precision for pretraining")
-    # others 
+    # others
     parser.add_argument('--num_workers', default=8, type=int)
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')
     parser.add_argument('--local_rank', default=-1, type=int)
@@ -62,24 +62,24 @@ def get_args_parser():
     parser.add_argument('--save_freq', default=1, type=int, help='frequence (number of epochs) to save checkpoint in checkpoint-last.pth')
     parser.add_argument('--keep_freq', default=20, type=int, help='frequence (number of epochs) to save checkpoint in checkpoint-%d.pth')
     parser.add_argument('--print_freq', default=20, type=int, help='frequence (number of iterations) to print infos while training')
-    # paths 
+    # paths
     parser.add_argument('--output_dir', default='./output/', type=str, help="path where to save the output")
     parser.add_argument('--data_dir', default='./data/', type=str, help="path where data are stored")
     return parser
 
 
 
-        
+
 def main(args):
     misc.init_distributed_mode(args)
     global_rank = misc.get_rank()
     world_size = misc.get_world_size()
-    
+
     print("output_dir: "+args.output_dir)
     if args.output_dir:
-        Path(args.output_dir).mkdir(parents=True, exist_ok=True)                         
+        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
-    # auto resume 
+    # auto resume
     last_ckpt_fname = os.path.join(args.output_dir, f'checkpoint-last.pth')
     args.resume = last_ckpt_fname if os.path.isfile(last_ckpt_fname) else None
 
@@ -96,7 +96,7 @@ def main(args):
 
     cudnn.benchmark = True
 
-    ## training dataset and loader 
+    ## training dataset and loader
     print('Building dataset for {:s} with transforms {:s}'.format(args.dataset, args.transforms))
     dataset = PairsDataset(args.dataset, trfs=args.transforms, data_dir=args.data_dir)
     if world_size>1:
@@ -113,13 +113,13 @@ def main(args):
         pin_memory=True,
         drop_last=True,
     )
-   
-    ## model 
+
+    ## model
     print('Loading model: {:s}'.format(args.model))
     model = eval(args.model)
     print('Loading criterion: MaskedMSE(norm_pix_loss={:s})'.format(str(bool(args.norm_pix_loss))))
     criterion = MaskedMSE(norm_pix_loss=bool(args.norm_pix_loss))
-   
+
     model.to(device)
     model_without_ddp = model
     print("Model = %s" % str(model_without_ddp))
@@ -135,7 +135,7 @@ def main(args):
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True, static_graph=True)
         model_without_ddp = model.module
-    
+
     param_groups = misc.get_parameter_groups(model_without_ddp, args.weight_decay) # following timm: set wd as 0 for bias and norm layers
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
     print(optimizer)
@@ -153,19 +153,19 @@ def main(args):
     for epoch in range(args.start_epoch, args.max_epoch):
         if world_size>1:
             data_loader_train.sampler.set_epoch(epoch)
-            
+
         train_stats = train_one_epoch(
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             log_writer=log_writer,
             args=args
         )
-        
+
         if args.output_dir and epoch % args.save_freq == 0 :
             misc.save_model(
                 args=args, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch, fname='last')
-                
+
         if args.output_dir and (epoch % args.keep_freq == 0 or epoch + 1 == args.max_epoch) and (epoch>0 or args.max_epoch==1):
             misc.save_model(
                 args=args, model_without_ddp=model_without_ddp, optimizer=optimizer,
@@ -209,7 +209,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         if data_iter_step % accum_iter == 0:
             misc.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
-        image1 = image1.to(device, non_blocking=True) 
+        image1 = image1.to(device, non_blocking=True)
         image2 = image2.to(device, non_blocking=True)
         with torch.cuda.amp.autocast(enabled=bool(args.amp)):
             out, mask, target = model(image1, image2)
@@ -236,7 +236,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         loss_value_reduce = misc.all_reduce_mean(loss_value)
         if log_writer is not None and ((data_iter_step + 1) % (accum_iter*args.print_freq)) == 0:
-            # x-axis is based on epoch_1000x in the tensorboard, calibrating differences curves when batch size changes 
+            # x-axis is based on epoch_1000x in the tensorboard, calibrating differences curves when batch size changes
             epoch_1000x = int((data_iter_step / len(data_loader) + epoch) * 1000)
             log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
             log_writer.add_scalar('lr', lr, epoch_1000x)
@@ -245,8 +245,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-    
-    
+
+
 
 if __name__ == '__main__':
     args = get_args_parser()

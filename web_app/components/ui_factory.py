@@ -13,12 +13,12 @@ from components.sam_interface import SAMInterface
 
 class UIFactory:
     """Factory class for creating UI components"""
-    
+
     @staticmethod
     def create_video_upload_and_display() -> Tuple[gr.File, gr.File, gr.Video, gr.Video]:
         """
         Create integrated video upload and display components
-        
+
         Returns:
             tuple: (video_1_upload, video_2_upload, video_1_display, video_2_display)
         """
@@ -40,7 +40,7 @@ class UIFactory:
                         interactive=False,
                         container=True
                     )
-            
+
             with gr.Column(scale=1):
                 # Video 2 - Integrated Upload + Display
                 with gr.Group():
@@ -58,22 +58,22 @@ class UIFactory:
                         interactive=False,
                         container=True
                     )
-        
+
         return video_1_upload, video_2_upload, video_1_display, video_2_display
-    
-    
+
+
     @staticmethod
     def create_frame_selector() -> gr.Slider:
         """
         Create frame selector component
-        
+
         Returns:
             gr.Slider: Frame slider component
         """
         with gr.Row():
             with gr.Column(scale=1):
                 gr.Markdown("## 📸 Frame Selection")
-                
+
                 # Frame controls - simplified single frame selector
                 frame_slider = gr.Slider(
                     minimum=0,
@@ -83,20 +83,20 @@ class UIFactory:
                     label="Frame Position (0 to max_frame)",
                     interactive=True
                 )
-        
+
         return frame_slider
-    
+
     @staticmethod
     def create_selected_images() -> Tuple[gr.Image, gr.Image]:
         """
         Create selected images display components
-        
+
         Returns:
             tuple: (selected_image_1, selected_image_2)
         """
         with gr.Row():
             with gr.Column(scale=1):
-                
+
                 with gr.Row():
                     with gr.Column(scale=1):
                         selected_image_1 = gr.Image(
@@ -105,7 +105,7 @@ class UIFactory:
                             interactive=False,
                             container=True
                         )
-                    
+
                     with gr.Column(scale=1):
                         selected_image_2 = gr.Image(
                             label="Selected Frame - Video 2",
@@ -113,25 +113,25 @@ class UIFactory:
                             interactive=False,
                             container=True
                         )
-        
+
         return selected_image_1, selected_image_2
-    
+
     @staticmethod
     def create_playback_timer() -> gr.Timer:
         """
         Create a timer for playback updates
-        
+
         Returns:
             gr.Timer: Timer component for periodic updates
         """
         return gr.Timer(value=0.1, active=False)  # 100ms interval
-    
-    
+
+
     @staticmethod
     def create_calibration_upload() -> Tuple[gr.File, gr.Textbox]:
         """
         Create calibration upload component
-        
+
         Returns:
             tuple: (calibration_upload, upload_status)
         """
@@ -143,7 +143,7 @@ class UIFactory:
                     file_types=[".json"],
                     type="filepath"
                 )
-            
+
             with gr.Column(scale=2):
                 gr.Markdown("## 📋 Upload Status")
                 upload_status = gr.Textbox(
@@ -154,15 +154,15 @@ class UIFactory:
                     max_lines=12,
                     elem_classes=["status-box"]
                 )
-        
+
         return calibration_upload, upload_status
-    
-    
+
+
     @staticmethod
     def create_complete_interface() -> Dict[str, Any]:
         """
         Create complete UI interface
-        
+
         Returns:
             dict: Dictionary containing all UI components
         """
@@ -175,7 +175,7 @@ class UIFactory:
         activate_sam_btn, deactivate_sam_btn, point_prompt_1, point_prompt_2, compute_masks_btn, sam_status = SAMInterface.create_sam_controls()
         model3d_viewer, viz_status = PointCloudVisualizer.create_point_cloud_viewer()
         folder_name, start_frame, end_frame, step, process_all_btn, batch_progress, batch_status, download_batch, update_batch_status_btn = BatchProcessingInterface.create_batch_processing_controls()
-        
+
         return {
             'video_1_upload': video_1_upload,
             'video_2_upload': video_2_upload,

@@ -6,34 +6,31 @@ This test ensures that K_resized correctly matches the transformation applied to
 Results are saved to output_tests/ directory as JSON and PNG files for inspection.
 """
 
-import os
 import json
-import numpy as np
-import pytest
-import PIL.Image
 from pathlib import Path
 
-# Project root (pythonpath configured in pyproject.toml)
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+import numpy as np
+import pytest
 
-from stereo.image import resize_image
 from stereo.convert_calibration import (
     calculate_resize_and_crop_params,
     transform_camera_matrix,
 )
+from stereo.image import resize_image
+
 from .test_intrinsics_conversion_utils import (
-    save_json_results,
-    generate_synthetic_checkerboard,
-    generate_3d_test_points_random,
-    create_projection_visualization,
-    create_corner_visualization,
-    format_projections_for_json,
-    format_corners_for_json,
     create_accuracy_test_results,
-    print_sample_projections,
+    create_corner_visualization,
+    create_projection_visualization,
+    format_corners_for_json,
+    generate_3d_test_points_random,
+    generate_synthetic_checkerboard,
     print_sample_corners,
+    print_sample_projections,
+    save_json_results,
 )
 
+project_root = Path(__file__).resolve().parents[2]
 
 # ============================================================================
 # FIXTURES
@@ -43,8 +40,8 @@ from .test_intrinsics_conversion_utils import (
 @pytest.fixture
 def output_dir():
     """Create and return output directory for test results"""
-    output_path = os.path.join(project_root, "output_tests", "intrinsics_conversion")
-    os.makedirs(output_path, exist_ok=True)
+    output_path = project_root / "output_tests" / "intrinsics_conversion"
+    output_path.mkdir(parents=True, exist_ok=True)
     return output_path
 
 
@@ -69,10 +66,14 @@ def patch_size():
 @pytest.fixture
 def intrinsics_1_1():
     """Load intrinsics for camera 1_1"""
-    intrinsics_path = os.path.join(
-        project_root, "assets", "reconstruction", "intrinsics", "intrinsics_1_1.json"
+    intrinsics_path = (
+        project_root
+        / "assets"
+        / "reconstruction"
+        / "intrinsics"
+        / "intrinsics_1_1.json"
     )
-    with open(intrinsics_path, "r") as f:
+    with open(intrinsics_path) as f:
         data = json.load(f)
     return np.array(data["camera_matrix"])
 
@@ -80,10 +81,14 @@ def intrinsics_1_1():
 @pytest.fixture
 def intrinsics_1_2():
     """Load intrinsics for camera 1_2"""
-    intrinsics_path = os.path.join(
-        project_root, "assets", "reconstruction", "intrinsics", "intrinsics_1_2.json"
+    intrinsics_path = (
+        project_root
+        / "assets"
+        / "reconstruction"
+        / "intrinsics"
+        / "intrinsics_1_2.json"
     )
-    with open(intrinsics_path, "r") as f:
+    with open(intrinsics_path) as f:
         data = json.load(f)
     return np.array(data["camera_matrix"])
 
@@ -220,11 +225,11 @@ def test_resize_image_dimensions(
     }
 
     # Save JSON
-    save_json_results(os.path.join(output_dir, "test_resize_dimensions.json"), results)
+    save_json_results(output_dir / "test_resize_dimensions.json", results)
 
     # Save images
-    pil_image.save(os.path.join(output_dir, "checkerboard_original.png"))
-    resized_image.save(os.path.join(output_dir, "checkerboard_resized.png"))
+    pil_image.save(str(output_dir / "checkerboard_original.png"))
+    resized_image.save(str(output_dir / "checkerboard_resized.png"))
 
     print(f"✅ Resized image dimensions: {width}x{height}")
     print(f"📁 Saved results to: {output_dir}")
@@ -272,7 +277,7 @@ def test_transform_params_match_resize(
         "sizes_match": actual_size == expected_size,
     }
 
-    save_json_results(os.path.join(output_dir, "test_transform_params.json"), results)
+    save_json_results(output_dir / "test_transform_params.json", results)
 
     print(f"✅ Transform params match resize: {actual_size}")
     print(f"📁 Saved results to: {output_dir}")
@@ -315,7 +320,7 @@ def test_intrinsics_conversion_accuracy(
         original_image_size, target_size, patch_size
     )
 
-    print(f"Transform params:")
+    print("Transform params:")
     print(f"  Scale factor: {transform_params['scale_factor']:.6f}")
     print(f"  Resized size: {transform_params['resized_size']}")
     print(f"  Crop offset: {transform_params['crop_offset']}")
@@ -370,7 +375,7 @@ def test_intrinsics_conversion_accuracy(
     mean_error = np.mean(pixel_errors)
     median_error = np.median(pixel_errors)
 
-    print(f"\nProjection errors:")
+    print("\nProjection errors:")
     print(f"  Max error: {max_error:.6f} px")
     print(f"  Mean error: {mean_error:.6f} px")
     print(f"  Median error: {median_error:.6f} px")
@@ -398,9 +403,7 @@ def test_intrinsics_conversion_accuracy(
     )
 
     # Save detailed results as JSON
-    output_file = os.path.join(
-        output_dir, f"test_accuracy_{intrinsics_fixture}_{point_method}.json"
-    )
+    output_file = output_dir / f"test_accuracy_{intrinsics_fixture}_{point_method}.json"
     save_json_results(output_file, results)
 
     # Create visualization image
@@ -410,10 +413,8 @@ def test_intrinsics_conversion_accuracy(
         (final_width, final_height),
     )
 
-    viz_file = os.path.join(
-        output_dir, f"projections_{intrinsics_fixture}_{point_method}.png"
-    )
-    viz_img.save(viz_file)
+    viz_file = output_dir / f"projections_{intrinsics_fixture}_{point_method}.png"
+    viz_img.save(str(viz_file))
 
     print(f"📁 Saved results to: {output_file}")
     print(f"📁 Saved visualization to: {viz_file}")
@@ -465,7 +466,7 @@ def test_corner_tracking_through_resize(
 
     corners_valid = corners_transformed[valid_mask]
 
-    print(f"\nCheckerboard corner tracking:")
+    print("\nCheckerboard corner tracking:")
     print(f"  Original corners: {len(corners_original)}")
     print(f"  Valid corners in resized image: {len(corners_valid)}")
     print(f"  Resized image size: {final_width}x{final_height}")
@@ -487,13 +488,13 @@ def test_corner_tracking_through_resize(
         "original_image_size": list(original_image_size),
         "resized_image_size": [final_width, final_height],
         "corners": {
-            "total_original": int(len(corners_original)),
-            "valid_in_resized": int(len(corners_valid)),
+            "total_original": len(corners_original),
+            "valid_in_resized": len(corners_valid),
         },
         "all_corners": all_corners,  # All corners, not just samples
     }
 
-    output_file = os.path.join(output_dir, "test_corner_tracking.json")
+    output_file = output_dir / "test_corner_tracking.json"
     save_json_results(output_file, results)
 
     # Create visualization with corners marked
@@ -501,12 +502,12 @@ def test_corner_tracking_through_resize(
         resized_image, corners_valid, (final_width, final_height)
     )
 
-    viz_file = os.path.join(output_dir, "checkerboard_resized_with_corners.png")
-    resized_viz.save(viz_file)
+    viz_file = output_dir / "checkerboard_resized_with_corners.png"
+    resized_viz.save(str(viz_file))
 
     print(f"📁 Saved results to: {output_file}")
     print(f"📁 Saved visualization to: {viz_file}")
-    print(f"✅ Corner tracking test passed")
+    print("✅ Corner tracking test passed")
 
 
 # ============================================================================
@@ -584,7 +585,7 @@ def test_complete_pipeline_validation(
             "max_error": float(max_error),
             "mean_error": float(mean_error),
             "median_error": float(median_error),
-            "num_points": int(len(points_2d_ground_truth_valid)),
+            "num_points": len(points_2d_ground_truth_valid),
             "passed": bool(float(max_error) < 0.5),
         }
 
@@ -607,9 +608,9 @@ def test_complete_pipeline_validation(
         print(f"  Valid points: {result['num_points']}")
 
     if all_passed:
-        print(f"\n🎉 ALL TESTS PASSED - Intrinsics conversion is validated!")
+        print("\n🎉 ALL TESTS PASSED - Intrinsics conversion is validated!")
     else:
-        print(f"\n❌ SOME TESTS FAILED - Review conversion logic")
+        print("\n❌ SOME TESTS FAILED - Review conversion logic")
 
     # Save comprehensive summary
     summary = {
@@ -626,7 +627,7 @@ def test_complete_pipeline_validation(
         },
     }
 
-    output_file = os.path.join(output_dir, "complete_validation_summary.json")
+    output_file = output_dir / "complete_validation_summary.json"
     save_json_results(output_file, summary)
 
     print(f"\n📁 Saved comprehensive summary to: {output_file}")

@@ -1,7 +1,8 @@
 # Sail-CV Development Makefile
 
-.PHONY: help setup install install-all format lint typecheck test check clean dev \
+.PHONY: help setup install install-all format format-check lint lint-check typecheck ci-lint test check clean dev \
         test-reconstruction test-tracking \
+        reconstruct track web \
         docker-build docker-up docker-down \
         pre-commit-install pre-commit-run quick-check update
 
@@ -34,17 +35,31 @@ install-tracking: ## Install tracking dependencies
 
 # ── Code Quality ────────────────────────────────────────────────────
 
+# Paths used by ruff and mypy (single source of truth for CI and local)
+RUFF_PATHS := src/ tests/
+MYPY_PATHS := src/
+
 format: ## Format code with ruff
 	@echo "Formatting code..."
-	uv run ruff format src/ tests/
+	uv run ruff format $(RUFF_PATHS)
 
-lint: ## Lint code with ruff
+format-check: ## Check formatting only (no write); used by CI
+	uv run ruff format --check $(RUFF_PATHS)
+
+lint: ## Lint code with ruff (with auto-fix)
 	@echo "Linting code..."
-	uv run ruff check src/ tests/ --fix
+	uv run ruff check $(RUFF_PATHS) --fix
+
+lint-check: ## Lint only (no fix); used by CI
+	uv run ruff check $(RUFF_PATHS)
 
 typecheck: ## Run type checking with mypy
 	@echo "Type checking..."
-	uv run mypy --explicit-package-bases src/
+	uv run mypy --explicit-package-bases $(MYPY_PATHS)
+
+# CI: same as local checks but read-only (no format write, no lint --fix)
+ci-lint: format-check lint-check typecheck ## Run lint + typecheck as in CI
+	@echo "CI lint and typecheck complete."
 
 # ── Testing ─────────────────────────────────────────────────────────
 
@@ -58,6 +73,25 @@ test-reconstruction: ## Run reconstruction tests only
 test-tracking: ## Run tracking tests only
 	@echo "Running tracking tests..."
 	uv run pytest tests/tracking/ -v
+
+# ── Run ────────────────────────────────────────────────────────────
+
+RECONSTRUCTION_PYTHONPATH := src/reconstruction:mast3r:mast3r/dust3r
+TRACKING_PYTHONPATH := src/tracking
+
+SCENE ?= scene_10
+VIDEO ?= fixtures/C1_fixture.mp4
+LAYOUT ?= fixtures/C1_layout.json
+PARAMS ?= parameters/default.yaml
+
+reconstruct: ## Reconstruct 3D point cloud (SCENE=scene_10 [ARGS=...])
+	PYTHONPATH=$(RECONSTRUCTION_PYTHONPATH) uv run python src/reconstruction/reconstruct_pair.py --scene $(SCENE) $(ARGS)
+
+track: ## Run tell-tales tracking (VIDEO=... LAYOUT=... [PARAMS=...])
+	PYTHONPATH=$(TRACKING_PYTHONPATH) uv run python src/tracking/analyze_video.py --video $(VIDEO) --layout $(LAYOUT) --parameters $(PARAMS) $(ARGS)
+
+web: ## Launch reconstruction web interface
+	PYTHONPATH=$(RECONSTRUCTION_PYTHONPATH) uv run python web_app/main.py
 
 # ── Combined Checks ─────────────────────────────────────────────────
 

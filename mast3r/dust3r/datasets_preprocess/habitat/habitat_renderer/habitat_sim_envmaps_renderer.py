@@ -165,6 +165,6 @@ class HabitatEnvironmentMapRenderer:
 
     def up_direction(self):
         return np.asarray(habitat_sim.geo.UP).tolist()
-    
+
     def R_cam_to_world(self):
         return R_OPENCV2HABITAT.tolist()

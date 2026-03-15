@@ -32,7 +32,7 @@ dataset_to_root = {
     'Middlebury2006': './data/stereoflow/middlebury/2006/',
     'Middlebury2005': './data/stereoflow/middlebury/2005/train/',
     'MiddleburyEval3':  './data/stereoflow/middlebury/MiddEval3/',
-    'Spring': './data/stereoflow/spring/', 
+    'Spring': './data/stereoflow/spring/',
     'Kitti15': './data/stereoflow/kitti-stereo-2015/',
     'Kitti12': './data/stereoflow/kitti-stereo-2012/',
 }
@@ -49,10 +49,10 @@ def disp_to_tensor(disp):
     return torch.from_numpy(disp)[None,:,:]
 
 class StereoDataset(data.Dataset):
-    
+
     def __init__(self, split, augmentor=False, crop_size=None, totensor=True):
         self.split = split
-        if not augmentor: assert crop_size is None 
+        if not augmentor: assert crop_size is None
         if crop_size: assert augmentor
         self.crop_size = crop_size
         self.augmentor_str = augmentor
@@ -62,36 +62,36 @@ class StereoDataset(data.Dataset):
         self.has_constant_resolution = True # whether the dataset has constant resolution or not (=> don't use batch_size>1 at test time)
         self._prepare_data()
         self._load_or_build_cache()
-        
+
     def prepare_data(self):
         """
-        to be defined for each dataset 
+        to be defined for each dataset
         """
-        raise NotImplementedError 
-        
+        raise NotImplementedError
+
     def __len__(self):
         return len(self.pairnames)
-        
+
     def __getitem__(self, index):
         pairname = self.pairnames[index]
-        
-        # get filenames 
+
+        # get filenames
         Limgname = self.pairname_to_Limgname(pairname)
         Rimgname = self.pairname_to_Rimgname(pairname)
         Ldispname = self.pairname_to_Ldispname(pairname) if self.pairname_to_Ldispname is not None else None
-        
+
         # load images and disparities
         Limg = _read_img(Limgname)
         Rimg = _read_img(Rimgname)
         disp = self.load_disparity(Ldispname) if Ldispname is not None else None
-        
+
         # sanity check
         if disp is not None: assert np.all(disp>0) or self.name=="Spring", (self.name, pairname, Ldispname)
-        
+
         # apply augmentations
         if self.augmentor is not None:
             Limg, Rimg, disp = self.augmentor(Limg, Rimg, disp, self.name)
-        
+
         if self.totensor:
             Limg = img_to_tensor(Limg)
             Rimg = img_to_tensor(Rimg)
@@ -99,17 +99,17 @@ class StereoDataset(data.Dataset):
                 disp = torch.tensor([]) # to allow dataloader batching with default collate_gn
             else:
                 disp = disp_to_tensor(disp)
-        
+
         return Limg, Rimg, disp, str(pairname)
-        
+
     def __rmul__(self, v):
         self.rmul *= v
         self.pairnames = v * self.pairnames
         return self
-        
+
     def __str__(self):
         return f'{self.__class__.__name__}_{self.split}'
-        
+
     def __repr__(self):
         s = f'{self.__class__.__name__}(split={self.split}, augmentor={self.augmentor_str}, crop_size={str(self.crop_size)}, totensor={self.totensor})'
         if self.rmul==1:
@@ -120,7 +120,7 @@ class StereoDataset(data.Dataset):
 
     def _set_root(self):
         self.root = dataset_to_root[self.name]
-        assert os.path.isdir(self.root), f"could not find root directory for dataset {self.name}: {self.root}"       
+        assert os.path.isdir(self.root), f"could not find root directory for dataset {self.name}: {self.root}"
 
     def _load_or_build_cache(self):
         cache_file = osp.join(cache_dir, self.name+'.pkl')
@@ -133,7 +133,7 @@ class StereoDataset(data.Dataset):
             with open(cache_file, 'wb') as fid:
                 pickle.dump(tosave, fid)
             self.pairnames = tosave[self.split]
-        
+
 class CREStereoDataset(StereoDataset):
 
     def _prepare_data(self):
@@ -145,14 +145,14 @@ class CREStereoDataset(StereoDataset):
         self.pairname_to_Ldispname = lambda pairname: osp.join(self.root, pairname+'_left.disp.png')
         self.pairname_to_str = lambda pairname: pairname
         self.load_disparity = _read_crestereo_disp
-        
-    
+
+
     def _build_cache(self):
         allpairs = [s+'/'+f[:-len('_left.jpg')] for s in sorted(os.listdir(self.root)) for f in sorted(os.listdir(self.root+'/'+s)) if f.endswith('_left.jpg')]
         assert len(allpairs)==200000, "incorrect parsing of pairs in CreStereo"
         tosave = {'train': allpairs}
         return tosave
-        
+
 class SceneFlowDataset(StereoDataset):
 
     def _prepare_data(self):
@@ -164,7 +164,7 @@ class SceneFlowDataset(StereoDataset):
         self.pairname_to_Ldispname = lambda pairname: osp.join(self.root, pairname).replace('/frames_finalpass/','/disparity/').replace('/frames_cleanpass/','/disparity/')[:-4]+'.pfm'
         self.pairname_to_str = lambda pairname: pairname[:-4]
         self.load_disparity = _read_sceneflow_disp
-        
+
     def _build_cache(self):
         trainpairs = []
         # driving
@@ -188,7 +188,7 @@ class SceneFlowDataset(StereoDataset):
         assert len(testpairs) == 4370, "incorrect parsing of pairs in SceneFlow"
         test1of100pairs = testpairs[::100]
         assert len(test1of100pairs) == 44, "incorrect parsing of pairs in SceneFlow"
-        # all 
+        # all
         tosave = {'train_finalpass': trainpairs,
                   'train_cleanpass': list(map(lambda x: x.replace('frames_finalpass','frames_cleanpass'), trainpairs)),
                   'test_finalpass': testpairs,
@@ -199,7 +199,7 @@ class SceneFlowDataset(StereoDataset):
         tosave['train_allpass'] = tosave['train_finalpass']+tosave['train_cleanpass']
         tosave['test_allpass'] = tosave['test_finalpass']+tosave['test_cleanpass']
         return tosave
-   
+
 class Md21Dataset(StereoDataset):
 
     def _prepare_data(self):
@@ -211,7 +211,7 @@ class Md21Dataset(StereoDataset):
         self.pairname_to_Ldispname = lambda pairname: osp.join(self.root, pairname.split('/')[0], 'disp0.pfm')
         self.pairname_to_str = lambda pairname: pairname[:-4]
         self.load_disparity = _read_middlebury_disp
-        
+
     def _build_cache(self):
         seqs = sorted(os.listdir(self.root))
         trainpairs = []
@@ -223,7 +223,7 @@ class Md21Dataset(StereoDataset):
         subvalpairs = [p for p in trainpairs if any(p.startswith(s+'/') for s in seqs[-2:])]
         assert len(subtrainpairs)==335 and len(subvalpairs)==20, "incorrect parsing of pairs in Middlebury 2021"
         tosave = {'train': trainpairs, 'subtrain': subtrainpairs, 'subval': subvalpairs}
-        return tosave 
+        return tosave
 
 class Md14Dataset(StereoDataset):
 
@@ -237,7 +237,7 @@ class Md14Dataset(StereoDataset):
         self.pairname_to_str = lambda pairname: pairname[:-4]
         self.load_disparity = _read_middlebury_disp
         self.has_constant_resolution = False
-        
+
     def _build_cache(self):
         seqs = sorted(os.listdir(self.root))
         trainpairs = []
@@ -250,7 +250,7 @@ class Md14Dataset(StereoDataset):
         subvalpairs = [p for p in trainpairs if any(p.startswith(s+'/') for s in valseqs)]
         assert len(subtrainpairs)==132 and len(subvalpairs)==6, "incorrect parsing of pairs in Middlebury 2014"
         tosave = {'train': trainpairs, 'subtrain': subtrainpairs, 'subval': subvalpairs}
-        return tosave 
+        return tosave
 
 class Md06Dataset(StereoDataset):
 
@@ -263,7 +263,7 @@ class Md06Dataset(StereoDataset):
         self.pairname_to_Ldispname = lambda pairname: osp.join(self.root, pairname.split('/')[0], 'disp1.png')
         self.load_disparity = _read_middlebury20052006_disp
         self.has_constant_resolution = False
-        
+
     def _build_cache(self):
         seqs = sorted(os.listdir(self.root))
         trainpairs = []
@@ -291,7 +291,7 @@ class Md05Dataset(StereoDataset):
         self.pairname_to_Ldispname = lambda pairname: osp.join(self.root, pairname.split('/')[0], 'disp1.png')
         self.pairname_to_str = lambda pairname: pairname[:-4]
         self.load_disparity = _read_middlebury20052006_disp
-        
+
     def _build_cache(self):
         seqs = sorted(os.listdir(self.root))
         trainpairs = []
@@ -307,7 +307,7 @@ class Md05Dataset(StereoDataset):
         assert len(subtrainpairs)==45 and len(subvalpairs)==9, "incorrect parsing of pairs in Middlebury 2005"
         tosave = {'train': trainpairs, 'subtrain': subtrainpairs, 'subval': subvalpairs}
         return tosave
-        
+
 class MdEval3Dataset(StereoDataset):
 
     def _prepare_data(self):
@@ -316,7 +316,7 @@ class MdEval3Dataset(StereoDataset):
         assert self.split in [s+'_'+r for s in ['train','subtrain','subval','test','all'] for r in ['full','half','quarter']]
         if self.split.endswith('_full'):
             self.root = self.root.replace('/MiddEval3','/MiddEval3_F')
-        elif self.split.endswith('_half'):        
+        elif self.split.endswith('_half'):
             self.root = self.root.replace('/MiddEval3','/MiddEval3_H')
         else:
             assert self.split.endswith('_quarter')
@@ -328,7 +328,7 @@ class MdEval3Dataset(StereoDataset):
         # for submission only
         self.submission_methodname = "CroCo-Stereo"
         self.submission_sresolution = 'F' if self.split.endswith('_full') else ('H' if self.split.endswith('_half') else 'Q')
-        
+
     def _build_cache(self):
         trainpairs = ['train/'+s for s in sorted(os.listdir(self.root+'train/'))]
         testpairs = ['test/'+s for s in sorted(os.listdir(self.root+'test/'))]
@@ -340,7 +340,7 @@ class MdEval3Dataset(StereoDataset):
         for r in ['full','half','quarter']:
             tosave.update(**{'train_'+r: trainpairs, 'subtrain_'+r: subtrainpairs, 'subval_'+r: subvalpairs, 'test_'+r: testpairs, 'all_'+r: allpairs})
         return tosave
-        
+
     def submission_save_pairname(self, pairname, prediction, outdir, time):
         assert prediction.ndim==2
         assert prediction.dtype==np.float32
@@ -369,7 +369,7 @@ class ETH3DLowResDataset(StereoDataset):
         self.pairname_to_str = lambda pairname: pairname
         self.load_disparity = _read_eth3d_disp
         self.has_constant_resolution = False
-        
+
     def _build_cache(self):
         trainpairs = ['train/' + s for s in sorted(os.listdir(self.root+'train/'))]
         testpairs = ['test/' + s for s in sorted(os.listdir(self.root+'test/'))]
@@ -408,8 +408,8 @@ class BoosterDataset(StereoDataset):
         self.pairname_to_Ldispname = lambda pairname: osp.join(self.root, osp.dirname(pairname), '../disp_00.npy') # same images with different colors, same gt per sequence
         self.pairname_to_str = lambda pairname: pairname[:-4].replace('/camera_00/','/')
         self.load_disparity = _read_booster_disp
-        
-        
+
+
     def _build_cache(self):
         trainseqs = sorted(os.listdir(self.root+'train/balanced'))
         trainpairs = ['train/balanced/'+s+'/camera_00/'+imname for s in trainseqs for imname in sorted(os.listdir(self.root+'train/balanced/'+s+'/camera_00/'))]
@@ -420,7 +420,7 @@ class BoosterDataset(StereoDataset):
         # warning: if we do validation split, we should split scenes!!!
         tosave = {'train_balanced': trainpairs, 'test_balanced': testpairs, 'subtrain_balanced': subtrainpairs, 'subval_balanced': subvalpairs,}
         return tosave
-        
+
 class SpringDataset(StereoDataset):
 
     def _prepare_data(self):
@@ -431,8 +431,8 @@ class SpringDataset(StereoDataset):
         self.pairname_to_Rimgname = lambda pairname: osp.join(self.root, pairname+'.png').replace('frame_right','<frame_right>').replace('frame_left','frame_right').replace('<frame_right>','frame_left')
         self.pairname_to_Ldispname = lambda pairname: None if pairname.startswith('test') else osp.join(self.root, pairname+'.dsp5').replace('frame_left','disp1_left').replace('frame_right','disp1_right')
         self.pairname_to_str = lambda pairname: pairname
-        self.load_disparity = _read_hdf5_disp        
-        
+        self.load_disparity = _read_hdf5_disp
+
     def _build_cache(self):
         trainseqs = sorted(os.listdir( osp.join(self.root,'train')))
         trainpairs = [osp.join('train',s,'frame_left',f[:-4]) for s in trainseqs for f in sorted(os.listdir(osp.join(self.root,'train',s,'frame_left')))]
@@ -445,14 +445,14 @@ class SpringDataset(StereoDataset):
         assert len(trainpairs)==5000 and len(testpairs)==2000 and len(subtrainpairs)==4904 and len(subvalpairs)==96, "incorrect parsing of pairs in Spring"
         tosave = {'train': trainpairs, 'test': testpairs, 'subtrain': subtrainpairs, 'subval': subvalpairs}
         return tosave
-        
+
     def submission_save_pairname(self, pairname, prediction, outdir, time):
         assert prediction.ndim==2
         assert prediction.dtype==np.float32
         outfile = os.path.join(outdir, pairname+'.dsp5').replace('frame_left','disp1_left').replace('frame_right','disp1_right')
         os.makedirs( os.path.dirname(outfile), exist_ok=True)
         writeDsp5File(prediction, outfile)
-        
+
     def finalize_submission(self, outdir):
         assert self.split=='test'
         exe = "{self.root}/disp1_subsampling"
@@ -476,13 +476,13 @@ class Kitti12Dataset(StereoDataset):
         self.pairname_to_Ldispname = None if self.split=='test' else lambda pairname: osp.join(self.root, pairname.replace('/colored_0/','/disp_occ/')+'_10.png')
         self.pairname_to_str = lambda pairname: pairname.replace('/colored_0/','/')
         self.load_disparity = _read_kitti_disp
-        
+
     def _build_cache(self):
         trainseqs = ["training/colored_0/%06d"%(i) for i in range(194)]
         testseqs = ["testing/colored_0/%06d"%(i) for i in range(195)]
         assert len(trainseqs)==194 and len(testseqs)==195, "incorrect parsing of pairs in Kitti12"
         tosave = {'train': trainseqs, 'test': testseqs}
-        return tosave 
+        return tosave
 
     def submission_save_pairname(self, pairname, prediction, outdir, time):
         assert prediction.ndim==2
@@ -510,7 +510,7 @@ class Kitti15Dataset(StereoDataset):
         self.pairname_to_Ldispname = None if self.split=='test' else lambda pairname: osp.join(self.root, pairname.replace('/image_2/','/disp_occ_0/')+'_10.png')
         self.pairname_to_str = lambda pairname: pairname.replace('/image_2/','/')
         self.load_disparity = _read_kitti_disp
-        
+
     def _build_cache(self):
         trainseqs = ["training/image_2/%06d"%(i) for i in range(200)]
         subtrainseqs = trainseqs[:-5]
@@ -518,7 +518,7 @@ class Kitti15Dataset(StereoDataset):
         testseqs = ["testing/image_2/%06d"%(i) for i in range(200)]
         assert len(trainseqs)==200 and len(subtrainseqs)==195 and len(subvalseqs)==5 and len(testseqs)==200, "incorrect parsing of pairs in Kitti15"
         tosave = {'train': trainseqs, 'subtrain': subtrainseqs, 'subval': subvalseqs, 'test': testseqs}
-        return tosave 
+        return tosave
 
     def submission_save_pairname(self, pairname, prediction, outdir, time):
         assert prediction.ndim==2
@@ -552,7 +552,7 @@ def _read_png_disp(filename, coef=1.0):
     disp = np.asarray(Image.open(filename))
     disp = disp.astype(np.float32) / coef
     disp[disp==0.0] = np.inf
-    return disp 
+    return disp
 
 def _read_pfm_disp(filename):
     disp = np.ascontiguousarray(_read_pfm(filename)[0])
@@ -570,13 +570,13 @@ _read_eth3d_disp = _read_pfm_disp
 _read_middlebury_disp = _read_pfm_disp
 _read_carla_disp = _read_pfm_disp
 _read_tartanair_disp = _read_npy_disp
-    
+
 def _read_hdf5_disp(filename):
     disp = np.asarray(h5py.File(filename)['disparity'])
     disp[np.isnan(disp)] = np.inf # make invalid values as +inf
     #disp[disp==0.0] = np.inf # make invalid values as +inf
     return disp.astype(np.float32)
-    
+
 import re
 def _read_pfm(file):
     file = open(file, 'rb')
@@ -659,8 +659,8 @@ def vis_disparity(disp, m=None, M=None):
     disp_vis = cv2.applyColorMap(disp_vis, cv2.COLORMAP_INFERNO)
     return disp_vis
 
-# dataset getter 
-    
+# dataset getter
+
 def get_train_dataset_stereo(dataset_str, augmentor=True, crop_size=None):
     dataset_str = dataset_str.replace('(','Dataset(')
     if augmentor:
@@ -668,7 +668,7 @@ def get_train_dataset_stereo(dataset_str, augmentor=True, crop_size=None):
     if crop_size is not None:
         dataset_str = dataset_str.replace(')',', crop_size={:s})'.format(str(crop_size)))
     return eval(dataset_str)
-    
+
 def get_test_datasets_stereo(dataset_str):
     dataset_str = dataset_str.replace('(','Dataset(')
     return [eval(s) for s in dataset_str.split('+')]

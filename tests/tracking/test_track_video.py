@@ -1,11 +1,11 @@
 from pathlib import Path
-import json
-import numpy as np
+
+from detector import Detector
+from track_video import track_video
+from tracker import Tracker
 
 from models import ModelSpecs, TrackerConfig
-from detector import Detector
-from tracker import Tracker
-from track_video import track_video
+
 
 def test_track_video_yolo():
     project_root = Path(__file__).resolve().parents[2]
@@ -33,7 +33,17 @@ def test_track_video_yolo():
     tracker = Tracker(tracker_config)
 
     # Track video
-    track_video(detector, tracker, video_path, output_folder, output_video_path, output_json_path, start_frame=0, end_frame=60)
+    track_video(
+        detector,
+        tracker,
+        video_path,
+        output_folder,
+        output_video_path,
+        output_json_path,
+        start_frame=0,
+        end_frame=60,
+    )
+
 
 def test_track_video_rt_detr():
     project_root = Path(__file__).resolve().parents[2]
@@ -61,4 +71,13 @@ def test_track_video_rt_detr():
     tracker = Tracker(tracker_config)
 
     # Track video
-    track_video(detector, tracker, video_path, output_folder, output_video_path, output_json_path, start_frame=30, end_frame=40)
+    track_video(
+        detector,
+        tracker,
+        video_path,
+        output_folder,
+        output_video_path,
+        output_json_path,
+        start_frame=30,
+        end_frame=40,
+    )

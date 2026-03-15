@@ -5,7 +5,7 @@
 # --------------------------------------------------------
 # Main encoder/decoder blocks
 # --------------------------------------------------------
-# References: 
+# References:
 # timm
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/helpers.py
@@ -15,7 +15,7 @@
 
 
 import torch
-import torch.nn as nn 
+import torch.nn as nn
 
 from itertools import repeat
 import collections.abc
@@ -89,7 +89,7 @@ class Attention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
-        self.rope = rope 
+        self.rope = rope
 
     def forward(self, x, xpos):
         B, N, C = x.shape
@@ -97,11 +97,11 @@ class Attention(nn.Module):
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).transpose(1,3)
         q, k, v = [qkv[:,:,i] for i in range(3)]
         # q,k,v = qkv.unbind(2)  # make torchscript happy (cannot use tensor as tuple)
-               
+
         if self.rope is not None:
             q = self.rope(q, xpos)
             k = self.rope(k, xpos)
-               
+
         attn = (q @ k.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
@@ -130,7 +130,7 @@ class Block(nn.Module):
         return x
 
 class CrossAttention(nn.Module):
-    
+
     def __init__(self, dim, rope=None, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0.):
         super().__init__()
         self.num_heads = num_heads
@@ -143,22 +143,22 @@ class CrossAttention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
-        
+
         self.rope = rope
-        
+
     def forward(self, query, key, value, qpos, kpos):
         B, Nq, C = query.shape
         Nk = key.shape[1]
         Nv = value.shape[1]
-        
+
         q = self.projq(query).reshape(B,Nq,self.num_heads, C// self.num_heads).permute(0, 2, 1, 3)
         k = self.projk(key).reshape(B,Nk,self.num_heads, C// self.num_heads).permute(0, 2, 1, 3)
         v = self.projv(value).reshape(B,Nv,self.num_heads, C// self.num_heads).permute(0, 2, 1, 3)
-        
+
         if self.rope is not None:
             q = self.rope(q, qpos)
             k = self.rope(k, kpos)
-            
+
         attn = (q @ k.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
@@ -189,15 +189,15 @@ class DecoderBlock(nn.Module):
         x = x + self.drop_path(self.cross_attn(self.norm2(x), y_, y_, xpos, ypos))
         x = x + self.drop_path(self.mlp(self.norm3(x)))
         return x, y
-        
-        
+
+
 # patch embedding
 class PositionGetter(object):
     """ return positions of patches """
 
     def __init__(self):
         self.cache_positions = {}
-        
+
     def __call__(self, b, h, w, device):
         if not (h,w) in self.cache_positions:
             x = torch.arange(w, device=device)
@@ -221,9 +221,9 @@ class PatchEmbed(nn.Module):
 
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
-        
+
         self.position_getter = PositionGetter()
-        
+
     def forward(self, x):
         B, C, H, W = x.shape
         torch._assert(H == self.img_size[0], f"Input image height ({H}) doesn't match model ({self.img_size[0]}).")
@@ -234,8 +234,7 @@ class PatchEmbed(nn.Module):
             x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
         x = self.norm(x)
         return x, pos
-        
+
     def _init_weights(self):
         w = self.proj.weight.data
-        torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1])) 
-
+        torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))

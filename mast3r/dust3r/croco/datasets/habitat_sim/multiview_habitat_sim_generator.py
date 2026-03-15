@@ -353,7 +353,7 @@ class MultiviewHabitatSimGenerator:
         """
         Return a list of images corresponding to a spiral trajectory from a random starting point.
         Useful to generate nice visualisations.
-        Use an even number of half turns to get a nice "C1-continuous" loop effect 
+        Use an even number of half turns to get a nice "C1-continuous" loop effect
         """
         ref_position, ref_orientation, navpoint = self.sample_random_viewpoint()
         ref_observations = self.render_viewpoint(ref_position, ref_orientation)
@@ -373,7 +373,7 @@ class MultiviewHabitatSimGenerator:
         # Spiral trajectory, use_constant orientation
         for i, alpha in enumerate(np.linspace(0, 1, images_count)):
             r = max_radius * np.abs(np.sin(alpha * np.pi)) # Increase then decrease the radius
-            theta = alpha * half_turns * np.pi 
+            theta = alpha * half_turns * np.pi
             x = r * np.cos(theta)
             y = r * np.sin(theta)
             z = 0.0

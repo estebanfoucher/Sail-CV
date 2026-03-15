@@ -436,6 +436,112 @@ def fit_circle_least_squares(
 
 
 # -------------------------------------------------------
+# 6a-bis. Fit circle with fixed (imposed) radius
+# -------------------------------------------------------
+def fit_circle_fixed_radius(points_2d, fixed_radius, initial_center):
+    """
+    Fit a circle to 2D points with radius locked to fixed_radius.
+    Only the center (cx, cy) is optimized (2 DOF).
+
+    Args:
+        points_2d: 2D point array (N, 2)
+        fixed_radius: Imposed radius (not optimized)
+        initial_center: Starting center from a previous free fit (2D array)
+
+    Returns:
+        center: Optimized circle center (2D)
+        residual_std: Standard deviation of geometric residuals
+    """
+    if len(points_2d) < 3 or initial_center is None:
+        return None, None
+
+    def residuals(params):
+        cx, cy = params
+        center = np.array([cx, cy])
+        return np.linalg.norm(points_2d - center, axis=1) - fixed_radius
+
+    result = least_squares(residuals, initial_center, loss="soft_l1", f_scale=0.1)
+    if result.success:
+        center = np.array(result.x)
+        res_std = (
+            np.std(np.abs(residuals(result.x)), ddof=1) if len(points_2d) > 1 else 0.0
+        )
+        return center, res_std
+    return None, None
+
+
+# -------------------------------------------------------
+# 6a-ter. Mean distance between two circles within bbox (for error in mm)
+# -------------------------------------------------------
+def mean_circle_error_in_bbox_mm(
+    points_2d,
+    center_free,
+    radius_free,
+    center_constr,
+    radius_constr,
+    n_sample=720,
+    units_to_mm=1000.0,
+):
+    """
+    Mean distance (in mm) between the free-fit and constrained-radius circles
+    over the arc of the free-fit circle that lies inside the 2D bbox of the data.
+
+    Samples points on the free-fit circle; keeps those inside the bbox of points_2d;
+    for each, computes distance to the constrained circle; returns mean in mm.
+
+    Assumes 2D/3D coordinates are in meters (units_to_mm=1000).
+    """
+    if points_2d is None or len(points_2d) < 2:
+        return None
+    x_min, x_max = points_2d[:, 0].min(), points_2d[:, 0].max()
+    y_min, y_max = points_2d[:, 1].min(), points_2d[:, 1].max()
+    angles = np.linspace(0, 2 * np.pi, n_sample, endpoint=False)
+    # Points on free-fit circle
+    px = center_free[0] + radius_free * np.cos(angles)
+    py = center_free[1] + radius_free * np.sin(angles)
+    inside = (px >= x_min) & (px <= x_max) & (py >= y_min) & (py <= y_max)
+    if not np.any(inside):
+        return None
+    pts = np.column_stack([px[inside], py[inside]])
+    dist_to_constr_center = np.linalg.norm(pts - center_constr, axis=1)
+    # Signed distance to constrained circle (positive outside)
+    dist_to_constr_circle = np.abs(dist_to_constr_center - radius_constr)
+    mean_dist = float(np.mean(dist_to_constr_circle))
+    return mean_dist * units_to_mm
+
+
+def sigma_circle_error_in_bbox_mm(
+    points_2d,
+    center_free,
+    radius_free,
+    center_constr,
+    radius_constr,
+    n_sample=720,
+    units_to_mm=1000.0,
+):
+    """
+    Std (sigma) of the distance between the free-fit and constrained circles
+    over the arc of the free-fit circle that lies inside the 2D bbox of the data.
+    Same sampling as mean_circle_error_in_bbox_mm; returns std in mm.
+    """
+    if points_2d is None or len(points_2d) < 2:
+        return None
+    x_min, x_max = points_2d[:, 0].min(), points_2d[:, 0].max()
+    y_min, y_max = points_2d[:, 1].min(), points_2d[:, 1].max()
+    angles = np.linspace(0, 2 * np.pi, n_sample, endpoint=False)
+    px = center_free[0] + radius_free * np.cos(angles)
+    py = center_free[1] + radius_free * np.sin(angles)
+    inside = (px >= x_min) & (px <= x_max) & (py >= y_min) & (py <= y_max)
+    if not np.any(inside):
+        return None
+    pts = np.column_stack([px[inside], py[inside]])
+    dist_to_constr_center = np.linalg.norm(pts - center_constr, axis=1)
+    dist_to_constr_circle = np.abs(dist_to_constr_center - radius_constr)
+    sigma_dist = float(np.std(dist_to_constr_circle))
+    return sigma_dist * units_to_mm
+
+
+# -------------------------------------------------------
 # 6b. Statistical Outlier Removal for 2D points
 # -------------------------------------------------------
 def remove_statistical_outliers_2d(points_2d, n_neighbors=20, std_ratio=2.0):
@@ -1084,6 +1190,10 @@ for name, params in params_dict.items():
     slice_centers = []
     valid_slices = []
     circle_centers_2d = []  # Store circle centers for visualization
+    constrained_centers_2d = []  # Store constrained-radius circle centers
+    mean_circle_error_mm = []  # Mean distance free vs constrained circle in bbox (mm)
+    sigma_point_to_green_mm = []  # Std of point-to-green-circle distances per slice (mm)
+    sigma_red_green_bbox_mm = []  # Std of red-green circle distance in bbox per slice (mm)
     valid_slice_points = []  # Store original slice points for all valid slices
 
     # Track previous slice results for use as priors
@@ -1135,12 +1245,33 @@ for name, params in params_dict.items():
             # Fallback: use a simple approximation
             camber_sigma = abs(camber) * (sigma / radius) if radius > 0 else 0.0
 
+        # Constrained-radius fit: optimize center only with R = measured_radius
+        constr_center, constr_std = fit_circle_fixed_radius(
+            points_2d, measured_radius, initial_center=center_2d
+        )
+
         radii.append(radius)
         radius_sigmas.append(sigma)
         cambers.append(camber)
         camber_sigmas.append(camber_sigma)
         slice_centers.append(pos)
         circle_centers_2d.append(center_2d)
+        constrained_centers_2d.append(constr_center)
+        err_mm = mean_circle_error_in_bbox_mm(
+            points_2d, center_2d, radius, constr_center, measured_radius
+        )
+        mean_circle_error_mm.append(err_mm if err_mm is not None else np.nan)
+        # Sigma of point-to-green-circle distance (green = ground truth, R = measured_radius)
+        dist_to_green = np.abs(
+            np.linalg.norm(points_2d - constr_center, axis=1) - measured_radius
+        )
+        sigma_green_mm = float(np.std(dist_to_green)) * 1000.0  # m -> mm
+        sigma_point_to_green_mm.append(sigma_green_mm)
+        # Sigma of red-green circle distance in bbox (along arc inside bbox only)
+        sigma_rg = sigma_circle_error_in_bbox_mm(
+            points_2d, center_2d, radius, constr_center, measured_radius
+        )
+        sigma_red_green_bbox_mm.append(sigma_rg if sigma_rg is not None else np.nan)
         valid_slices.append(i + 1)
         valid_slice_points.append(slice_pts)  # Store for visualization
 
@@ -1152,6 +1283,18 @@ for name, params in params_dict.items():
         print(f"  Circle center (2D): {center_2d}")
         print(f"  Radius: {radius:.6f} ± {2 * sigma:.6f} (2*sigma)")
         print(f"  Camber: {camber:.6f} ± {2 * camber_sigma:.6f} (2*sigma)")
+        if err_mm is not None and not np.isnan(err_mm):
+            print(f"  Mean circle error (free vs constrained in bbox): {err_mm:.3f} mm")
+
+    # Summary: mean circle error in mm (over valid slices)
+    if mean_circle_error_mm:
+        valid_err = np.array(mean_circle_error_mm)
+        valid_err = valid_err[~(np.isnan(valid_err))]
+        if len(valid_err) > 0:
+            print(
+                f"\n--- Mean circle error (free vs constrained, in bbox): "
+                f"mean = {np.mean(valid_err):.3f} mm, max = {np.max(valid_err):.3f} mm over {len(valid_err)} slices ---"
+            )
 
     # -------------------------------------------------------
     # 7. Visualizations
@@ -1292,12 +1435,12 @@ for name, params in params_dict.items():
     ax2.legend(bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
 
     plt.tight_layout()
-    output_path = plots_dir / "01_cylinder_analysis_steps.png"
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    output_path = plots_dir / "01_cylinder_analysis_steps.pdf"
+    plt.savefig(output_path, format="pdf", bbox_inches="tight")
     plt.close(fig)
     print(f"Saved: {output_path}")
 
-    # Visualization 2: All successful projected circle fittings
+    # Visualization 2: All successful projected circle fittings (zoomed to data)
     if len(valid_slices) > 0:
         n_cols = min(4, len(valid_slices))
         n_rows = int(np.ceil(len(valid_slices) / n_cols))
@@ -1316,6 +1459,7 @@ for name, params in params_dict.items():
             # Get fitted circle parameters for this slice
             center_2d = circle_centers_2d[idx]
             radius_val = radii[idx]
+            constr_center = constrained_centers_2d[idx]
 
             # Plot projected points
             ax.scatter(
@@ -1324,33 +1468,56 @@ for name, params in params_dict.items():
                 s=5,
                 alpha=0.6,
                 c="blue",
-                label="Projected Points",
+                label="Points",
             )
 
-            # Plot fitted circle
-            circle = plt.Circle(
-                center_2d,
-                radius_val,
-                fill=False,
+            # Plot free-fit circle (red)
+            theta = np.linspace(0, 2 * np.pi, 360)
+            free_x = center_2d[0] + radius_val * np.cos(theta)
+            free_y = center_2d[1] + radius_val * np.sin(theta)
+            ax.plot(
+                free_x,
+                free_y,
                 color="red",
-                linewidth=2,
-                label="Fitted Circle",
+                linewidth=1.5,
+                label=f"Free R={radius_val:.3f}",
             )
-            ax.add_patch(circle)
-            ax.scatter(*center_2d, color="red", s=20, marker="o", label="Circle Center")
 
-            ax.set_xlabel("u (plane coordinate)", fontsize=10)
-            ax.set_ylabel("v (plane coordinate)", fontsize=10)
+            # Plot constrained circle (green, R = measured_radius)
+            if constr_center is not None:
+                constr_x = constr_center[0] + measured_radius * np.cos(theta)
+                constr_y = constr_center[1] + measured_radius * np.sin(theta)
+                ax.plot(
+                    constr_x,
+                    constr_y,
+                    color="green",
+                    linewidth=1.5,
+                    label=f"Constr R={measured_radius:.3f}",
+                )
+
+            # Zoom to data region: bbox of points with margin
+            margin_frac = 0.15
+            x_min, x_max = points_2d[:, 0].min(), points_2d[:, 0].max()
+            y_min, y_max = points_2d[:, 1].min(), points_2d[:, 1].max()
+            dx = x_max - x_min
+            dy = y_max - y_min
+            pad = max(dx, dy) * margin_frac
+            ax.set_xlim(x_min - pad, x_max + pad)
+            ax.set_ylim(y_min - pad, y_max + pad)
+
+            ax.set_xlabel("u", fontsize=10)
+            ax.set_ylabel("v", fontsize=10)
             ax.set_title(
-                f"Slice {slice_num}\nPos: {pos:.3f}, R: {radius_val:.4f}", fontsize=9
+                f"Slice {slice_num}\nPos: {pos:.3f}, R_free: {radius_val:.3f}",
+                fontsize=9,
             )
             ax.set_aspect("equal")
             ax.grid(True, alpha=0.3)
-            ax.legend(fontsize=7)
+            ax.legend(fontsize=6, loc="best")
 
         plt.tight_layout()
-        output_path = plots_dir / "02_cylinder_all_projections.png"
-        plt.savefig(output_path, dpi=150, bbox_inches="tight")
+        output_path = plots_dir / "02_cylinder_all_projections.pdf"
+        plt.savefig(output_path, format="pdf", bbox_inches="tight")
         plt.close(fig_all)
         print(f"Saved: {output_path} ({len(valid_slices)} successful slices)")
 
@@ -1373,25 +1540,25 @@ for name, params in params_dict.items():
             color="orange",
             ecolor="black",
             alpha=0.7,
-            label="Fitted Radius (±2*sigma)",
+            label=r"Fitted radius (±2$\sigma$)",
         )
         ax2.axhline(
             measured_radius,
             color="red",
             linestyle="--",
             linewidth=2,
-            label="Measured Radius",
+            label="Measured radius",
         )
         ax2.set_xlabel("Position along axis", fontsize=12)
-        ax2.set_ylabel("Radius", fontsize=12)
+        ax2.set_ylabel("Radius (m)", fontsize=12)
         ax2.set_ylim(2, 6)
-        ax2.set_title("Radius vs Position Along Axis", fontsize=14, fontweight="bold")
+        ax2.set_title("Radius vs position along axis", fontsize=12)
         ax2.grid(True, alpha=0.3)
         ax2.legend()
 
         plt.tight_layout()
-        output_path = plots_dir / "03_cylinder_curvature_radius.png"
-        plt.savefig(output_path, dpi=150, bbox_inches="tight")
+        output_path = plots_dir / "03_cylinder_curvature_radius.pdf"
+        plt.savefig(output_path, format="pdf", bbox_inches="tight")
         plt.close(fig2)
         print(f"Saved: {output_path}")
 
@@ -1467,8 +1634,8 @@ for name, params in params_dict.items():
             ax3.legend()
 
             plt.tight_layout()
-            output_path = plots_dir / "04_cylinder_camber.png"
-            plt.savefig(output_path, dpi=150, bbox_inches="tight")
+            output_path = plots_dir / "04_cylinder_camber.pdf"
+            plt.savefig(output_path, format="pdf", bbox_inches="tight")
             plt.close(fig3)
             print(f"Saved: {output_path}")
 
@@ -1485,3 +1652,46 @@ for name, params in params_dict.items():
                 print(f"Measured camber: {measured_camber:.6f}")
     else:
         print("\nNo valid slices found for camber analysis")
+
+    # Visualization 5: Sigma of point-to-green-circle distance per slice
+    # The green (constrained) circle is ground truth: fixed radius = measured_radius from physical measurement.
+    # This plot shows the spread (std) of point-to-ground-truth distances per slice.
+    if len(sigma_point_to_green_mm) > 0:
+        fig5 = plt.figure(figsize=(8, 5))
+        ax5 = fig5.add_subplot(1, 1, 1)
+        ax5.plot(
+            slice_centers,
+            sigma_point_to_green_mm,
+            "o-",
+            color="green",
+            linewidth=2,
+            markersize=6,
+            label=r"$\sigma$-raw-distribution (point cloud to ground-truth circle)",
+        )
+        # Red curve: sigma of red-green circle distance in bbox only
+        if len(sigma_red_green_bbox_mm) == len(slice_centers):
+            red_sigma = np.array(sigma_red_green_bbox_mm)
+            valid_red = ~np.isnan(red_sigma)
+            if np.any(valid_red):
+                ax5.plot(
+                    np.array(slice_centers)[valid_red],
+                    red_sigma[valid_red],
+                    "s-",
+                    color="red",
+                    linewidth=2,
+                    markersize=5,
+                    label=r"$\sigma$ (red-green circle distance, bbox only)",
+                )
+        ax5.set_xlabel("Position along principal axis", fontsize=12)
+        ax5.set_ylabel("Std of distance (mm)", fontsize=12)
+
+        ax5.grid(True, alpha=0.3)
+        ax5.legend()
+        if "c2f_720" in name:
+            ax5.set_ylim(top=150, bottom=0)
+
+        plt.tight_layout(rect=[0, 0.04, 1, 1])
+        output_path = plots_dir / "05_cylinder_sigma_point_cloud_to_ground_truth.pdf"
+        plt.savefig(output_path, format="pdf", bbox_inches="tight")
+        plt.close(fig5)
+        print(f"Saved: {output_path}")

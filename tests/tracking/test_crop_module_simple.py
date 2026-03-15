@@ -3,8 +3,8 @@
 import cv2
 import numpy as np
 
-from models import BoundingBox, Detection, Image
 from crop_module import CropModulePCA
+from models import BoundingBox, Image
 
 
 def test_pca_1_axis():
@@ -20,9 +20,6 @@ def test_pca_1_axis():
     # Create a bounding box around the rectangle
     bbox = BoundingBox.from_numpy(np.array([10, 30, 190, 70]))
 
-    # Create detection
-    detection = Detection(bbox=bbox, confidence=1.0, class_id=0)
-
     # Initialize PCA module with 1 component
     pca_module = CropModulePCA(n_components=1, use_grayscale=True)
 
@@ -34,7 +31,9 @@ def test_pca_1_axis():
     result = results[0]
     assert isinstance(result, np.ndarray), "Result should be numpy array"
     assert result.shape == (1,), f"Result should have shape (1,), got {result.shape}"
-    assert not np.allclose(result, 0), "PCA result should not be zero for non-empty crop"
+    assert not np.allclose(result, 0), (
+        "PCA result should not be zero for non-empty crop"
+    )
 
     print(f"✓ PCA 1-axis test passed. Result: {result}")
     print(f"  Principal axis value: {result[0]:.4f}")

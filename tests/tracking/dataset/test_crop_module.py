@@ -8,12 +8,12 @@ import numpy as np
 # Project root (pythonpath configured in pyproject.toml)
 project_root = Path(__file__).resolve().parents[3]
 
-# Import after path is set
-from models import Image, ModelSpecs
-from dataset import YOLODatasetLoader  # noqa: E402
 from detector import Detector  # noqa: E402
+
 from crop_module import CropModulePCA, MaskDetectorSAM  # noqa: E402
 from crop_module.utils import extract_crop_from_bbox  # noqa: E402
+from dataset import YOLODatasetLoader  # noqa: E402
+from models import ModelSpecs  # noqa: E402
 
 
 def test_loader():
@@ -36,7 +36,7 @@ def test_loader():
 
     # Process each pair
     for idx, (image_name, image, detections) in enumerate(pairs):
-        print(f"Processing {idx+1}/10: {image_name} ({len(detections)} detections)")
+        print(f"Processing {idx + 1}/10: {image_name} ({len(detections)} detections)")
 
         # Render detections
         rendered_image = detector.render_result(image, detections)
@@ -63,7 +63,7 @@ def test_crop_extraction():
 
     # Process each pair
     for idx, (image_name, image, detections) in enumerate(pairs):
-        print(f"Processing {idx+1}/10: {image_name} ({len(detections)} detections)")
+        print(f"Processing {idx + 1}/10: {image_name} ({len(detections)} detections)")
 
         # Extract crops for each detection
         for det_idx, detection in enumerate(detections):
@@ -96,12 +96,14 @@ def test_mask_generation():
         print("✓ MaskDetectorSAM initialized successfully")
     except Exception as e:
         print(f"⚠ Warning: Could not initialize MaskDetectorSAM: {e}")
-        print("  Skipping mask generation test. Install mobile-sam or segment-anything to enable.")
+        print(
+            "  Skipping mask generation test. Install mobile-sam or segment-anything to enable."
+        )
         return
 
     # Process each pair
     for idx, (image_name, image, detections) in enumerate(pairs):
-        print(f"Processing {idx+1}/10: {image_name} ({len(detections)} detections)")
+        print(f"Processing {idx + 1}/10: {image_name} ({len(detections)} detections)")
 
         if not detections:
             continue
@@ -121,7 +123,9 @@ def test_mask_generation():
             cv2.imwrite(str(output_path), mask_rendered)
 
             # Also save individual crop masks for inspection
-            for det_idx, (detection, mask) in enumerate(zip(detections, masks)):
+            for det_idx, (detection, mask) in enumerate(
+                zip(detections, masks, strict=True)
+            ):
                 crop = extract_crop_from_bbox(image, detection.bbox)
                 if crop.size == 0:
                     continue
@@ -175,7 +179,9 @@ def test_pca_results():
         print("✓ Using MaskDetectorSAM for masked PCA")
     except Exception as e:
         print(f"⚠ Warning: Could not initialize MaskDetectorSAM: {e}")
-        print("  Running PCA without masks. Install mobile-sam or segment-anything to enable masks.")
+        print(
+            "  Running PCA without masks. Install mobile-sam or segment-anything to enable masks."
+        )
 
     # Initialize PCA module with 2 components to get full 2D principal axis direction
     # Pass mask_detector if available
@@ -185,7 +191,7 @@ def test_pca_results():
 
     # Process each pair
     for idx, (image_name, image, detections) in enumerate(pairs):
-        print(f"Processing {idx+1}/10: {image_name} ({len(detections)} detections)")
+        print(f"Processing {idx + 1}/10: {image_name} ({len(detections)} detections)")
 
         if not detections:
             continue
@@ -197,7 +203,9 @@ def test_pca_results():
         pca_results = pca_module.analyze_crop(image, bboxes)
 
         # Visualize PCA results on crops
-        for det_idx, (detection, pca_result) in enumerate(zip(detections, pca_results)):
+        for det_idx, (detection, pca_result) in enumerate(
+            zip(detections, pca_results, strict=True)
+        ):
             # Extract crop
             crop = extract_crop_from_bbox(image, detection.bbox)
 
@@ -243,7 +251,9 @@ def test_pca_results():
             )
 
             # Draw center point (start of arrow)
-            cv2.circle(crop_viz, (center_x, center_y), 5, (0, 0, 255), -1)  # Red center point
+            cv2.circle(
+                crop_viz, (center_x, center_y), 5, (0, 0, 255), -1
+            )  # Red center point
 
             # Draw a perpendicular line to show it's an axis (optional, makes it more obvious)
             perp_length = min(w, h) * 0.1
@@ -251,7 +261,9 @@ def test_pca_results():
             perp_y = int(center_y + axis_x_norm * perp_length)
             perp_x2 = int(center_x + axis_y_norm * perp_length)
             perp_y2 = int(center_y - axis_x_norm * perp_length)
-            cv2.line(crop_viz, (perp_x, perp_y), (perp_x2, perp_y2), (255, 255, 0), 2)  # Yellow perpendicular
+            cv2.line(
+                crop_viz, (perp_x, perp_y), (perp_x2, perp_y2), (255, 255, 0), 2
+            )  # Yellow perpendicular
 
             # Add text with PCA values
             cv2.putText(
@@ -301,7 +313,7 @@ def test_full_crop_module_pipeline():
 
     # Process each pair through full pipeline
     for idx, (image_name, image, detections) in enumerate(pairs):
-        print(f"Processing {idx+1}/10: {image_name} ({len(detections)} detections)")
+        print(f"Processing {idx + 1}/10: {image_name} ({len(detections)} detections)")
 
         if not detections:
             continue
@@ -345,7 +357,9 @@ def test_full_crop_module_pipeline():
         cv2.imwrite(str(full_output_path), full_viz)
 
         # Step 4: Create individual crop visualizations with mask and PCA
-        for det_idx, (detection, pca_result) in enumerate(zip(detections, pca_results)):
+        for det_idx, (detection, pca_result) in enumerate(
+            zip(detections, pca_results, strict=True)
+        ):
             # Extract crop
             crop = extract_crop_from_bbox(image, detection.bbox)
 
@@ -505,7 +519,7 @@ if __name__ == "__main__":
 
     # Process each pair through full pipeline
     for idx, (image_name, image, detections) in enumerate(pairs):
-        print(f"Processing {idx+1}/10: {image_name} ({len(detections)} detections)")
+        print(f"Processing {idx + 1}/10: {image_name} ({len(detections)} detections)")
 
         if not detections:
             continue
@@ -549,7 +563,9 @@ if __name__ == "__main__":
         cv2.imwrite(str(full_output_path), full_viz)
 
         # Step 4: Create individual crop visualizations with mask and PCA
-        for det_idx, (detection, pca_result) in enumerate(zip(detections, pca_results)):
+        for det_idx, (detection, pca_result) in enumerate(
+            zip(detections, pca_results, strict=True)
+        ):
             # Extract crop
             crop = extract_crop_from_bbox(image, detection.bbox)
 
@@ -624,7 +640,7 @@ if __name__ == "__main__":
             )
 
             # Draw center point
-            cv2.circle(crop_viz, (center_x, center_y), 5, (255, 0, 0), -1)            # Add text
+            cv2.circle(crop_viz, (center_x, center_y), 5, (255, 0, 0), -1)  # Add text
             mask_info = (
                 f"mask: {crop_mask.mean() * 100:.1f}%"
                 if crop_mask is not None

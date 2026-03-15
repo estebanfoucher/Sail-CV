@@ -36,7 +36,7 @@ $SCENES_DIR/
 └──scannet/
 ```
 
-### Download renderings metadata 
+### Download renderings metadata
 
 Download metadata corresponding to each scene and extract them into a directory `$METADATA_DIR`
 ```bash

@@ -58,7 +58,7 @@ class StaticThings3D (BaseStereoViewDataset):
             image, depthmap, intrinsics = self._crop_resize_if_necessary(image, depthmap, intrinsics, resolution, rng, info=(seq_path,cam,img))
 
             views.append(dict(
-                img = image, 
+                img = image,
                 depthmap = depthmap,
                 camera_pose = camera_pose, # cam2world
                 camera_intrinsics = intrinsics,

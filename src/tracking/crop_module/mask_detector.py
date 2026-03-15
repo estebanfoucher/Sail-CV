@@ -203,7 +203,7 @@ class MaskDetectorSAM(MaskDetector):
                 bbox_indices, mask_indices = linear_sum_assignment(cost_matrix)
 
                 # Assign masks to bboxes (accept any match from Hungarian assignment, threshold = 0)
-                assigned_masks = [None] * num_bboxes
+                assigned_masks: list[np.ndarray | None] = [None] * num_bboxes
                 for bbox_idx, mask_idx in zip(bbox_indices, mask_indices, strict=False):
                     iou = -cost_matrix[bbox_idx, mask_idx]  # Convert back to IoU
                     assigned_masks[bbox_idx] = raw_masks[mask_idx]

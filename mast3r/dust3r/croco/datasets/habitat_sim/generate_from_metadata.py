@@ -18,7 +18,7 @@ def generate_multiview_images_from_metadata(metadata_filename,
                                             output_dir,
                                             overload_params = dict(),
                                             scene_datasets_paths=None,
-                                            exist_ok=False):   
+                                            exist_ok=False):
     """
     Generate images from a metadata file for reproducibility purposes.
     """
@@ -47,7 +47,7 @@ def generate_multiview_images_from_metadata(metadata_filename,
     generate_depth = metadata["generate_depth"]
 
     os.makedirs(output_dir, exist_ok=exist_ok)
- 
+
     generator = MultiviewHabitatSimGenerator(**generation_entries)
 
     # Generate views
@@ -88,5 +88,3 @@ if __name__ == "__main__":
                              scene_datasets_paths=SCENES_DATASET,
                              overload_params=dict(),
                              exist_ok=True)
-
- 

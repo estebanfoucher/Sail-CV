@@ -1,6 +1,6 @@
 # Copyright (C) 2022-present Naver Corporation. All rights reserved.
 # Licensed under CC BY-NC-SA 4.0 (non-commercial use only).
-# 
+#
 # --------------------------------------------------------
 # utilitary functions for CroCo
 # --------------------------------------------------------
@@ -220,7 +220,7 @@ def save_on_master(*args, **kwargs):
 
 
 def init_distributed_mode(args):
-    nodist = args.nodist if hasattr(args,'nodist') else False 
+    nodist = args.nodist if hasattr(args,'nodist') else False
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ and not nodist:
         args.rank = int(os.environ["RANK"])
         args.world_size = int(os.environ['WORLD_SIZE'])
@@ -344,7 +344,7 @@ def _replace(text, src, tgt, rm=''):
     - replace all elements in src by the corresponding element in tgt
     - remove all elements in rm
     """
-    if len(tgt) == 1: 
+    if len(tgt) == 1:
         tgt = tgt * len(src)
     assert len(src) == len(tgt), f"'{src}' and '{tgt}' should have the same len"
     for s,t in zip(src, tgt):
@@ -352,13 +352,13 @@ def _replace(text, src, tgt, rm=''):
     for c in rm:
         text = text.replace(c,'')
     return text
-    
+
 def filename( obj ):
-    """ transform a python obj or cmd into a proper filename. 
+    """ transform a python obj or cmd into a proper filename.
      - \1 gets replaced by slash '/'
      - \2 gets replaced by comma ','
     """
-    if not isinstance(obj, str): 
+    if not isinstance(obj, str):
         obj = repr(obj)
     obj = str(obj).replace('()','')
     obj = _replace(obj, '_,(*/\1\2','-__x%/,', rm=' )\'"')
@@ -389,14 +389,14 @@ def get_parameter_groups(model, weight_decay, layer_decay=1.0, skip_list=(), no_
     parameter_group_names = {}
     parameter_group_vars = {}
     enc_depth, dec_depth = None, None
-    # prepare layer decay values 
+    # prepare layer decay values
     assert layer_decay==1.0 or 0.<layer_decay<1.
     if layer_decay<1.:
         enc_depth = model.enc_depth
         dec_depth = model.dec_depth if hasattr(model, 'dec_blocks') else 0
         num_layers = enc_depth+dec_depth
         layer_decay_values = list(layer_decay ** (num_layers + 1 - i) for i in range(num_layers + 2))
-        
+
     for name, param in model.named_parameters():
         if not param.requires_grad:
             continue  # frozen weights
@@ -447,17 +447,17 @@ def get_parameter_groups(model, weight_decay, layer_decay=1.0, skip_list=(), no_
 
 def adjust_learning_rate(optimizer, epoch, args):
     """Decay the learning rate with half-cycle cosine after warmup"""
-    
+
     if epoch < args.warmup_epochs:
-        lr = args.lr * epoch / args.warmup_epochs 
+        lr = args.lr * epoch / args.warmup_epochs
     else:
         lr = args.min_lr + (args.lr - args.min_lr) * 0.5 * \
             (1. + math.cos(math.pi * (epoch - args.warmup_epochs) / (args.epochs - args.warmup_epochs)))
-            
+
     for param_group in optimizer.param_groups:
         if "lr_scale" in param_group:
             param_group["lr"] = lr * param_group["lr_scale"]
         else:
             param_group["lr"] = lr
-            
+
     return lr

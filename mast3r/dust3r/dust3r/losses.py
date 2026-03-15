@@ -200,7 +200,7 @@ class ConfLoss (MultiLoss):
 
     Principle:
         high-confidence means high conf = 0.1 ==> conf_loss = x / 10 + alpha*log(10)
-        low  confidence means low  conf = 10  ==> conf_loss = x * 10 - alpha*log(10) 
+        low  confidence means low  conf = 10  ==> conf_loss = x * 10 - alpha*log(10)
 
         alpha: hyperparameter
     """

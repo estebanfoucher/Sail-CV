@@ -793,7 +793,7 @@ class CharucoDetector:
 
         return matches
 
-    def extract_correspondences(  # noqa: PLR0911
+    def extract_correspondences(
         self, matches: list[tuple], detections1: tuple, detections2: tuple
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Extract 2D-2D correspondences and 3D points from matching Charuco corners."""

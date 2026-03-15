@@ -1,6 +1,6 @@
 # Copyright (C) 2022-present Naver Corporation. All rights reserved.
 # Licensed under CC BY-NC-SA 4.0 (non-commercial use only).
-# 
+#
 # --------------------------------------------------------
 # Extracting crops for pre-training
 # --------------------------------------------------------
@@ -156,4 +156,3 @@ def save_image_crops(args, data):
 if __name__ == '__main__':
     args = arg_parser().parse_args()
     main(args)
-

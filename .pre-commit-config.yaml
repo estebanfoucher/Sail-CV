@@ -1,6 +1,8 @@
+# Tool versions must match pyproject.toml dev deps (ruff, mypy) so local,
+# pre-commit, and CI action runners use the same rules and behavior.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -11,22 +13,24 @@ repos:
       - id: debug-statements
       - id: check-docstring-first
 
+  # Same ruff version as pyproject.toml dev deps; paths match Makefile (src/ tests/)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.1
+    rev: v0.15.6
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
-        files: ^src/
+        files: ^(src/|tests/)
         exclude: ^mast3r/
       - id: ruff-format
-        files: ^src/
+        files: ^(src/|tests/)
         exclude: ^mast3r/
 
+  # Same mypy version as pyproject.toml dev deps; args match Makefile typecheck
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2
+    rev: v1.19.1
     hooks:
       - id: mypy
-        args: [--explicit-package-bases, --ignore-missing-imports]
+        args: [--explicit-package-bases]
         additional_dependencies: [types-PyYAML]
         files: ^src/
         exclude: ^mast3r/

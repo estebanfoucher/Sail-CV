@@ -51,7 +51,7 @@ def list_replica_cad_baked_lighting_scenes(base_output_dir, base_path=SCENES_DAT
                     navmesh = "",
                     output_dir = output_dir)
         scenes_data.append(data)
-    return scenes_data    
+    return scenes_data
 
 def list_replica_scenes(base_output_dir, base_path):
     scenes_data = []
@@ -120,10 +120,10 @@ def list_scenes_available(base_output_dir, scenes_dataset_paths=SCENES_DATASET):
     scenes_data += list_replica_cad_baked_lighting_scenes(base_output_dir=base_output_dir)
 
     # ScanNet
-    scenes_data += list_scenes(base_output_dir=os.path.join(base_output_dir, "scannet"), 
+    scenes_data += list_scenes(base_output_dir=os.path.join(base_output_dir, "scannet"),
                             base_path=scenes_dataset_paths["scannet"])
-    
+
     # Replica
     list_replica_scenes(base_output_dir=os.path.join(base_output_dir, "replica"),
                         base_path=scenes_dataset_paths["replica"])
-    return scenes_data    
+    return scenes_data

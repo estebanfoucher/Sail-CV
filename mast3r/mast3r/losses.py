@@ -346,8 +346,8 @@ class APLoss (MatchingCriterion):
 
 
 class MatchingLoss (Criterion, MultiLoss):
-    """ 
-    Matching loss per image 
+    """
+    Matching loss per image
     only compare pixels inside an image but not in the whole batch as what would be done usually
     """
 

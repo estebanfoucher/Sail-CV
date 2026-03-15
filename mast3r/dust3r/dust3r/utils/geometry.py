@@ -13,7 +13,7 @@ from dust3r.utils.device import to_numpy
 
 
 def xy_grid(W, H, device=None, origin=(0, 0), unsqueeze=None, cat_dim=-1, homogeneous=False, **arange_kw):
-    """ Output a (H,W,2) array of int32 
+    """ Output a (H,W,2) array of int32
         with output[j,i,0] = i + origin[0]
              output[j,i,1] = j + origin[1]
     """

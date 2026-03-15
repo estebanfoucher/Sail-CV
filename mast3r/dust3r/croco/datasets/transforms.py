@@ -25,16 +25,16 @@ class ToTensorBoth(torchvision.transforms.ToTensor):
         img1 = super().__call__(img1)
         img2 = super().__call__(img2)
         return img1, img2
-        
-class RandomCropPair(torchvision.transforms.RandomCrop): 
+
+class RandomCropPair(torchvision.transforms.RandomCrop):
     # the crop will be intentionally different for the two images with this class
     def forward(self, img1, img2):
         img1 = super().forward(img1)
         img2 = super().forward(img2)
         return img1, img2
 
-class ColorJitterPair(torchvision.transforms.ColorJitter): 
-    # can be symmetric (same for both images) or assymetric (different jitter params for each image) depending on assymetric_prob  
+class ColorJitterPair(torchvision.transforms.ColorJitter):
+    # can be symmetric (same for both images) or assymetric (different jitter params for each image) depending on assymetric_prob
     def __init__(self, assymetric_prob, **kwargs):
         super().__init__(**kwargs)
         self.assymetric_prob = assymetric_prob
@@ -49,7 +49,7 @@ class ColorJitterPair(torchvision.transforms.ColorJitter):
             elif fn_id == 3 and hue_factor is not None:
                 img = F.adjust_hue(img, hue_factor)
         return img
-        
+
     def forward(self, img1, img2):
 
         fn_idx, brightness_factor, contrast_factor, saturation_factor, hue_factor = self.get_params(
@@ -76,7 +76,7 @@ def get_pair_transforms(transform_str, totensor=True, normalize=True):
             pass
         else:
             raise NotImplementedError('Unknown augmentation: '+s)
-            
+
     if totensor:
         trfs.append( ToTensorBoth() )
     if normalize:
@@ -88,8 +88,3 @@ def get_pair_transforms(transform_str, totensor=True, normalize=True):
         return trfs
     else:
         return ComposePair(trfs)
-        
-        
-        
-        
-        

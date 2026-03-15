@@ -17,11 +17,11 @@ def create_video_display_interface() -> Tuple[gr.File, gr.File, gr.Video, gr.Vid
     """
     Create integrated video upload and display interface components
     Each video has its upload widget and display fused into a single visual unit
-    
+
     Returns:
         tuple: (video_1_upload, video_2_upload, video_1_display, video_2_display, frame_slider, sync_offset_slider, frame_number_input, status_display)
     """
-    
+
     with gr.Row():
         with gr.Column(scale=1):
             # Video 1 - Integrated Upload + Display
@@ -40,7 +40,7 @@ def create_video_display_interface() -> Tuple[gr.File, gr.File, gr.Video, gr.Vid
                     interactive=False,
                     container=True
                 )
-        
+
         with gr.Column(scale=1):
             # Video 2 - Integrated Upload + Display
             with gr.Group():
@@ -58,11 +58,11 @@ def create_video_display_interface() -> Tuple[gr.File, gr.File, gr.Video, gr.Vid
                     interactive=False,
                     container=True
                 )
-    
+
     # Frame Control and Sync Settings - Integrated Control Panel
     with gr.Group():
         gr.Markdown("### 🎬 Video Control Panel")
-        
+
         with gr.Row():
             with gr.Column(scale=3):
                 frame_slider = gr.Slider(
@@ -74,7 +74,7 @@ def create_video_display_interface() -> Tuple[gr.File, gr.File, gr.Video, gr.Vid
                     interactive=True,
                     container=True
                 )
-            
+
             with gr.Column(scale=1):
                 frame_number_input = gr.Number(
                     value=0,
@@ -83,7 +83,7 @@ def create_video_display_interface() -> Tuple[gr.File, gr.File, gr.Video, gr.Vid
                     interactive=True,
                     container=True
                 )
-        
+
         with gr.Row():
             with gr.Column(scale=2):
                 sync_offset_slider = gr.Slider(
@@ -95,7 +95,7 @@ def create_video_display_interface() -> Tuple[gr.File, gr.File, gr.Video, gr.Vid
                     interactive=True,
                     container=True
                 )
-            
+
             with gr.Column(scale=1):
                 status_display = gr.Textbox(
                     label="Status",
@@ -104,25 +104,25 @@ def create_video_display_interface() -> Tuple[gr.File, gr.File, gr.Video, gr.Vid
                     lines=1,
                     container=True
                 )
-    
+
     return video_1_upload, video_2_upload, video_1_display, video_2_display, frame_slider, sync_offset_slider, frame_number_input, status_display
 
 
 def create_video_controls() -> Tuple[gr.Button]:
     """
     Create video control buttons
-    
+
     Returns:
         tuple: (refresh_frame_btn,)
     """
-    
+
     with gr.Row():
         refresh_frame_btn = gr.Button(
             "🔄 Refresh Display",
-            variant="secondary", 
+            variant="secondary",
             size="sm"
         )
-    
+
     return refresh_frame_btn,
 
 
@@ -133,42 +133,42 @@ def update_video_display(
 ) -> Tuple[Optional[str], Optional[str], str]:
     """
     Update video display with current frame - supports single video display
-    
+
     Args:
         video_processor: VideoProcessor instance
         frame_number: Frame number to display
         sync_offset: Sync offset between videos
-        
+
     Returns:
         tuple: (video_1_path, video_2_path, status_message)
     """
     try:
         logger.debug(f"Updating video display: frame={frame_number}, sync_offset={sync_offset}")
-        
+
         # Check if any videos are loaded
         video_1_loaded = video_processor.video_1_reader is not None
         video_2_loaded = video_processor.video_2_reader is not None
-        
+
         if not video_1_loaded and not video_2_loaded:
             return None, None, "No videos loaded"
-        
+
         # Update sync offset
         video_processor.set_sync_offset(sync_offset)
-        
+
         # Return video paths for display (None for missing videos)
         video_1_path = video_processor.video_1_path if video_1_loaded else None
         video_2_path = video_processor.video_2_path if video_2_loaded else None
-        
+
         # Create status message
         loaded_videos = []
         if video_1_loaded:
             loaded_videos.append("Video 1")
         if video_2_loaded:
             loaded_videos.append("Video 2")
-        
+
         status_msg = f"Frame {frame_number} | Sync offset: {sync_offset} | Loaded: {', '.join(loaded_videos)}"
         return video_1_path, video_2_path, status_msg
-            
+
     except Exception as e:
         logger.error(f"Error updating video display: {str(e)}", exc_info=True)
         return None, None, f"Error updating display: {str(e)}"
@@ -182,29 +182,29 @@ def handle_video_upload_and_display(
 ) -> Tuple[str, int, Optional[str], Optional[str], str]:
     """
     Handle video upload, validation, and display - supports single video uploads
-    
+
     Args:
         video_processor: VideoProcessor instance
         video_1_path: Path to video 1
         video_2_path: Path to video 2
         calibration_path: Path to calibration file
-        
+
     Returns:
         tuple: (status_message, max_frames, video_1_path, video_2_path, upload_status)
     """
     try:
         logger.info(f"Handling integrated video upload: {video_1_path}, {video_2_path}, {calibration_path}")
-        
+
         # Import validation functions
         from utils.validation import validate_video_file, validate_calibration_file, validate_video_compatibility
-        
+
         upload_messages = []
         max_frames = 0
-        
+
         # Validate and load individual videos
         video_1_loaded = False
         video_2_loaded = False
-        
+
         # Handle video 1
         if video_1_path:
             is_valid, error_msg = validate_video_file(video_1_path)
@@ -216,7 +216,7 @@ def handle_video_upload_and_display(
                 return f"❌ Video 1 validation failed: {error_msg}", 0, None, video_2_path, "\n".join(upload_messages)
         else:
             upload_messages.append("⚠️ Video 1: No file uploaded")
-        
+
         # Handle video 2
         if video_2_path:
             is_valid, error_msg = validate_video_file(video_2_path)
@@ -228,7 +228,7 @@ def handle_video_upload_and_display(
                 return f"❌ Video 2 validation failed: {error_msg}", 0, video_1_path, None, "\n".join(upload_messages)
         else:
             upload_messages.append("⚠️ Video 2: No file uploaded")
-        
+
         # Handle calibration
         if calibration_path:
             is_valid, error_msg = validate_calibration_file(calibration_path)
@@ -239,7 +239,7 @@ def handle_video_upload_and_display(
                 return f"❌ Calibration validation failed: {error_msg}", 0, video_1_path, video_2_path, "\n".join(upload_messages)
         else:
             upload_messages.append("⚠️ Calibration: No file uploaded")
-        
+
         # Load videos into processor (supports single video loading)
         if video_1_loaded and video_2_loaded:
             # Both videos available - check compatibility first
@@ -249,11 +249,11 @@ def handle_video_upload_and_display(
             else:
                 upload_messages.append(f"❌ Compatibility: {compat_msg}")
                 return f"❌ Video compatibility failed: {compat_msg}", 0, video_1_path, video_2_path, "\n".join(upload_messages)
-            
+
             # Smart loading - only load videos that aren't already loaded
             current_video_1 = video_processor.video_1_path if hasattr(video_processor, 'video_1_path') else None
             current_video_2 = video_processor.video_2_path if hasattr(video_processor, 'video_2_path') else None
-            
+
             if current_video_1 == video_1_path and current_video_2 == video_2_path:
                 # Both videos already loaded with same paths
                 upload_messages.append("📹 Both videos already loaded!")
@@ -284,13 +284,13 @@ def handle_video_upload_and_display(
                     upload_messages.append("🎉 Both videos loaded successfully!")
                 else:
                     return f"❌ {message}", 0, video_1_path, video_2_path, "\n".join(upload_messages)
-            
+
             # Get video information for max frames calculation
             video_info = video_processor.get_video_info()
             frame_count_1 = video_info['video_1']['frame_count']
             frame_count_2 = video_info['video_2']['frame_count']
             max_frames = max(0, min(frame_count_1, frame_count_2) - 1)
-                
+
         elif video_1_loaded:
             # Only video 1 available - smart loading
             current_video_1 = video_processor.video_1_path if hasattr(video_processor, 'video_1_path') else None
@@ -302,11 +302,11 @@ def handle_video_upload_and_display(
                     upload_messages.append("📹 Video 1 loaded successfully!")
                 else:
                     return f"❌ {message}", 0, video_1_path, None, "\n".join(upload_messages)
-            
+
             video_info = video_processor.get_video_info()
             frame_count = video_info.get('video_1', {}).get('frame_count', 0)
             max_frames = max(0, frame_count - 1)
-                
+
         elif video_2_loaded:
             # Only video 2 available - smart loading
             current_video_2 = video_processor.video_2_path if hasattr(video_processor, 'video_2_path') else None
@@ -318,16 +318,16 @@ def handle_video_upload_and_display(
                     upload_messages.append("📹 Video 2 loaded successfully!")
                 else:
                     return f"❌ {message}", 0, None, video_2_path, "\n".join(upload_messages)
-            
+
             video_info = video_processor.get_video_info()
             frame_count = video_info.get('video_2', {}).get('frame_count', 0)
             max_frames = max(0, frame_count - 1)
         else:
             # No videos available
             return "Please upload at least one video", 0, None, None, "\n".join(upload_messages)
-        
+
         return f"✅ Videos ready | Max frames: {max_frames}", max_frames, video_1_path, video_2_path, "\n".join(upload_messages)
-            
+
     except Exception as e:
         logger.error(f"Error in integrated video upload: {str(e)}", exc_info=True)
         return f"❌ Error during upload: {str(e)}", 0, video_1_path, video_2_path, f"❌ Error during upload: {str(e)}"
@@ -340,18 +340,18 @@ def load_videos_from_upload(
 ) -> Tuple[str, int, Optional[str], Optional[str]]:
     """
     Load videos from uploaded files
-    
+
     Args:
         video_processor: VideoProcessor instance
         video_1_path: Path to video 1
         video_2_path: Path to video 2
-        
+
     Returns:
         tuple: (status_message, max_frames, video_1_path, video_2_path)
     """
     try:
         logger.info(f"Loading videos from upload: {video_1_path}, {video_2_path}")
-        
+
         # Handle different scenarios
         if video_1_path and video_2_path:
             # Both videos available
@@ -364,7 +364,7 @@ def load_videos_from_upload(
                 return f"✅ {message} | Max frames: {max_frames}", max_frames, video_1_path, video_2_path
             else:
                 return f"❌ {message}", 0, None, None
-                
+
         elif video_1_path:
             # Only video 1 available
             success, message = video_processor.load_single_video(video_1_path, "video_1")
@@ -375,7 +375,7 @@ def load_videos_from_upload(
                 return f"✅ {message} | Max frames: {max_frames}", max_frames, video_1_path, None
             else:
                 return f"❌ {message}", 0, None, None
-                
+
         elif video_2_path:
             # Only video 2 available
             success, message = video_processor.load_single_video(video_2_path, "video_2")
@@ -388,7 +388,7 @@ def load_videos_from_upload(
                 return f"❌ {message}", 0, None, None
         else:
             return "Please upload at least one video", 0, None, None
-            
+
     except Exception as e:
         logger.error(f"Error loading videos from upload: {str(e)}", exc_info=True)
         return f"❌ Error loading videos: {str(e)}", 0, None, None
@@ -397,27 +397,27 @@ def load_videos_from_upload(
 def handle_file_deletion(video_processor: VideoProcessor, video_1_path, video_2_path, calibration_path) -> Tuple[str, int, Optional[str], Optional[str], str]:
     """
     Handle file deletion (when user clicks X on upload widget) and release specific videos
-    
+
     Args:
         video_processor: VideoProcessor instance
         video_1_path: Path to video 1 (may be None if deleted)
         video_2_path: Path to video 2 (may be None if deleted)
         calibration_path: Path to calibration file
-        
+
     Returns:
         tuple: (status_message, max_frames, video_1_path, video_2_path, upload_status)
     """
     try:
         logger.info(f"Handling file deletion: video_1={video_1_path}, video_2={video_2_path}, calibration={calibration_path}")
-        
+
         # Check current state of video processor
         current_video_1 = video_processor.video_1_path if hasattr(video_processor, 'video_1_path') else None
         current_video_2 = video_processor.video_2_path if hasattr(video_processor, 'video_2_path') else None
-        
+
         # Determine which specific video was deleted
         video_1_deleted = current_video_1 is not None and video_1_path is None
         video_2_deleted = current_video_2 is not None and video_2_path is None
-        
+
         # Release only the specific video that was deleted
         if video_1_deleted:
             # Only video 1 deleted - release video 1 specifically
@@ -433,7 +433,7 @@ def handle_file_deletion(video_processor: VideoProcessor, video_1_path, video_2_
                 video_processor.video_2_reader = None
                 video_processor.video_2_path = None
             logger.info("Video 2 deleted - released video 2 resources")
-        
+
         # Determine which files are still available
         available_files = []
         if video_1_path:
@@ -442,7 +442,7 @@ def handle_file_deletion(video_processor: VideoProcessor, video_1_path, video_2_
             available_files.append("Video 2")
         if calibration_path:
             available_files.append("Calibration")
-        
+
         # Calculate max frames based on remaining videos
         max_frames = 0
         if video_1_path and video_2_path:
@@ -470,16 +470,16 @@ def handle_file_deletion(video_processor: VideoProcessor, video_1_path, video_2_
                 max_frames = max(0, frame_count - 1)
             except:
                 max_frames = 0
-        
+
         if available_files:
             status_msg = f"📁 Files available: {', '.join(available_files)}"
             upload_msg = f"🗑️ Some files removed. Available: {', '.join(available_files)}"
         else:
             status_msg = "📁 No files loaded"
             upload_msg = "🗑️ All files removed"
-        
+
         return status_msg, max_frames, video_1_path, video_2_path, upload_msg
-            
+
     except Exception as e:
         logger.error(f"Error handling file deletion: {str(e)}", exc_info=True)
         return f"❌ Error: {str(e)}", 0, video_1_path, video_2_path, f"❌ Error handling deletion: {str(e)}"
@@ -488,10 +488,10 @@ def handle_file_deletion(video_processor: VideoProcessor, video_1_path, video_2_
 def release_videos(video_processor: VideoProcessor) -> str:
     """
     Release loaded videos
-    
+
     Args:
         video_processor: VideoProcessor instance
-        
+
     Returns:
         str: Status message
     """

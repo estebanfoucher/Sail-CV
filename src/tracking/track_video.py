@@ -8,10 +8,11 @@ from loguru import logger
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from detector import Detector
-from models import Image
 from tracker import Tracker
-from tracker_utils.render_tracks import draw_tracks
 from video import FFmpegVideoWriter, VideoReader
+
+from models import Image
+from tracker_utils.render_tracks import draw_tracks
 
 
 def make_json_serializable(obj):

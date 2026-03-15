@@ -22,7 +22,7 @@ GRID_ORTHOGONALITY_THRESHOLD = (
 )
 
 
-def detect_checkerboard_fast(  # noqa: PLR0911
+def detect_checkerboard_fast(
     image: np.ndarray, board_size: tuple[int, int], debug: bool = False
 ) -> tuple[bool, np.ndarray | None]:
     """
@@ -164,7 +164,7 @@ def detect_checkerboard_fast(  # noqa: PLR0911
     return True, corners_refined
 
 
-def _validate_grid_structure(  # noqa: PLR0911
+def _validate_grid_structure(
     corners: list, image_shape: tuple[int, int], debug: bool = False
 ) -> bool:
     """

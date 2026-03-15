@@ -12,14 +12,14 @@ from multiprocessing import cpu_count
 def parallel_threads(function, args, workers=0, star_args=False, kw_args=False, front_num=1, Pool=ThreadPool, **tqdm_kw):
     """ tqdm but with parallel execution.
 
-    Will essentially return 
+    Will essentially return
       res = [ function(arg) # default
               function(*arg) # if star_args is True
               function(**arg) # if kw_args is True
               for arg in args]
 
     Note:
-        the <front_num> first elements of args will not be parallelized. 
+        the <front_num> first elements of args will not be parallelized.
         This can be useful for debugging.
     """
     while workers <= 0:

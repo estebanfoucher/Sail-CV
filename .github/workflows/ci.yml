@@ -1,5 +1,8 @@
 name: CI
 
+# Ruff and mypy versions come from pyproject.toml dev deps (pinned) and uv.lock.
+# Pre-commit uses the same versions via rev in .pre-commit-config.yaml.
+
 on:
   push:
     branches: [main]
@@ -22,11 +25,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
 
-      - name: Check formatting
-        run: uv run ruff format --check src/ tests/
-
-      - name: Lint
-        run: uv run ruff check src/ tests/
+      - name: Lint & format check (same as local Makefile)
+        run: make format-check lint-check
 
   typecheck:
     name: Type Check
@@ -43,5 +43,5 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
 
-      - name: Type check
-        run: uv run mypy --explicit-package-bases src/
+      - name: Type check (same as local Makefile)
+        run: make typecheck

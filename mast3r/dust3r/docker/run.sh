@@ -12,7 +12,7 @@ check_docker() {
     fi
 }
 
-download_model_checkpoint() { 
+download_model_checkpoint() {
     if [ -f "./files/checkpoints/${model_name}" ]; then
         echo "Model checkpoint ${model_name} already exists. Skipping download."
         return

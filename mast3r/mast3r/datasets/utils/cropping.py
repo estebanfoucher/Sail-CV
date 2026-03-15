@@ -156,8 +156,8 @@ def _dotmv(Trf, pts, ncol=None, norm=False):
 
 
 def crop_to_homography(K, crop, target_size=None):
-    """ Given an image and its intrinsics, 
-        we want to replicate a rectangular crop with an homography, 
+    """ Given an image and its intrinsics,
+        we want to replicate a rectangular crop with an homography,
         so that the principal point of the new 'crop' is centered.
     """
     # build intrinsics for the crop
@@ -191,7 +191,7 @@ def crop_to_homography(K, crop, target_size=None):
 
 
 def gen_random_crops(imsize, n_crops, resolution, aug_crop, rng=np.random):
-    """ Generate random crops of size=resolution, 
+    """ Generate random crops of size=resolution,
         for an input image upscaled to (imsize + randint(0 , aug_crop))
     """
     resolution_crop = np.array(resolution) * min(np.array(imsize) / resolution)

@@ -4,12 +4,12 @@ Utility functions for intrinsics conversion tests.
 Handles visualization, image generation, and result saving.
 """
 
-import os
 import json
+from datetime import datetime
+
 import numpy as np
 import PIL.Image
 import PIL.ImageDraw
-from datetime import datetime
 
 
 def save_json_results(output_path, data):
@@ -111,7 +111,7 @@ def create_projection_visualization(
     draw = PIL.ImageDraw.Draw(viz_img)
 
     # Draw all valid points
-    for gt, pred in zip(points_2d_ground_truth, points_2d_predicted):
+    for gt, pred in zip(points_2d_ground_truth, points_2d_predicted, strict=True):
         # Ground truth in green (larger circle)
         draw.ellipse(
             [gt[0] - 3, gt[1] - 3, gt[0] + 3, gt[1] + 3],
@@ -266,7 +266,7 @@ def create_accuracy_test_results(
         },
         "test_points": {
             "total_generated": int(total_points_generated),
-            "valid_in_resized": int(len(points_2d_ground_truth_valid)),
+            "valid_in_resized": len(points_2d_ground_truth_valid),
         },
         "errors": {
             "max_error_px": float(max_error),

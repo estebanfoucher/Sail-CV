@@ -13,8 +13,11 @@ from dotenv import load_dotenv
 # Load environment variables from .env file (from root of repo)
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-# Add src to path for imports
-sys.path.append(str(Path(__file__).parent.parent / "src"))
+# Add reconstruction source and mast3r to path for flat imports
+_project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(_project_root / "src" / "reconstruction"))
+sys.path.insert(0, str(_project_root / "mast3r"))
+sys.path.insert(0, str(_project_root / "mast3r" / "dust3r"))
 
 # Import configuration and services
 from config.settings import get_config
@@ -41,10 +44,10 @@ config = get_config()
 
 def create_mvs_app():
     """Create the main MVS Gradio application"""
-    
+
     app_config = config['app']
     ui_config = config['ui']
-    
+
     with gr.Blocks(
         title=app_config['title'],
         theme=getattr(gr.themes, app_config['theme'].title())(),
@@ -54,13 +57,13 @@ def create_mvs_app():
         .status-box {{ font-family: monospace; }}
         """
     ) as app:
-        
+
         gr.Markdown("# Multi-View Stereo 3D Reconstruction Interactive Web Application")
         gr.Markdown("## 🎬 Video Upload")
-        
+
         # Create UI components using factory
         components = UIFactory.create_complete_interface()
-        
+
         # Video Upload and Display Section
         with gr.Row():
             with gr.Column(scale=2):
@@ -71,20 +74,20 @@ def create_mvs_app():
                 # Video upload and display components
                 components['video_2_upload']
                 components['video_2_display']
-        
+
         # Calibration Upload Section
         with gr.Row():
             with gr.Column(scale=1):
                 components['calibration_upload']
             with gr.Column(scale=1):
                 components['upload_status']
-        
+
         # Frame Selection Section
         with gr.Row():
             with gr.Column(scale=1):
                 # Frame selection controls
                 components['frame_slider']
-        
+
         # Selected Frames Section
         with gr.Row():
             with gr.Column(scale=1):
@@ -93,7 +96,7 @@ def create_mvs_app():
             with gr.Column(scale=1):
                 # Selected frames display
                 components['selected_image_2']
-        
+
         # SAM Filtering Section
         with gr.Row():
             with gr.Column(scale=1):
@@ -103,7 +106,7 @@ def create_mvs_app():
                 components['point_prompt_2']
                 components['compute_masks_btn']
                 components['sam_status']
-        
+
         # Processing Section
         with gr.Row():
             with gr.Column(scale=1):
@@ -112,14 +115,14 @@ def create_mvs_app():
                 components['subsample_param']
                 components['download_ply']
                 components['processing_status']
-        
+
         # 3D Visualization Section
         with gr.Row():
             with gr.Column(scale=2):
                 components['model3d_viewer']
             with gr.Column(scale=1):
                 components['viz_status']
-        
+
         # Batch Processing Section
         with gr.Row():
             with gr.Column(scale=1):
@@ -131,11 +134,11 @@ def create_mvs_app():
                 components['batch_progress']
                 components['batch_status']
                 components['download_batch']
-        
+
         # Setup event handlers
         event_handler = EventHandler()
         event_handler.setup_event_handlers(components)
-    
+
     return app
 
 
@@ -143,10 +146,10 @@ def main():
     """Main function to run the application"""
     try:
         logger.info("Starting MVS Interactive Web Application")
-        
+
         # Create the application
         app = create_mvs_app()
-        
+
         # Launch the application
         app_config = config['app']
         app.launch(
@@ -155,7 +158,7 @@ def main():
             share=app_config['share'],
             debug=app_config['debug']
         )
-        
+
     except Exception as e:
         logger.error(f"Error starting application: {str(e)}", exc_info=True)
         raise

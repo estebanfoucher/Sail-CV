@@ -108,10 +108,10 @@ except ImportError:
     print('Warning, cannot find cuda-compiled version of RoPE2D, using a slow pytorch version instead')
 
     class RoPE2D(torch.nn.Module):
-        
+
         def __init__(self, freq=100.0, F0=1.0):
             super().__init__()
-            self.base = freq 
+            self.base = freq
             self.F0 = F0
             self.cache = {}
 
@@ -125,18 +125,18 @@ except ImportError:
                 sin = freqs.sin()
                 self.cache[D,seq_len,device,dtype] = (cos,sin)
             return self.cache[D,seq_len,device,dtype]
-            
+
         @staticmethod
         def rotate_half(x):
             x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2 :]
             return torch.cat((-x2, x1), dim=-1)
-            
+
         def apply_rope1d(self, tokens, pos1d, cos, sin):
             assert pos1d.ndim==2
             cos = torch.nn.functional.embedding(pos1d, cos)[:, None, :, :]
             sin = torch.nn.functional.embedding(pos1d, sin)[:, None, :, :]
             return (tokens * cos) + (self.rotate_half(tokens) * sin)
-            
+
         def forward(self, tokens, positions):
             """
             input:
