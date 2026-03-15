@@ -1,6 +1,6 @@
 # Sail-CV Development Makefile
 
-.PHONY: help setup install install-all format lint typecheck test check clean dev \
+.PHONY: help setup install install-all format format-check lint lint-check typecheck test check clean dev \
         test-reconstruction test-tracking \
         docker-build docker-up docker-down \
         pre-commit-install pre-commit-run quick-check update
@@ -38,9 +38,17 @@ format: ## Format code with ruff
 	@echo "Formatting code..."
 	uv run ruff format src/ tests/
 
+format-check: ## Check formatting without modifying (CI)
+	@echo "Checking format..."
+	uv run ruff format src/ tests/ --check
+
 lint: ## Lint code with ruff
 	@echo "Linting code..."
 	uv run ruff check src/ tests/ --fix
+
+lint-check: ## Lint check without fixing (CI)
+	@echo "Checking lint..."
+	uv run ruff check src/ tests/
 
 typecheck: ## Run type checking with mypy
 	@echo "Type checking..."
