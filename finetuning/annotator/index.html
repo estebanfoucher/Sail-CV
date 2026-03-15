@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tell-tale annotator — Sail-CV</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 0 auto; padding: 1rem; background: #1a1a1a; color: #e0e0e0; }
+    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+    .toolbar label, .toolbar button { padding: 0.4rem 0.75rem; border-radius: 6px; border: 1px solid #444; background: #2a2a2a; color: #e0e0e0; cursor: pointer; font-size: 0.9rem; }
+    .toolbar button:hover { background: #333; }
+    .toolbar button.primary { background: #0a5; color: #000; border-color: #0a5; }
+    .toolbar button.danger { background: #c33; color: #fff; border-color: #c33; }
+    .classes { display: flex; gap: 0.5rem; margin-left: 0.5rem; }
+    .classes button { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
+    .classes button.active { outline: 2px solid #0af; outline-offset: 2px; }
+    #canvasWrap { position: relative; display: inline-block; background: #111; border: 1px solid #333; margin-bottom: 0.5rem; overflow: auto; max-width: 100%; }
+    #canvas { display: block; cursor: crosshair; vertical-align: top; }
+    .info { font-size: 0.85rem; color: #888; margin-bottom: 0.5rem; }
+    .thumbnails { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 0.5rem; max-height: 120px; overflow-y: auto; }
+    .thumbnails img { width: 60px; height: 45px; object-fit: cover; border: 2px solid #333; cursor: pointer; }
+    .thumbnails img.selected { border-color: #0af; }
+    .video-controls { margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .video-controls input[type="range"] { width: 200px; }
+    #videoEl { max-width: 100%; max-height: 300px; background: #000; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>Tell-tale annotator (3 classes)</h1>
+  <p class="info">Load images or videos. For video: seek to a frame, then "Add current frame". Annotate boxes; assign class. Export produces a YOLO dataset (non-split). Video frames are named with time prefix for grouping.</p>
+
+  <div class="toolbar">
+    <label>
+      Images <input type="file" id="imageInput" accept="image/*" multiple>
+    </label>
+    <label>
+      Video <input type="file" id="videoInput" accept="video/*">
+    </label>
+    <span class="classes">
+      <span>Class:</span>
+      <button type="button" data-class="0" class="class-btn active" title="pennon_attached">attached</button>
+      <button type="button" data-class="1" class="class-btn" title="pennon_detached">detached</button>
+      <button type="button" data-class="2" class="class-btn" title="pennon_leech">leech</button>
+    </span>
+    <button type="button" id="prevBtn">Prev</button>
+    <button type="button" id="nextBtn">Next</button>
+    <button type="button" id="deleteBoxBtn" class="danger">Delete last box</button>
+    <button type="button" id="exportBtn" class="primary">Export YOLO zip</button>
+  </div>
+
+  <div id="videoSection" class="hidden">
+    <video id="videoEl" controls></video>
+    <div class="video-controls">
+      <button type="button" id="addFrameBtn">Add current frame</button>
+      <span id="videoTime"></span>
+    </div>
+  </div>
+
+  <div id="canvasWrap" class="hidden">
+    <canvas id="canvas"></canvas>
+  </div>
+  <div id="indexInfo" class="info"></div>
+  <div id="thumbnails" class="thumbnails"></div>
+
+  <script>
+    const CLASS_NAMES = ['pennon_attached', 'pennon_detached', 'pennon_leech'];
+    const imageExtensions = new Set(['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']);
+
+    let state = {
+      items: [],
+      currentIndex: 0,
+      currentClass: 0,
+      boxes: [],
+      drawing: null,
+      imageScale: 1,
+      imageOffset: { x: 0, y: 0 }
+    };
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const canvasWrap = document.getElementById('canvasWrap');
+    const imageInput = document.getElementById('imageInput');
+    const videoInput = document.getElementById('videoInput');
+    const videoEl = document.getElementById('videoEl');
+    const videoSection = document.getElementById('videoSection');
+    const addFrameBtn = document.getElementById('addFrameBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const deleteBoxBtn = document.getElementById('deleteBoxBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const indexInfo = document.getElementById('indexInfo');
+    const thumbnailsEl = document.getElementById('thumbnails');
+
+    document.querySelectorAll('.class-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.class-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.currentClass = parseInt(btn.dataset.class, 10);
+      });
+    });
+
+    function getVideoBasename(file) {
+      const name = file.name.replace(/\.[^/.]+$/, '');
+      return name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
+
+    function formatTime(seconds) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = Math.floor(seconds % 60);
+      return [h, m, s].map(v => String(v).padStart(2, '0')).join('_');
+    }
+
+    imageInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files || []).filter(f =>
+        imageExtensions.has('.' + (f.name.split('.').pop() || '').toLowerCase()));
+      files.forEach((file, i) => {
+        const url = URL.createObjectURL(file);
+        state.items.push({
+          type: 'image',
+          file,
+          url,
+          name: `photo_${i}.jpg`
+        });
+      });
+      imageInput.value = '';
+      refreshThumbnails();
+      showIndex(0);
+    });
+
+    videoInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      videoSection.classList.remove('hidden');
+      videoEl.src = URL.createObjectURL(file);
+      videoEl.load();
+    });
+
+    videoEl.addEventListener('loadedmetadata', () => {
+      document.getElementById('videoTime').textContent = `Duration: ${videoEl.duration.toFixed(1)}s`;
+    });
+
+    addFrameBtn.addEventListener('click', () => {
+      const file = videoInput.files[0];
+      if (!file || videoEl.readyState < 2) return;
+      const t = videoEl.currentTime;
+      const basename = getVideoBasename(file);
+      const timeStr = formatTime(t);
+      const frameNum = state.items.filter(i => i.type === 'video' && i.videoBasename === basename).length;
+      const name = `${basename}_${timeStr}_frame_${frameNum}.jpg`;
+
+      const v = document.createElement('video');
+      v.muted = true;
+      v.playsInline = true;
+      v.preload = 'auto';
+      v.currentTime = t;
+      v.src = videoEl.src;
+      v.videoBasename = basename;
+      v._name = name;
+      v.addEventListener('loadeddata', () => {
+        const c = document.createElement('canvas');
+        c.width = v.videoWidth;
+        c.height = v.videoHeight;
+        c.getContext('2d').drawImage(v, 0, 0);
+        c.toBlob(blob => {
+          state.items.push({
+            type: 'video',
+            blob,
+            url: URL.createObjectURL(blob),
+            name: name,
+            videoBasename: basename,
+            _imgWidth: v.videoWidth,
+            _imgHeight: v.videoHeight
+          });
+          refreshThumbnails();
+          showIndex(state.items.length - 1);
+        }, 'image/jpeg', 0.92);
+      });
+      v.load();
+    });
+
+    function refreshThumbnails() {
+      thumbnailsEl.innerHTML = '';
+      state.items.forEach((item, i) => {
+        const img = document.createElement('img');
+        img.src = item.url;
+        img.alt = item.name;
+        img.dataset.index = i;
+        if (i === state.currentIndex) img.classList.add('selected');
+        img.addEventListener('click', () => showIndex(i));
+        thumbnailsEl.appendChild(img);
+      });
+    }
+
+    function showIndex(index) {
+      if (state.items.length === 0) {
+        canvasWrap.classList.add('hidden');
+        return;
+      }
+      canvasWrap.classList.remove('hidden');
+      state.currentIndex = index;
+      state.boxes = state.items[index].boxes || [];
+      state.items[index].boxes = state.boxes;
+
+      document.querySelectorAll('#thumbnails img').forEach((img, i) => {
+        img.classList.toggle('selected', i === index);
+      });
+
+      const item = state.items[index];
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const maxW = 1200;
+        const scale = Math.min(1, maxW / img.width);
+        const bufW = Math.round(img.width * scale);
+        const bufH = Math.round(img.height * scale);
+        canvas.width = bufW;
+        canvas.height = bufH;
+        canvas.style.width = bufW + 'px';
+        canvas.style.height = bufH + 'px';
+        state.imageScale = scale;
+        state.imageOffset = { x: 0, y: 0 };
+        state._imgWidth = img.width;
+        state._imgHeight = img.height;
+        item._imgWidth = img.width;
+        item._imgHeight = img.height;
+        redraw();
+      };
+      img.src = item.url;
+      indexInfo.textContent = `${index + 1} / ${state.items.length} — ${item.name}`;
+    }
+
+    function redraw() {
+      const item = state.items[state.currentIndex];
+      if (!item || state._imgWidth == null) return;
+      const img = new Image();
+      const curIndex = state.currentIndex;
+      const curDrawing = state.drawing;
+      const curBoxes = state.boxes.slice();
+      img.onload = () => {
+        if (state.currentIndex !== curIndex) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const colors = ['#0f0', '#f00', '#00f'];
+        curBoxes.forEach((b) => {
+          const c1 = toCanvasCoords(b.x1, b.y1);
+          const c2 = toCanvasCoords(b.x2, b.y2);
+          const cx1 = Math.min(c1.x, c2.x);
+          const cy1 = Math.min(c1.y, c2.y);
+          const cx2 = Math.max(c1.x, c2.x);
+          const cy2 = Math.max(c1.y, c2.y);
+          ctx.strokeStyle = colors[b.classId] || '#fff';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(cx1, cy1, cx2 - cx1, cy2 - cy1);
+          ctx.fillStyle = colors[b.classId] || '#fff';
+          ctx.font = '12px sans-serif';
+          ctx.fillText(CLASS_NAMES[b.classId], cx1, Math.max(12, cy1 - 4));
+        });
+        if (curDrawing) {
+          const d = curDrawing;
+          ctx.setLineDash([4, 4]);
+          ctx.strokeStyle = '#fff';
+          ctx.strokeRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1);
+          ctx.setLineDash([]);
+        }
+      };
+      img.src = item.url;
+    }
+
+    function toImageCoords(x, y) {
+      const w = state._imgWidth;
+      const h = state._imgHeight;
+      const sx = canvas.width / w;
+      const sy = canvas.height / h;
+      return { x: x / sx, y: y / sy };
+    }
+
+    function toCanvasCoords(x, y) {
+      if (state._imgWidth == null || state._imgHeight == null) return { x: 0, y: 0 };
+      const w = state._imgWidth;
+      const h = state._imgHeight;
+      const sx = canvas.width / w;
+      const sy = canvas.height / h;
+      return { x: x * sx, y: y * sy };
+    }
+
+    function getMouseCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      let x = (e.clientX - rect.left) * scaleX;
+      let y = (e.clientY - rect.top) * scaleY;
+      x = Math.round(Math.max(0, Math.min(canvas.width, x)));
+      y = Math.round(Math.max(0, Math.min(canvas.height, y)));
+      return { x, y };
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const { x, y } = getMouseCanvasCoords(e);
+      state.drawing = { x1: x, y1: y, x2: x, y2: y, classId: state.currentClass };
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!state.drawing) return;
+      const { x, y } = getMouseCanvasCoords(e);
+      state.drawing.x2 = x;
+      state.drawing.y2 = y;
+      redraw();
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+      if (e.button !== 0 || !state.drawing) return;
+      const { x, y } = getMouseCanvasCoords(e);
+      state.drawing.x2 = x;
+      state.drawing.y2 = y;
+      let x1 = Math.min(state.drawing.x1, state.drawing.x2);
+      let y1 = Math.min(state.drawing.y1, state.drawing.y2);
+      let x2 = Math.max(state.drawing.x1, state.drawing.x2);
+      let y2 = Math.max(state.drawing.y1, state.drawing.y2);
+      const w = state._imgWidth;
+      const h = state._imgHeight;
+      const p1 = toImageCoords(x1, y1);
+      const p2 = toImageCoords(x2, y2);
+      x1 = Math.max(0, Math.min(p1.x, w - 1));
+      y1 = Math.max(0, Math.min(p1.y, h - 1));
+      x2 = Math.max(0, Math.min(p2.x, w));
+      y2 = Math.max(0, Math.min(p2.y, h));
+      if (x2 - x1 > 2 && y2 - y1 > 2) {
+        state.boxes.push({
+          classId: state.drawing.classId,
+          x1, y1, x2, y2
+        });
+        const item = state.items[state.currentIndex];
+        if (item) item.boxes = state.boxes;
+      }
+      state.drawing = null;
+      redraw();
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      if (state.drawing) {
+        state.drawing = null;
+        redraw();
+      }
+    });
+
+    prevBtn.addEventListener('click', () => {
+      if (state.items.length === 0) return;
+      const next = (state.currentIndex - 1 + state.items.length) % state.items.length;
+      showIndex(next);
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (state.items.length === 0) return;
+      const next = (state.currentIndex + 1) % state.items.length;
+      showIndex(next);
+    });
+
+    deleteBoxBtn.addEventListener('click', () => {
+      if (state.boxes.length > 0) {
+        state.boxes.pop();
+        state.items[state.currentIndex].boxes = state.boxes;
+        redraw();
+      }
+    });
+
+    function toYOLOLine(box, imgW, imgH) {
+      const xc = (box.x1 + box.x2) / 2 / imgW;
+      const yc = (box.y1 + box.y2) / 2 / imgH;
+      const w = (box.x2 - box.x1) / imgW;
+      const h = (box.y2 - box.y1) / imgH;
+      return `${box.classId} ${xc.toFixed(6)} ${yc.toFixed(6)} ${w.toFixed(6)} ${h.toFixed(6)}`;
+    }
+
+    exportBtn.addEventListener('click', async () => {
+      if (state.items.length === 0) {
+        alert('Add at least one image or video frame.');
+        return;
+      }
+      const zip = new JSZip();
+      const imagesFolder = zip.folder('images');
+      const labelsFolder = zip.folder('labels');
+
+      for (const item of state.items) {
+        const blob = item.blob || (await fetch(item.url).then(r => r.blob()));
+        let ext = (item.name.match(/\.(jpg|jpeg|png|bmp|tiff?)$/i) || [])[0] || '.jpg';
+        if (ext.toLowerCase() === '.jpeg') ext = '.jpg';
+        const baseName = item.name.replace(/\.[^/.]+$/, '') || item.name;
+        const imgName = baseName + ext;
+        imagesFolder.file(imgName, blob);
+
+        let imgW = item._imgWidth || 0;
+        let imgH = item._imgHeight || 0;
+        if ((!imgW || !imgH) && item.boxes && item.boxes.length > 0) {
+          const img = new Image();
+          img.src = item.url;
+          await new Promise((res) => { img.onload = res; });
+          imgW = img.naturalWidth;
+          imgH = img.naturalHeight;
+        }
+        if (item.boxes && item.boxes.length > 0 && imgW && imgH) {
+          const lines = item.boxes.map(b => toYOLOLine(b, imgW, imgH));
+          labelsFolder.file(baseName + '.txt', lines.join('\n') + '\n');
+        } else {
+          labelsFolder.file(baseName + '.txt', '');
+        }
+      }
+
+      const dataYaml = `path: .
+train: images
+val: images
+nc: 3
+names: ['pennon_attached', 'pennon_detached', 'pennon_leech']
+`;
+      zip.file('data.yaml', dataYaml);
+      zip.file('classes.txt', CLASS_NAMES.join('\n') + '\n');
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'sailcv_annotations_yolo.zip';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    showIndex(0);
+  </script>
+</body>
+</html>

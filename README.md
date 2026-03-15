@@ -111,7 +111,10 @@ sudo apt update && sudo apt install ffmpeg
 brew install ffmpeg
 ```
 
-Download model checkpoints:
+
+### Quick Start — 3D Reconstruction
+
+Download model checkpoint:
 
 ```bash
 mkdir -p checkpoints/
@@ -119,8 +122,6 @@ mkdir -p checkpoints/
 # MASt3R (3D reconstruction)
 wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth -P checkpoints/
 ```
-
-### Quick Start — 3D Reconstruction
 
 Set up the Python path for reconstruction (run from project root):
 
@@ -207,6 +208,40 @@ uv run python src/tracking/analyze_video.py \
   --video fixtures/C1_fixture.mp4 \
   --layout fixtures/C1_layout.json
 ```
+
+### Finetuning the detector
+
+You can finetune the telltale detector on your own data by (1) creating a small annotated dataset with the annotator, (2) splitting it by source and reducing to one class, (3) fusing with the main Hugging Face dataset and training for a few epochs. The result is a 1-class (telltale) model you can use as the detector in the pipeline.
+
+**Step 1: Create your custom dataset**
+
+1. Open the annotation app in a browser: open `finetuning/annotator/index.html` from the project root (or serve the folder with any static server).
+2. Load photos and/or videos. For videos, seek to a frame and click **Add current frame**; frames are named with a time prefix so they can be grouped by source when splitting.
+3. Annotate bounding boxes and assign one of the three classes: **attached**, **detached**, **leech**.
+4. Click **Export YOLO zip** and save the zip. It contains `images/`, `labels/`, and `data.yaml` (non-split, 3-class YOLO).
+
+**Step 2: Split and reduce to one class**
+
+Unzip the export, then run the split script so that images from the same video stay in the same split and all labels are reduced to a single class (`telltale`):
+
+```bash
+uv run python finetuning/split_yolo_by_source.py /path/to/export --output /path/to/custom_split
+```
+
+Optional: `--train-ratio 0.8` (default), `--seed 42` for reproducibility.
+
+Output: `custom_split/train/`, `custom_split/val/`, and `data.yaml` with `nc: 1`, `names: ['telltale']`.
+
+**Step 3: Finetune**
+
+1. Open `finetuning/finetune_rtdetr.ipynb` (e.g. in Colab or locally with Jupyter).
+2. Run the cells in order. On Colab, when prompted, upload the zip of your **split** custom dataset (the folder produced in Step 2, zipped).
+3. The notebook will: download the main dataset from [estefoucher/sail-cv-telltales](https://huggingface.co/datasets/estefoucher/sail-cv-telltales), reduce it to one class if needed, fuse it with your custom data, download the 640 checkpoint from [estefoucher/tell-tale-detector](https://huggingface.co/estefoucher/tell-tale-detector), and train for 10–15 epochs (configurable in the notebook).
+4. Best weights are saved under `runs/train/finetune_rtdetr/weights/best.pt`.
+
+**Step 4: Use the new weights**
+
+Point `model_path` in your parameters YAML to the new checkpoint (e.g. `runs/train/finetune_rtdetr/weights/best.pt`), or copy that file to `checkpoints/` and reference it by name.
 
 ### Docker
 
