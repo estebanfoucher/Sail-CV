@@ -42,5 +42,6 @@ visualization:
 output:
   generate_fgmask_video: true
   generate_pca_visualization: true
-  render_masks: false  # No classifier: rendering requires class_info from classifier
-  render_arrows: false
+  output_tracking_video: true  # Produce main video (bboxes + labels)
+  render_masks: true            # Vector run: mask overlay
+  render_arrows: true           # Vector run: PCA arrows

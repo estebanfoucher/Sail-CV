@@ -41,6 +41,7 @@ visualization:
 output:
   generate_fgmask_video: true
   generate_pca_visualization: true
+  output_tracking_video: true
   render_masks: true
   render_arrows: true
 

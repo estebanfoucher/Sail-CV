@@ -31,13 +31,15 @@ def make_json_serializable(obj):
     if isinstance(obj, (np.int32, np.int64, np.float32, np.float64)):
         return float(obj) if isinstance(obj, (np.float32, np.float64)) else int(obj)
 
-    # Handle Pydantic models
+    # Handle Pydantic models (recurse into model_dump so nested types are serialized)
     if hasattr(obj, "model_dump"):
-        return obj.model_dump()
+        return make_json_serializable(obj.model_dump())
 
     # Handle collections
     if isinstance(obj, dict):
-        return {k: make_json_serializable(v) for k, v in obj.items()}
+        return {
+            make_json_serializable(k): make_json_serializable(v) for k, v in obj.items()
+        }
     if isinstance(obj, list):
         return [make_json_serializable(item) for item in obj]
 
@@ -683,34 +685,33 @@ class Pipeline:
             # Classifications without classifier (shouldn't happen, but handle gracefully)
             result["classifications"] = classifications
 
-        # Optional rendering (memory intensive)
-        if self.config.output.render_masks or self.config.output.render_arrows:
-            # Build class_info dict for rendering
-            # Only use classified class_ids - no fallback to detector
+        # Optional rendering: bboxes always when output_tracking_video; masks/arrows per config
+        if self.config.output.output_tracking_video:
+            # Build class_info dict for rendering (colors for bbox/labels)
             from typing import Any
 
             class_info: dict[int, dict[str, Any]] = {}
+            colors = [
+                (0, 255, 0),  # green for class 0
+                (0, 0, 255),  # red for class 1
+                (255, 0, 0),  # blue for class 2
+                (0, 255, 255),  # yellow for class 3
+                (255, 0, 255),  # magenta for class 4
+                (255, 255, 0),  # cyan for class 5
+            ]
 
-            # Classifier must be enabled and classifications must exist for rendering
             if self.classifier is not None:
                 if not classifications:
                     raise RuntimeError(
                         f"Frame {frame_number}: Cannot render without classifications when classifier is enabled"
                     )
-
-                # Collect only classified class_ids
                 all_class_ids = set(classifications.values())
-
-                # Build class_info with default color mapping
-                # Default color mapping (can be extended or made configurable)
-                colors = [
-                    (0, 255, 0),  # green for class 0
-                    (0, 0, 255),  # red for class 1
-                    (255, 0, 0),  # blue for class 2
-                    (0, 255, 255),  # yellow for class 3
-                    (255, 0, 255),  # magenta for class 4
-                    (255, 255, 0),  # cyan for class 5
-                ]
+                for class_id in all_class_ids:
+                    color = colors[class_id % len(colors)]
+                    class_info[class_id] = {"name": f"class_{class_id}", "color": color}
+            else:
+                # No classifier: use detector class_id for each track (vector run)
+                all_class_ids = {t.detection.class_id for t in tracks}
                 for class_id in all_class_ids:
                     color = colors[class_id % len(colors)]
                     class_info[class_id] = {"name": f"class_{class_id}", "color": color}

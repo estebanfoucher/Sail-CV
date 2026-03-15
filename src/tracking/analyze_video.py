@@ -99,7 +99,7 @@ def main():
     dumper = Dumper(
         output_json_path=output_json_path,
         output_video_path=output_video_path
-        if config.output.render_masks or config.output.render_arrows
+        if config.output.output_tracking_video
         else None,
         output_fgmask_path=output_fgmask_path,
     )

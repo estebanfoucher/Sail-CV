@@ -65,11 +65,11 @@ def test_pipeline_with_fixture(parameters_file: str):
         else None
     )
 
-    # Initialize dumper
+    # Initialize dumper (main tracking video when output_tracking_video is true)
     dumper = Dumper(
         output_json_path=output_json_path,
         output_video_path=output_video_path
-        if config.output.render_masks or config.output.render_arrows
+        if config.output.output_tracking_video
         else None,
         output_fgmask_path=output_fgmask_path,
     )
@@ -108,7 +108,7 @@ def test_pipeline_with_fixture(parameters_file: str):
 
     # Verify output video has correct frame count (20 frames) if it was created
     if (
-        (config.output.render_masks or config.output.render_arrows)
+        config.output.output_tracking_video
         and output_video_path
         and output_video_path.exists()
     ):

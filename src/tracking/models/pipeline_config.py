@@ -160,11 +160,15 @@ class OutputConfig(BaseModel):
     generate_pca_visualization: bool = Field(
         True, description="Generate PCA vector visualization video"
     )
+    output_tracking_video: bool = Field(
+        True,
+        description="Produce main tracking video (colored bboxes + class labels). Overlays controlled by render_masks and render_arrows.",
+    )
     render_masks: bool = Field(
-        False, description="Render mask overlays on output video (memory intensive)"
+        False, description="Overlay masks on tracking video (memory intensive)"
     )
     render_arrows: bool = Field(
-        False, description="Render PCA arrows on output video (memory intensive)"
+        False, description="Overlay PCA arrows on tracking video (memory intensive)"
     )
 
 
