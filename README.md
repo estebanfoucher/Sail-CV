@@ -111,7 +111,10 @@ sudo apt update && sudo apt install ffmpeg
 brew install ffmpeg
 ```
 
-Download model checkpoints:
+
+### Quick Start — 3D Reconstruction
+
+Download model checkpoint:
 
 ```bash
 mkdir -p checkpoints/
@@ -119,8 +122,6 @@ mkdir -p checkpoints/
 # MASt3R (3D reconstruction)
 wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth -P checkpoints/
 ```
-
-### Quick Start — 3D Reconstruction
 
 Set up the Python path for reconstruction (run from project root):
 
@@ -207,6 +208,39 @@ uv run python src/tracking/analyze_video.py \
   --video fixtures/C1_fixture.mp4 \
   --layout fixtures/C1_layout.json
 ```
+
+### Finetuning the detector
+
+Finetune the telltale detector on your own data: create a small YOLO dataset with the annotator, split it (by source) and reduce to one class with the script, then run the notebook to fuse with the main dataset and train for a few epochs. You get a 1-class (telltale) detector to use in the pipeline.
+
+Tools live under `finetuning/`: annotator app, `split_yolo_by_source.py`, and `finetune_rtdetr.ipynb`.
+
+**1. Create your custom dataset**
+
+- Open `finetuning/annotator/index.html` in a browser (or serve the `finetuning/annotator/` folder).
+- Load photos and/or videos. For video: seek to a frame, click **Add current frame** (frames get a time prefix for grouping).
+- Annotate boxes with the three classes: **attached**, **detached**, **leech**.
+- **Export YOLO zip** — you get `images/`, `labels/`, and `data.yaml` (non-split, 3-class).
+
+**2. Split and reduce to one class**
+
+Unzip the export, then run (from project root):
+
+```bash
+uv run python finetuning/split_yolo_by_source.py /path/to/export --output /path/to/custom_split
+```
+
+Options: `--train-ratio 0.8`, `--seed 42`. Output: `custom_split/train/`, `custom_split/val/`, `data.yaml` with `nc: 1`, `names: ['telltale']`.
+
+**3. Finetune**
+
+- Open `finetuning/finetune_rtdetr.ipynb` (Colab or local Jupyter).
+- Run all cells. On Colab: enable GPU (Runtime → Change runtime type → GPU), then when prompted upload the zip of your **split** custom dataset (Step 2 output).
+- The notebook downloads the main dataset ([estefoucher/sail-cv-telltales](https://huggingface.co/datasets/estefoucher/sail-cv-telltales)), fuses it with your data, downloads the 640 checkpoint ([estefoucher/tell-tale-detector](https://huggingface.co/estefoucher/tell-tale-detector)), and trains 10–15 epochs. Best weights: `runs/train/finetune_rtdetr/weights/best.pt`.
+
+**4. Use the new weights**
+
+Set `model_path` in your parameters YAML to that `best.pt`, or copy it to `checkpoints/` and reference by filename.
 
 ### Docker
 
