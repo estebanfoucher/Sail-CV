@@ -7,6 +7,7 @@ import numpy as np
 import torch
 from loguru import logger
 
+from model_weights import resolve_model_path
 from models.classifier import ClassifierConfig
 
 
@@ -22,27 +23,31 @@ class Classifier:
         Output: Tuple of (class_id, confidence)
     """
 
-    def __init__(self, config: ClassifierConfig):
+    def __init__(
+        self,
+        config: ClassifierConfig,
+        *,
+        project_root: Path | None = None,
+    ):
         """
         Initialize Classifier with model configuration.
 
         Args:
             config: ClassifierConfig object (Pydantic validated)
+            project_root: Optional project root for resolving relative paths
+                and for downloading from Hugging Face if not found locally.
         """
         self.config = config
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"Classifier using device: {self.device}")
 
-        # Load YOLO model
+        # Resolve path: local or download from Hugging Face (estefoucher/tell-tale-detector)
+        model_path = resolve_model_path(
+            config.model_path,
+            project_root=project_root,
+        )
+
         from ultralytics import YOLO
-
-        model_path = config.model_path
-        if not model_path.is_absolute():
-            # Resolve relative to current working directory
-            model_path = Path.cwd() / model_path
-
-        if not model_path.exists():
-            raise FileNotFoundError(f"Classifier model not found: {model_path}")
 
         self.model = YOLO(str(model_path))
         self.model.to(self.device)

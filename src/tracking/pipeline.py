@@ -18,6 +18,7 @@ from crop_module import (
     MaskDetectorSAM,
 )
 from crop_module.background_detector import BackgroundDetectorOCV, BackgroundDetectorVPI
+from model_weights import resolve_model_path
 from models import Image, Layout, ModelSpecs, PipelineConfig
 from tracker_utils.render_tracks import draw_tracks
 
@@ -66,7 +67,7 @@ class Pipeline:
         self.layout = layout
         self.project_root = project_root or Path.cwd()
 
-        # Resolve model path relative to project root
+        # Resolve detector model path: local or Hugging Face (estefoucher/tell-tale-detector)
         model_path = config.detector.model_path
         if not model_path.is_absolute():
             model_path = self.project_root / model_path
@@ -79,12 +80,16 @@ class Pipeline:
             self.detector = FakeDetector(precomputed_results_json_path=model_path)
             logger.info("✓ FakeDetector initialized")
         else:
-            # Initialize real detector
+            resolved_path = resolve_model_path(
+                model_path,
+                project_root=self.project_root,
+            )
             logger.info(
-                f"Initializing {config.detector.architecture} detector with {model_path}"
+                f"Initializing {config.detector.architecture} detector with {resolved_path}"
             )
             specs = ModelSpecs(
-                model_path=model_path, architecture=config.detector.architecture
+                model_path=resolved_path,
+                architecture=config.detector.architecture,
             )
             self.detector = Detector(specs)
             logger.info("✓ Detector initialized")
@@ -174,7 +179,10 @@ class Pipeline:
                 # Create a copy of config with resolved path
                 classifier_config = config.classifier.model_copy()
                 classifier_config.model_path = classifier_model_path
-                self.classifier = Classifier(classifier_config)
+                self.classifier = Classifier(
+                    classifier_config,
+                    project_root=self.project_root,
+                )
                 logger.info("✓ Classifier initialized")
             except Exception as e:
                 logger.error(f"Failed to initialize Classifier: {e}")
