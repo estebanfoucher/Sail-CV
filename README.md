@@ -260,6 +260,18 @@ uv run python finetuning/split_yolo_by_source.py sailcv_annotations_yolo -o sail
 
 Set `model_path` in your parameters YAML to that `best.pt`, or copy it to `checkpoints/` and reference by filename.
 
+### Finetuning the classifier (3 classes, Colab)
+
+Tell-tale **state** classification uses the same three classes as the annotator. Split the export **without** reducing to one class:
+
+| Step | Command / action |
+|------|------------------|
+| Split | `uv run python finetuning/split_yolo_by_source.py EXPORT -o OUT --no-reduce --seed 42` |
+| Zip | Zip `OUT/` so it contains `train/`, `val/`, and `data.yaml` (`nc` / `names` must match the HF dataset below) |
+| Train | Open `finetuning/train_classifier.ipynb` on Colab (GPU). It downloads **`telltale_3_classes_fused.zip`** from [estefoucher/sail-cv-telltales](https://huggingface.co/datasets/estefoucher/sail-cv-telltales), uploads your zip and `finetuning/crop_dataset.py`, fuses, crops, and fine-tunes `yolo11n-cls`. Best weights: `runs/classify/train/weights/best.pt`. |
+
+**Local crops only** (YOLO split → Ultralytics cls folders): `uv run python finetuning/crop_dataset.py --train PATH/train --val PATH/val --output data/cls_dataset` (add `--multipliers '{"0":1,"1":5}'` or omit for 1:1 per class).
+
 ### Docker
 
 For containerized deployment on Jetson hardware:
