@@ -215,26 +215,40 @@ uv run python src/tracking/analyze_video.py \
 
 ### Finetuning the detector
 
-Finetune the telltale detector on your own data: create a small YOLO dataset with the annotator, split it (by source) and reduce to one class with the script, then run the notebook to fuse with the main dataset and train for a few epochs. You get a 1-class (telltale) detector to use in the pipeline.
-
-Tools live under `finetuning/`: annotator app, `split_yolo_by_source.py`, and `finetune_rtdetr.ipynb`.
+Export annotations from the annotator, turn them into train/val if needed, then (for RT-DETR finetuning) use **one class** and a **split** layout. Tools: `finetuning/annotator/`, `split_yolo_by_source.py`, `reduce_to_one_class.py`, `finetune_rtdetr.ipynb`.
 
 **1. Create your custom dataset**
 
 - Open `finetuning/annotator/index.html` in a browser (or serve the `finetuning/annotator/` folder).
 - Load photos and/or videos. For video: seek to a frame, click **Add current frame** (frames get a time prefix for grouping).
 - Annotate boxes with the three classes: **attached**, **detached**, **leech**.
-- **Export YOLO zip** — you get `images/`, `labels/`, and `data.yaml` (non-split, 3-class).
+- **Export YOLO zip** — you get `images/`, `labels/`, and `data.yaml` (flat layout, 3 classes).
 
-**2. Split and reduce to one class**
+**2. From zip to folders**
 
-Unzip the export, then run (from project root):
+Unzip so you have a single directory (call it `EXPORT`) that contains `images/` and `labels/`. Run the commands below from the **project root**. If unzipping drops `images/` and `labels/` in the current directory, use `.` instead of `EXPORT`.
+
+Two separate ideas:
+
+- **Split** — build `train/` and `val/` so one video does not appear in both (script: `split_yolo_by_source.py`).
+- **Reduce** — rewrite every box to class `telltale` / `nc: 1` (default behavior of the split script, or `reduce_to_one_class.py` alone).
+
+What to run:
+
+| You want | Command |
+|----------|---------|
+| Split **and** 1 class (usual input for `finetune_rtdetr.ipynb`) | `uv run python finetuning/split_yolo_by_source.py EXPORT -o OUT` |
+| Split **without** changing classes (still 3 classes) | Same command, add `--no-reduce` (export must include `data.yaml` or `classes.txt`) |
+| 1 class **without** train/val split | `uv run python finetuning/reduce_to_one_class.py EXPORT` → creates `EXPORT_telltale` next to `EXPORT` |
+
+Split script options: `--train-ratio 0.8`, `--seed 42`. If you already have a **3-class split** folder and only need 1 class, run `reduce_to_one_class.py` on **that folder** (the one with `train/` and `val/`), not on the original flat export.
+
+**Example** (`sailcv_annotations_yolo.zip` at project root):
 
 ```bash
-uv run python finetuning/split_yolo_by_source.py /path/to/export --output /path/to/custom_split
+unzip -o sailcv_annotations_yolo.zip
+uv run python finetuning/split_yolo_by_source.py sailcv_annotations_yolo -o sailcv_fm_split --seed 42
 ```
-
-Options: `--train-ratio 0.8`, `--seed 42`. Output: `custom_split/train/`, `custom_split/val/`, `data.yaml` with `nc: 1`, `names: ['telltale']`.
 
 **3. Finetune**
 
