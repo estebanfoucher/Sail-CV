@@ -35,20 +35,24 @@ def build_augmentation_pipeline(
     if preset != "sail_default":
         raise ValueError(f"Unknown preset: {preset!r} (only 'sail_default')")
 
-    # Shadow ROI biased toward frame center so polygons often cross object ROIs
+    # Shadow ROI biased toward frame center so polygons often cross object ROIs.
+    # Slightly reduced vs the earlier default to avoid overly harsh shadows.
     shadow = A.RandomShadow(
         shadow_roi=(0.05, 0.08, 0.95, 0.92),
-        num_shadows_lower=2,
-        num_shadows_upper=4,
+        num_shadows_lower=1,
+        num_shadows_upper=3,
+        # Slightly larger shadows when they appear.
         shadow_dimension=6,
-        p=0.55,
+        p=0.45,
     )
 
     bbox_params = A.BboxParams(
         format="yolo",
         label_fields=["class_labels"],
-        min_area=1.0,
-        min_visibility=0.05,
+        # Keep bboxes; we enforce "min side" constraints later in apply.py
+        # to avoid accidentally dropping small native boxes.
+        min_area=0.0,
+        min_visibility=0.0,
     )
 
     transforms: list = [
@@ -60,13 +64,15 @@ def build_augmentation_pipeline(
             p=0.45,
         ),
         A.Affine(
-            scale=(0.88, 1.12),
+            # Slightly restricted scale to avoid shrinking objects too much.
+            scale=(0.90, 1.10),
             translate_percent=0.04,
             rotate=0,
             border_mode=cv2.BORDER_REFLECT_101,
             p=0.35,
         ),
-        A.RandomScale(scale_limit=0.12, p=0.35),
+        # Slightly restricted random scaling.
+        A.RandomScale(scale_limit=0.08, p=0.35),
         A.HueSaturationValue(
             hue_shift_limit=12,
             sat_shift_limit=22,

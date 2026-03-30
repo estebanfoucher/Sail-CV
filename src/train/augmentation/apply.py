@@ -22,6 +22,7 @@ def augment_yolo_sample(
     rng: random.Random | None = None,
     bbox_motion_blur: bool = True,
     motion_blur_p: float = 0.45,
+    min_bbox_side_px: int = 10,
 ) -> tuple[np.ndarray, list[list[float]], list[int]]:
     """
     Apply Albumentations then optional ROI motion blur.
@@ -40,6 +41,9 @@ def augment_yolo_sample(
             )
         return img, [], []
 
+    h, w = image_rgb.shape[:2]
+    original_min_sides: list[float] = [min(bw * w, bh * h) for (_, _, bw, bh) in bboxes]
+
     out = compose(
         image=image_rgb,
         bboxes=[list(b) for b in bboxes],
@@ -48,6 +52,24 @@ def augment_yolo_sample(
     img = out["image"]
     b_out = [list(b) for b in out["bboxes"]]
     c_out = list(out["class_labels"])
+
+    # Enforce: for bboxes that were >= `min_bbox_side_px` before augmentation,
+    # avoid shrinking them below `min_bbox_side_px` afterwards.
+    # Native small boxes (originally < min_bbox_side_px) are preserved.
+    # NOTE: Albumentations preserves order when we keep min_visibility/min_area low.
+    if b_out and min_bbox_side_px > 0:
+        kept_b: list[list[float]] = []
+        kept_c: list[int] = []
+        for i, (box, cls) in enumerate(zip(b_out, c_out, strict=True)):
+            bw, bh = box[2], box[3]
+            new_min_side = min(bw * w, bh * h)
+            # Albumentations preserves bbox order when we keep min_area/min_visibility low.
+            old_min_side = original_min_sides[i]
+            if old_min_side >= min_bbox_side_px and new_min_side < min_bbox_side_px:
+                continue
+            kept_b.append(box)
+            kept_c.append(cls)
+        b_out, c_out = kept_b, kept_c
 
     if bbox_motion_blur and b_out:
         img = apply_motion_blur_to_bboxes(
