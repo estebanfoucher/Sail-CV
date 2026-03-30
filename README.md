@@ -272,6 +272,22 @@ Tell-tale **state** classification uses the same three classes as the annotator.
 
 **Local crops only** (YOLO split → Ultralytics cls folders): `uv run python finetuning/crop_dataset.py --train PATH/train --val PATH/val --output data/cls_dataset` (add `--multipliers '{"0":1,"1":5}'` or omit for 1:1 per class).
 
+### YOLO data augmentation (optional `train` extra)
+
+Install: `uv sync --extra train` (adds **albumentations**). Module: [`src/train/augmentation/`](src/train/augmentation/) — geometry + global weather (shadow, fog, rain, flare, snow, …) and **bbox-only motion blur** after the Albumentations pass.
+
+**Preview strips** (iterate on `sailcv_annotations_yolo.zip` or any flat `images/` + `labels/` folder):
+
+```bash
+# Easiest: wrapper adds src/ to the path (same as pytest's pythonpath).
+uv run python scripts/augment_yolo.py --zip sailcv_annotations_yolo.zip \
+  --out-dir output/aug_preview --preview-only --max-images 8 --repeats 3 --draw-boxes
+
+# Or: PYTHONPATH=src uv run python -m train.augmentation --data-dir path/to/export ...
+```
+
+Open `output/aug_preview/previews/index.html` in a browser (or browse the PNG strips). Omit `--preview-only` to also write augmented `images/` + `labels/` under `--out-dir` (and copy `data.yaml` if present).
+
 ### Docker
 
 For containerized deployment on Jetson hardware:
@@ -286,6 +302,7 @@ docker compose up -d
 
 ```bash
 uv sync --all-extras --group dev   # Install all dependencies
+uv sync --extra train              # Optional: albumentation tests (tests/train/)
 uv run pytest tests/               # Run full test suite
 uv run ruff check src/ tests/      # Lint
 uv run ruff format src/ tests/     # Format
