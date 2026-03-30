@@ -39,7 +39,11 @@ class Model:
         else:
             raise ValueError(f"Invalid architecture: {specs.architecture}")
         self.model.to(self.device)
-        logger.info(f"✓ Model moved to {self.device}")
+        if self.device == "cuda":
+            self.model.half()
+            logger.info(f"✓ Model on {self.device} (FP16 inference)")
+        else:
+            logger.info(f"✓ Model on {self.device} (FP32; FP16 skipped on CPU)")
 
     def format_inference_results(self, results):
         """Format inference results exactly like the tracker"""

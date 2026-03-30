@@ -51,7 +51,11 @@ class Classifier:
 
         self.model = YOLO(str(model_path))
         self.model.to(self.device)
-        logger.info(f"✓ Classifier model loaded and moved to {self.device}")
+        if self.device == "cuda":
+            self.model.half()
+            logger.info(f"✓ Classifier on {self.device} (FP16 inference)")
+        else:
+            logger.info(f"✓ Classifier on {self.device} (FP32; FP16 skipped on CPU)")
 
     def classify_crop(self, crop: np.ndarray | None) -> tuple[int | None, float]:
         """
