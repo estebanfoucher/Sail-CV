@@ -13,6 +13,45 @@ if TYPE_CHECKING:
     import albumentations as A
 
 
+def _sanitize_yolo_boxes(
+    bboxes: list[list[float]],
+    class_labels: list[int],
+    *,
+    eps: float = 1e-6,
+) -> tuple[list[list[float]], list[int]]:
+    """
+    Clamp YOLO boxes to valid range and drop degenerate entries.
+
+    This avoids occasional floating-point overflows at image borders
+    (e.g. tiny negative y_min) that Albumentations refuses.
+    """
+    out_b: list[list[float]] = []
+    out_c: list[int] = []
+    for box, cls in zip(bboxes, class_labels, strict=True):
+        xc, yc, bw, bh = map(float, box[:4])
+        x1 = xc - bw / 2.0
+        y1 = yc - bh / 2.0
+        x2 = xc + bw / 2.0
+        y2 = yc + bh / 2.0
+
+        x1 = min(1.0, max(0.0, x1))
+        y1 = min(1.0, max(0.0, y1))
+        x2 = min(1.0, max(0.0, x2))
+        y2 = min(1.0, max(0.0, y2))
+
+        if x2 - x1 <= eps or y2 - y1 <= eps:
+            continue
+
+        bw2 = x2 - x1
+        bh2 = y2 - y1
+        xc2 = (x1 + x2) / 2.0
+        yc2 = (y1 + y2) / 2.0
+
+        out_b.append([xc2, yc2, bw2, bh2])
+        out_c.append(int(cls))
+    return out_b, out_c
+
+
 def augment_yolo_sample(
     image_rgb: np.ndarray,
     bboxes: list[list[float]],
@@ -22,7 +61,6 @@ def augment_yolo_sample(
     rng: random.Random | None = None,
     bbox_motion_blur: bool = True,
     motion_blur_p: float = 0.45,
-    min_bbox_side_px: int = 10,
 ) -> tuple[np.ndarray, list[list[float]], list[int]]:
     """
     Apply Albumentations then optional ROI motion blur.
@@ -32,7 +70,8 @@ def augment_yolo_sample(
     """
     if rng is None:
         rng = random.Random()
-    if not bboxes:
+    bboxes_in, class_in = _sanitize_yolo_boxes(bboxes, class_labels)
+    if not bboxes_in:
         out = compose(image=image_rgb, bboxes=[], class_labels=[])
         img = out["image"]
         if bbox_motion_blur:
@@ -41,35 +80,14 @@ def augment_yolo_sample(
             )
         return img, [], []
 
-    h, w = image_rgb.shape[:2]
-    original_min_sides: list[float] = [min(bw * w, bh * h) for (_, _, bw, bh) in bboxes]
-
     out = compose(
         image=image_rgb,
-        bboxes=[list(b) for b in bboxes],
-        class_labels=list(class_labels),
+        bboxes=[list(b) for b in bboxes_in],
+        class_labels=list(class_in),
     )
     img = out["image"]
     b_out = [list(b) for b in out["bboxes"]]
     c_out = list(out["class_labels"])
-
-    # Enforce: for bboxes that were >= `min_bbox_side_px` before augmentation,
-    # avoid shrinking them below `min_bbox_side_px` afterwards.
-    # Native small boxes (originally < min_bbox_side_px) are preserved.
-    # NOTE: Albumentations preserves order when we keep min_visibility/min_area low.
-    if b_out and min_bbox_side_px > 0:
-        kept_b: list[list[float]] = []
-        kept_c: list[int] = []
-        for i, (box, cls) in enumerate(zip(b_out, c_out, strict=True)):
-            bw, bh = box[2], box[3]
-            new_min_side = min(bw * w, bh * h)
-            # Albumentations preserves bbox order when we keep min_area/min_visibility low.
-            old_min_side = original_min_sides[i]
-            if old_min_side >= min_bbox_side_px and new_min_side < min_bbox_side_px:
-                continue
-            kept_b.append(box)
-            kept_c.append(cls)
-        b_out, c_out = kept_b, kept_c
 
     if bbox_motion_blur and b_out:
         img = apply_motion_blur_to_bboxes(
