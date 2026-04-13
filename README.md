@@ -14,6 +14,7 @@ This work introduces an embedded computer-vision framework that quantitatively m
 The two modules operate independently yet
 share the same minimal hardware requirements, enabling practical, plug-and-play deployment across a broad
 range of yachts.
+test
 
 
 ---
