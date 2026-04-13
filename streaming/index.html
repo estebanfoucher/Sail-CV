@@ -7,23 +7,46 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 12px; }
     h1 { color: #ccc; font-family: monospace; font-size: 14px; letter-spacing: 2px; }
-    .feeds { display: flex; gap: 12px; }
-    .feed { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .feeds { display: flex; gap: 24px; }
+    .feed { display: flex; flex-direction: column; align-items: center; gap: 8px; }
     .feed span { color: #666; font-family: monospace; font-size: 11px; }
-    img { display: block; max-width: 100%; border: 1px solid #333; }
+    .img-wrap { display: flex; align-items: center; justify-content: center; width: 480px; height: 480px; overflow: hidden; }
+    img { display: block; border: 1px solid #333; transition: transform 0.2s; max-width: 480px; max-height: 480px; }
+    .controls { display: flex; gap: 8px; }
+    button {
+      background: #222; color: #aaa; border: 1px solid #444;
+      font-family: monospace; font-size: 13px; padding: 4px 10px;
+      cursor: pointer; border-radius: 3px;
+    }
+    button:hover { background: #333; color: #fff; }
   </style>
 </head>
 <body>
   <h1>SAIL-CV / LIVE</h1>
   <div class="feeds">
     <div class="feed">
-      <img src="/stream/1" alt="Camera 1">
+      <div class="img-wrap"><img id="cam1" src="/stream/1" alt="Camera 1"></div>
+      <div class="controls">
+        <button onclick="rotate('cam1', -90)">↺ 90°</button>
+        <button onclick="rotate('cam1',  90)">↻ 90°</button>
+      </div>
       <span>CAM 1 — 192.168.1.214</span>
     </div>
     <div class="feed">
-      <img src="/stream/2" alt="Camera 2">
+      <div class="img-wrap"><img id="cam2" src="/stream/2" alt="Camera 2"></div>
+      <div class="controls">
+        <button onclick="rotate('cam2', -90)">↺ 90°</button>
+        <button onclick="rotate('cam2',  90)">↻ 90°</button>
+      </div>
       <span>CAM 2 — 192.168.1.34</span>
     </div>
   </div>
+  <script>
+    const angles = { cam1: 0, cam2: 0 };
+    function rotate(id, delta) {
+      angles[id] = (angles[id] + delta + 360) % 360;
+      document.getElementById(id).style.transform = `rotate(${angles[id]}deg)`;
+    }
+  </script>
 </body>
 </html>
