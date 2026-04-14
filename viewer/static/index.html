@@ -43,6 +43,26 @@
       position: absolute; bottom: 16px; right: 16px;
       font-size: 11px; color: #555;
     }
+    #log-panel {
+      position: absolute; bottom: 40px; left: 16px;
+      width: 600px; max-height: 180px;
+      background: rgba(0,0,0,0.75);
+      border: 1px solid #222;
+      border-radius: 4px;
+      overflow-y: auto;
+      font-size: 11px; line-height: 1.6;
+      padding: 8px;
+      display: none;
+    }
+    #log-panel .line { color: #666; white-space: pre-wrap; word-break: break-all; }
+    #log-panel .line.error { color: #e74c3c; }
+    #log-panel .line.info { color: #aaa; }
+    #log-toggle {
+      position: absolute; bottom: 16px; left: 16px;
+      background: none; border: none; color: #333; font-family: monospace;
+      font-size: 11px; cursor: pointer; padding: 0;
+    }
+    #log-toggle:hover { color: #666; }
   </style>
 </head>
 <body>
@@ -61,8 +81,10 @@
     <div>points &nbsp;<span id="stat-points">—</span></div>
   </div>
 
-  <div id="info">Drag · Scroll · Right-drag to pan</div>
-  <div id="status-msg" id="status-msg"></div>
+  <div id="log-panel"></div>
+  <button id="log-toggle">logs ▲</button>
+  <div id="info" style="left:60px">Drag · Scroll · Right-drag to pan</div>
+  <div id="status-msg"></div>
 
   <script type="importmap">
     { "imports": {
@@ -253,6 +275,34 @@
     function setStatus(msg) {
       document.getElementById('status-msg').textContent = msg;
     }
+
+    // --- Log panel ---
+    const logPanel = document.getElementById('log-panel');
+    const logToggle = document.getElementById('log-toggle');
+    let logVisible = false;
+
+    logToggle.addEventListener('click', () => {
+      logVisible = !logVisible;
+      logPanel.style.display = logVisible ? 'block' : 'none';
+      logToggle.textContent = logVisible ? 'logs ▼' : 'logs ▲';
+    });
+
+    function appendLog(line) {
+      const div = document.createElement('div');
+      div.className = 'line' + (line.includes('ERROR') || line.includes('error') ? ' error' : line.includes('INFO') ? ' info' : '');
+      div.textContent = line;
+      logPanel.appendChild(div);
+      // Keep last 200 lines
+      while (logPanel.children.length > 200) logPanel.removeChild(logPanel.firstChild);
+      logPanel.scrollTop = logPanel.scrollHeight;
+    }
+
+    // Always-on log SSE stream
+    const logSource = new EventSource('/logs');
+    logSource.onmessage = (e) => {
+      const { line } = JSON.parse(e.data);
+      appendLog(line);
+    };
 
     // Load initial scene if available
     fetch('/status').then(r => r.json()).then(s => {

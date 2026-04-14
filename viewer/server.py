@@ -26,6 +26,8 @@ state = {
 stop_event = threading.Event()
 sse_queues: list[queue.Queue] = []
 sse_lock = threading.Lock()
+log_queues: list[queue.Queue] = []
+log_lock = threading.Lock()
 
 
 def broadcast(event: dict):
@@ -41,46 +43,69 @@ def broadcast(event: dict):
             sse_queues.remove(q)
 
 
+def log(msg: str):
+    """Print and stream a log line to all /logs SSE clients."""
+    print(msg)
+    data = f"data: {json.dumps({'line': msg})}\n\n"
+    with log_lock:
+        dead = []
+        for q in log_queues:
+            try:
+                q.put_nowait(data)
+            except queue.Full:
+                dead.append(q)
+        for q in dead:
+            log_queues.remove(q)
+
+
 def run_reconstruction(scene: str):
-    """Run one reconstruction pass via Docker. Returns elapsed ms."""
+    """Run one reconstruction pass via Docker, streaming output. Returns elapsed ms."""
     t0 = time.monotonic()
-    result = subprocess.run(
-        [
-            "docker", "run", "--rm",
-            "--runtime=nvidia",
-            "-w", "/app",
-            "-v", f"{PROJECT_DIR}/assets/reconstruction:/app/assets/reconstruction:ro",
-            "-v", f"{PROJECT_DIR}/checkpoints:/app/checkpoints:ro",
-            "-v", f"{PROJECT_DIR}/src/reconstruction:/app/src/reconstruction:ro",
-            "-v", f"{OUTPUT_DIR}:/app/output:rw",
-            "-e", "DEVICE=cuda",
-            DOCKER_IMAGE,
-            "python3", "src/reconstruction/reconstruct_pair.py", "--scene", scene,
-        ],
-        capture_output=True,
-        text=True,
-    )
+    cmd = [
+        "docker", "run", "--rm",
+        "--runtime=nvidia",
+        "-w", "/app",
+        "-v", f"{PROJECT_DIR}/assets/reconstruction:/app/assets/reconstruction:ro",
+        "-v", f"{PROJECT_DIR}/checkpoints:/app/checkpoints:ro",
+        "-v", f"{PROJECT_DIR}/src/reconstruction:/app/src/reconstruction:ro",
+        "-v", f"{OUTPUT_DIR}:/app/output:rw",
+        "-e", "DEVICE=cuda",
+        DOCKER_IMAGE,
+        "python3", "src/reconstruction/reconstruct_pair.py", "--scene", scene,
+    ]
+    log(f"[docker] " + " ".join(cmd))
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    for line in proc.stdout:
+        log(line.rstrip())
+    proc.wait()
     elapsed_ms = int((time.monotonic() - t0) * 1000)
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr[-500:] if result.stderr else "docker failed")
+    if proc.returncode != 0:
+        raise RuntimeError(f"docker exited with code {proc.returncode}")
     return elapsed_ms
 
 
 def reconstruction_loop(scene: str):
     global state
     stop_event.clear()
+    log(f"[loop] Starting reconstruction loop for scene '{scene}'")
     while not stop_event.is_set():
         try:
+            with state_lock:
+                frame_num = state["frame_count"] + 1
+            log(f"[loop] Frame {frame_num} — running reconstruction...")
             ms = run_reconstruction(scene)
             with state_lock:
                 state["frame_count"] += 1
                 state["last_recon_ms"] = ms
                 frame = state["frame_count"]
+            log(f"[loop] Frame {frame} done in {ms}ms")
             broadcast({"frame": frame, "recon_ms": ms, "scene": scene})
         except Exception as e:
+            log(f"[loop] ERROR: {e}")
             broadcast({"error": str(e)})
             time.sleep(2)
 
+    log("[loop] Stopped")
     with state_lock:
         state["running"] = False
         state["scene"] = None
@@ -140,6 +165,31 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/status":
             with state_lock:
                 self.send_json(200, dict(state))
+
+        elif path == "/logs":
+            q: queue.Queue = queue.Queue(maxsize=200)
+            with log_lock:
+                log_queues.append(q)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            try:
+                while True:
+                    try:
+                        msg = q.get(timeout=15)
+                        self.wfile.write(msg.encode())
+                        self.wfile.flush()
+                    except queue.Empty:
+                        self.wfile.write(b": ping\n\n")
+                        self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            finally:
+                with log_lock:
+                    if q in log_queues:
+                        log_queues.remove(q)
 
         elif path == "/events":
             q: queue.Queue = queue.Queue(maxsize=32)
