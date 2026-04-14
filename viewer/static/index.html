@@ -7,49 +7,75 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #0a0a0a; color: #eee; font-family: monospace; overflow: hidden; }
     #canvas-container { width: 100vw; height: 100vh; }
+
     #ui {
       position: absolute; top: 16px; left: 16px;
       display: flex; gap: 8px; align-items: center;
     }
-    select, button {
+    select {
       background: #1a1a1a; color: #eee; border: 1px solid #333;
       padding: 6px 12px; border-radius: 4px; font-family: monospace; font-size: 13px;
-      cursor: pointer;
     }
-    select:hover, button:hover { border-color: #666; }
+    #toggle-btn {
+      padding: 6px 18px; border-radius: 4px; font-family: monospace; font-size: 13px;
+      border: 1px solid #444; cursor: pointer; transition: background 0.15s, border-color 0.15s;
+      background: #1a1a1a; color: #eee;
+    }
+    #toggle-btn.running {
+      background: #3a1a1a; border-color: #c0392b; color: #e74c3c;
+    }
+    #toggle-btn.loading {
+      opacity: 0.5; cursor: default;
+    }
+
+    #stats {
+      position: absolute; top: 16px; right: 16px;
+      text-align: right; font-size: 12px; line-height: 1.8;
+      color: #555;
+    }
+    #stats span { color: #aaa; }
+
     #info {
       position: absolute; bottom: 16px; left: 16px;
-      font-size: 12px; color: #555;
+      font-size: 11px; color: #333;
     }
-    #loading {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      font-size: 14px; color: #555; display: none;
+    #status-msg {
+      position: absolute; bottom: 16px; right: 16px;
+      font-size: 11px; color: #555;
     }
   </style>
 </head>
 <body>
   <div id="canvas-container"></div>
+
   <div id="ui">
     <select id="scene-select"><option value="">— select scene —</option></select>
-    <button id="load-btn">Load</button>
+    <button id="toggle-btn">Start</button>
   </div>
-  <div id="loading">Loading...</div>
-  <div id="info">Drag to rotate · Scroll to zoom · Right-drag to pan</div>
+
+  <div id="stats">
+    <div>reconstruction &nbsp;<span id="stat-recon">—</span></div>
+    <div>recon fps &nbsp;<span id="stat-fps">—</span></div>
+    <div>frames &nbsp;<span id="stat-frames">—</span></div>
+    <div>render fps &nbsp;<span id="stat-render">—</span></div>
+    <div>points &nbsp;<span id="stat-points">—</span></div>
+  </div>
+
+  <div id="info">Drag · Scroll · Right-drag to pan</div>
+  <div id="status-msg" id="status-msg"></div>
 
   <script type="importmap">
-    {
-      "imports": {
+    { "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
         "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
-      }
-    }
+    }}
   </script>
   <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 
-    // Scene setup
+    // --- Three.js setup ---
     const container = document.getElementById('canvas-container');
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(devicePixelRatio);
@@ -58,34 +84,95 @@
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0a0a);
+    scene.add(new THREE.AxesHelper(1));
 
-    const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.01, 1000);
+    const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.001, 1000);
     camera.position.set(0, 0, 5);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
 
-    // Axes helper (subtle)
-    scene.add(new THREE.AxesHelper(1));
-
-    // Resize
     window.addEventListener('resize', () => {
       camera.aspect = innerWidth / innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(innerWidth, innerHeight);
     });
 
-    // Animate
+    // Render FPS tracking
+    let lastRenderTime = performance.now();
+    let renderFps = 0;
     renderer.setAnimationLoop(() => {
+      const now = performance.now();
+      renderFps = 1000 / (now - lastRenderTime);
+      lastRenderTime = now;
       controls.update();
       renderer.render(scene, camera);
+      document.getElementById('stat-render').textContent = renderFps.toFixed(1) + ' fps';
     });
 
-    // Load scenes list
+    // --- PLY loading ---
+    const loader = new PLYLoader();
+    let currentMesh = null;
+    let loadVersion = 0;
+
+    function loadPly(sceneName, version) {
+      const myVersion = ++loadVersion;
+      loader.load(
+        `/ply/${sceneName}?v=${version}`,
+        (geometry) => {
+          if (myVersion !== loadVersion) return; // superseded
+
+          if (currentMesh) { scene.remove(currentMesh); currentMesh.geometry.dispose(); }
+
+          geometry.computeVertexNormals();
+
+          // Color by height if no vertex colors
+          if (!geometry.attributes.color) {
+            const pos = geometry.attributes.position;
+            const colors = new Float32Array(pos.count * 3);
+            let minY = Infinity, maxY = -Infinity;
+            for (let i = 0; i < pos.count; i++) {
+              const y = pos.getY(i);
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+            const c = new THREE.Color();
+            for (let i = 0; i < pos.count; i++) {
+              const t = (pos.getY(i) - minY) / (maxY - minY || 1);
+              c.setHSL(0.6 - t * 0.4, 1.0, 0.5);
+              colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+            }
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+          }
+
+          currentMesh = new THREE.Points(geometry, new THREE.PointsMaterial({
+            size: 0.05, vertexColors: true, sizeAttenuation: true,
+          }));
+          scene.add(currentMesh);
+
+          // Center camera on first load
+          if (version === 1) {
+            geometry.computeBoundingBox();
+            const box = geometry.boundingBox;
+            const center = new THREE.Vector3(); box.getCenter(center);
+            const size = new THREE.Vector3(); box.getSize(size);
+            controls.target.copy(center);
+            camera.position.copy(center).add(new THREE.Vector3(0, 0, Math.max(size.x, size.y, size.z) * 2));
+            controls.update();
+          }
+
+          document.getElementById('stat-points').textContent = geometry.attributes.position.count.toLocaleString();
+          setStatus('');
+        },
+        undefined,
+        (err) => { setStatus('PLY load error'); console.error(err); }
+      );
+    }
+
+    // --- UI ---
     const sceneSelect = document.getElementById('scene-select');
-    const loadBtn = document.getElementById('load-btn');
-    const loading = document.getElementById('loading');
+    const toggleBtn = document.getElementById('toggle-btn');
 
     fetch('/scenes').then(r => r.json()).then(({ scenes }) => {
       scenes.forEach(s => {
@@ -93,72 +180,87 @@
         opt.value = s; opt.textContent = s;
         sceneSelect.appendChild(opt);
       });
-      if (scenes.length === 1) {
-        sceneSelect.value = scenes[0];
-        loadScene(scenes[0]);
+      if (scenes.length === 1) sceneSelect.value = scenes[0];
+    });
+
+    // Load initial PLY for selected scene on scene change
+    sceneSelect.addEventListener('change', () => {
+      const s = sceneSelect.value;
+      if (s) loadPly(s, Date.now());
+    });
+
+    let running = false;
+    let eventSource = null;
+    let reconTimes = [];
+
+    toggleBtn.addEventListener('click', async () => {
+      if (toggleBtn.classList.contains('loading')) return;
+      const scene = sceneSelect.value;
+      if (!scene) { setStatus('Select a scene first'); return; }
+
+      if (!running) {
+        toggleBtn.classList.add('loading');
+        const res = await fetch(`/start/${scene}`, { method: 'POST' });
+        toggleBtn.classList.remove('loading');
+        if (!res.ok) { setStatus((await res.json()).error); return; }
+        running = true;
+        toggleBtn.textContent = 'Stop';
+        toggleBtn.classList.add('running');
+        startSSE(scene);
+      } else {
+        await fetch('/stop', { method: 'POST' });
+        running = false;
+        toggleBtn.textContent = 'Start';
+        toggleBtn.classList.remove('running');
+        stopSSE();
+        resetStats();
       }
     });
 
-    let currentMesh = null;
+    function startSSE(sceneName) {
+      eventSource = new EventSource('/events');
+      eventSource.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.error) { setStatus('Error: ' + data.error); return; }
 
-    function loadScene(name) {
-      if (!name) return;
-      loading.style.display = 'block';
-      const loader = new PLYLoader();
-      loader.load(`/ply/${name}`, (geometry) => {
-        if (currentMesh) scene.remove(currentMesh);
+        const { frame, recon_ms } = data;
+        reconTimes.push(recon_ms);
+        if (reconTimes.length > 10) reconTimes.shift();
+        const avgMs = reconTimes.reduce((a, b) => a + b, 0) / reconTimes.length;
+        const fps = 1000 / avgMs;
 
-        geometry.computeVertexNormals();
+        document.getElementById('stat-recon').textContent = recon_ms.toFixed(0) + ' ms';
+        document.getElementById('stat-fps').textContent = fps.toFixed(3) + ' fps';
+        document.getElementById('stat-frames').textContent = frame;
 
-        // Color by height (Y axis) if no vertex colors
-        if (!geometry.attributes.color) {
-          const positions = geometry.attributes.position;
-          const colors = new Float32Array(positions.count * 3);
-          let minY = Infinity, maxY = -Infinity;
-          for (let i = 0; i < positions.count; i++) {
-            const y = positions.getY(i);
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
-          }
-          const color = new THREE.Color();
-          for (let i = 0; i < positions.count; i++) {
-            const t = (positions.getY(i) - minY) / (maxY - minY);
-            color.setHSL(0.6 - t * 0.4, 1.0, 0.5);
-            colors[i * 3] = color.r;
-            colors[i * 3 + 1] = color.g;
-            colors[i * 3 + 2] = color.b;
-          }
-          geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        }
+        setStatus(`Rendering frame ${frame}...`);
+        loadPly(sceneName, frame);
+      };
+      eventSource.onerror = () => setStatus('SSE connection lost');
+    }
 
-        const material = new THREE.PointsMaterial({
-          size: 0.05,
-          vertexColors: true,
-          sizeAttenuation: true,
-        });
-        currentMesh = new THREE.Points(geometry, material);
-        scene.add(currentMesh);
+    function stopSSE() {
+      if (eventSource) { eventSource.close(); eventSource = null; }
+    }
 
-        // Center camera on point cloud
-        geometry.computeBoundingBox();
-        const box = geometry.boundingBox;
-        const center = new THREE.Vector3();
-        box.getCenter(center);
-        const size = new THREE.Vector3();
-        box.getSize(size);
-        const maxDim = Math.max(size.x, size.y, size.z);
-        controls.target.copy(center);
-        camera.position.copy(center).add(new THREE.Vector3(0, 0, maxDim * 2));
-        controls.update();
-
-        loading.style.display = 'none';
-      }, undefined, (err) => {
-        loading.style.display = 'none';
-        console.error(err);
+    function resetStats() {
+      reconTimes = [];
+      ['stat-recon', 'stat-fps', 'stat-frames'].forEach(id => {
+        document.getElementById(id).textContent = '—';
       });
     }
 
-    loadBtn.addEventListener('click', () => loadScene(sceneSelect.value));
+    function setStatus(msg) {
+      document.getElementById('status-msg').textContent = msg;
+    }
+
+    // Load initial scene if available
+    fetch('/status').then(r => r.json()).then(s => {
+      if (s.scene) {
+        sceneSelect.value = s.scene;
+        loadPly(s.scene, Date.now());
+      }
+    });
   </script>
 </body>
 </html>
