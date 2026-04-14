@@ -8,7 +8,7 @@
     body { background: #0a0a0a; color: #eee; font-family: monospace; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
     #header {
-      display: flex; align-items: center; gap: 12px;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
       padding: 10px 16px; border-bottom: 1px solid #1a1a1a; flex-shrink: 0;
     }
     #header h1 { font-size: 13px; color: #555; font-weight: normal; margin-right: 8px; }
@@ -21,6 +21,17 @@
     #stop-btn  { border-color: #c0392b; color: #e74c3c; }
     #stop-btn:disabled { opacity: 0.4; cursor: default; }
 
+    .sep { width: 1px; height: 20px; background: #222; flex-shrink: 0; }
+    #calib-capture-btn { border-color: #2980b9; color: #3498db; }
+    #calib-capture-btn:disabled { opacity: 0.4; cursor: default; }
+    #calib-run-btn  { border-color: #8e44ad; color: #9b59b6; }
+    #calib-run-btn:disabled  { opacity: 0.4; cursor: default; }
+    #calib-stop-btn  { border-color: #c0392b; color: #e74c3c; }
+    #calib-stop-btn:disabled  { opacity: 0.4; cursor: default; }
+    #calib-status { font-size: 11px; color: #555; }
+    #calib-status.ok  { color: #2ecc71; }
+    #calib-status.err { color: #e74c3c; }
+
     #stats {
       display: flex; gap: 24px; margin-left: auto;
       font-size: 11px; color: #444;
@@ -28,15 +39,32 @@
     #stats span { color: #888; }
 
     #main {
+      flex: 1; display: flex; overflow: hidden; background: #050505;
+    }
+    #composite-pane {
       flex: 1; display: flex; align-items: center; justify-content: center;
-      overflow: hidden; background: #050505;
+      border-right: 1px solid #1a1a1a; overflow: hidden;
     }
     #composite {
       max-width: 100%; max-height: 100%; object-fit: contain; display: block;
     }
+    #pc-pane {
+      flex: 1; position: relative; overflow: hidden;
+    }
+    #pc-canvas {
+      width: 100%; height: 100%; display: block;
+    }
+    #pc-hint {
+      position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+      font-size: 10px; color: #333; pointer-events: none;
+    }
+    #pc-overlay {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      font-size: 11px; color: #333; pointer-events: none;
+    }
 
     #log-panel {
-      height: 150px; flex-shrink: 0;
+      height: 130px; flex-shrink: 0;
       background: rgba(0,0,0,0.9); border-top: 1px solid #1a1a1a;
       overflow-y: auto; font-size: 11px; line-height: 1.6; padding: 6px 12px;
     }
@@ -52,25 +80,133 @@
     <h1>MASt3R · Match Viewer</h1>
     <button id="start-btn">Start</button>
     <button id="stop-btn" style="display:none">Stop</button>
+
+    <div class="sep"></div>
+
+    <button id="calib-capture-btn">Capture Pair</button>
+    <span id="calib-pair-count" style="font-size:11px;color:#555">0 pairs</span>
+    <button id="calib-run-btn">Run Calibration</button>
+    <button id="calib-reset-btn" style="color:#888;border-color:#333">Reset</button>
+    <button id="calib-stop-btn" style="display:none">Stop Calib</button>
+    <span id="calib-status"></span>
+
     <div id="stats">
       <div>recon <span id="s-recon">—</span></div>
       <div>fps <span id="s-fps">—</span></div>
       <div>frames <span id="s-frames">—</span></div>
       <div>matches <span id="s-matches">—</span></div>
+      <div>pts <span id="s-pts">—</span></div>
     </div>
   </div>
 
   <div id="main">
-    <img id="composite" src="" alt="Waiting for first frame…" />
+    <div id="composite-pane">
+      <img id="composite" src="" alt="Waiting for first frame…" />
+    </div>
+    <div id="pc-pane">
+      <canvas id="pc-canvas"></canvas>
+      <div id="pc-overlay">Waiting for point cloud…</div>
+      <div id="pc-hint">drag · scroll · right-drag</div>
+    </div>
   </div>
 
   <div id="log-panel"></div>
 
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+    }
+  }
+  </script>
+
   <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ── Three.js setup ────────────────────────────────────────────────
+    const pcPane   = document.getElementById('pc-pane');
+    const pcCanvas = document.getElementById('pc-canvas');
+    const pcOverlay = document.getElementById('pc-overlay');
+
+    const renderer = new THREE.WebGLRenderer({ canvas: pcCanvas, antialias: false });
+    renderer.setPixelRatio(window.devicePixelRatio);
+
+    const scene  = new THREE.Scene();
+    scene.background = new THREE.Color(0x050505);
+
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.001, 100);
+    camera.position.set(0, 0, 2);
+
+    const controls = new OrbitControls(camera, pcCanvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.1;
+
+    // Axes helper
+    scene.add(new THREE.AxesHelper(0.2));
+
+    // Point cloud object (replaced each frame)
+    let pointsMesh = null;
+
+    function resizeRenderer() {
+      const w = pcPane.clientWidth, h = pcPane.clientHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    resizeRenderer();
+    new ResizeObserver(resizeRenderer).observe(pcPane);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    function updatePointCloud(data) {
+      if (pointsMesh) { scene.remove(pointsMesh); pointsMesh.geometry.dispose(); pointsMesh.material.dispose(); }
+
+      const pts    = data.pts;
+      const colors = data.colors;
+      const n      = pts.length;
+
+      const positions = new Float32Array(n * 3);
+      const colArr    = new Float32Array(n * 3);
+
+      for (let i = 0; i < n; i++) {
+        positions[i*3]   = pts[i][0];
+        positions[i*3+1] = pts[i][1];
+        positions[i*3+2] = pts[i][2];
+        colArr[i*3]   = colors[i][0] / 255;
+        colArr[i*3+1] = colors[i][1] / 255;
+        colArr[i*3+2] = colors[i][2] / 255;
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute('color',    new THREE.BufferAttribute(colArr, 3));
+
+      const mat = new THREE.PointsMaterial({ size: 0.005, vertexColors: true, sizeAttenuation: true });
+      pointsMesh = new THREE.Points(geo, mat);
+      scene.add(pointsMesh);
+
+      pcOverlay.style.display = 'none';
+      document.getElementById('s-pts').textContent = n;
+    }
+
+    // ── UI helpers ────────────────────────────────────────────────────
     const startBtn  = document.getElementById('start-btn');
     const stopBtn   = document.getElementById('stop-btn');
     const logPanel  = document.getElementById('log-panel');
     const composite = document.getElementById('composite');
+    const calibCaptureBtn  = document.getElementById('calib-capture-btn');
+    const calibRunBtn      = document.getElementById('calib-run-btn');
+    const calibResetBtn    = document.getElementById('calib-reset-btn');
+    const calibStopBtn     = document.getElementById('calib-stop-btn');
+    const calibStatusEl    = document.getElementById('calib-status');
+    const calibPairCountEl = document.getElementById('calib-pair-count');
 
     function showStart() {
       startBtn.style.display = 'inline-block'; startBtn.disabled = false;
@@ -122,6 +258,9 @@
       eventSource.onmessage = (e) => {
         const data = JSON.parse(e.data);
         if (data.error) { appendLog('Error: ' + data.error); return; }
+        if (data.calib_pair !== undefined) { updatePairCount(data.calib_pair); return; }
+        if (data.calib_status || data.calib_error) { handleCalibEvent(data); return; }
+
         const { frame, recon_ms, num_matches } = data;
         reconTimes.push(recon_ms);
         if (reconTimes.length > 10) reconTimes.shift();
@@ -131,6 +270,12 @@
         document.getElementById('s-frames').textContent  = frame;
         document.getElementById('s-matches').textContent = num_matches ?? '—';
         composite.src = `/composite?v=${frame}`;
+
+        // Fetch and render point cloud
+        fetch(`/pointcloud?v=${frame}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d) updatePointCloud(d); })
+          .catch(() => {});
       };
     }
 
@@ -141,8 +286,93 @@
     // Sync on load
     fetch('/status').then(r => r.json()).then(s => {
       if (s.running) { showStop(); openEventStream(); }
-      // Show last composite if available
       composite.src = `/composite?v=0`;
+    });
+
+    // ── Calibration ───────────────────────────────────────────────────
+    let pairCount = 0;
+
+    function setCalibStatus(text, cls) {
+      calibStatusEl.textContent = text;
+      calibStatusEl.className = cls || '';
+    }
+    function updatePairCount(n) {
+      pairCount = n;
+      calibPairCountEl.textContent = `${n} pair${n !== 1 ? 's' : ''}`;
+    }
+
+    function handleCalibEvent(data) {
+      if (data.calib_pair !== undefined) updatePairCount(data.calib_pair);
+      if (data.calib_status) {
+        const s = data.calib_status;
+        const labels = { detecting: 'detecting corners…', calibrating: 'calibrating…',
+                         calibrating_intrinsics: 'intrinsics…', calibrating_stereo: 'stereo…' };
+        if (labels[s]) setCalibStatus(labels[s]);
+        if (s === 'done') {
+          const err = data.reprojection_error ? data.reprojection_error.toFixed(3) + 'px' : '';
+          setCalibStatus(`done ✓ ${err}`, 'ok');
+          calibStopBtn.style.display = 'none';
+          calibRunBtn.disabled = false;
+        }
+      }
+      if (data.calib_error) {
+        setCalibStatus('error: ' + data.calib_error, 'err');
+        calibStopBtn.style.display = 'none';
+        calibRunBtn.disabled = false;
+      }
+    }
+
+    calibCaptureBtn.addEventListener('click', async () => {
+      calibCaptureBtn.disabled = true;
+      setCalibStatus('capturing…');
+      const res  = await fetch('/calibrate/capture', { method: 'POST' });
+      const body = await res.json();
+      calibCaptureBtn.disabled = false;
+      if (!res.ok) { setCalibStatus('capture failed: ' + body.error, 'err'); return; }
+      updatePairCount(body.pair);
+      setCalibStatus(`pair ${body.pair} captured`);
+      composite.src = `/calibrate/preview?v=${body.pair}`;
+    });
+
+    calibRunBtn.addEventListener('click', async () => {
+      if (pairCount < 8) { setCalibStatus(`need ≥ 8 pairs (have ${pairCount})`, 'err'); return; }
+      calibRunBtn.disabled = true;
+      calibStopBtn.style.display = 'inline-block';
+      setCalibStatus('running…');
+      const res  = await fetch('/calibrate/run', { method: 'POST' });
+      const body = await res.json();
+      if (!res.ok) { setCalibStatus('error: ' + body.error, 'err'); calibRunBtn.disabled = false; calibStopBtn.style.display = 'none'; }
+    });
+
+    calibResetBtn.addEventListener('click', async () => {
+      await fetch('/calibrate/reset', { method: 'POST' });
+      updatePairCount(0);
+      setCalibStatus('reset');
+    });
+
+    calibStopBtn.addEventListener('click', async () => {
+      calibStopBtn.disabled = true;
+      await fetch('/calibrate/stop', { method: 'POST' });
+      calibStopBtn.style.display = 'none';
+      calibRunBtn.disabled = false;
+      setCalibStatus('stopped');
+    });
+
+    // SSE calib events (when loop not running)
+    const calibEventSrc = new EventSource('/events');
+    calibEventSrc.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      handleCalibEvent(data);
+    };
+
+    // Sync calibration state on load
+    fetch('/calibrate/status').then(r => r.json()).then(s => {
+      updatePairCount(s.pair_count || 0);
+      if (s.running) { setCalibStatus(s.status || 'running…'); calibStopBtn.style.display = 'inline-block'; }
+      else if (s.status === 'done') {
+        const err = s.reprojection_error ? s.reprojection_error.toFixed(3) + 'px' : '';
+        setCalibStatus(`done ✓ ${err}`, 'ok');
+      }
     });
   </script>
 </body>

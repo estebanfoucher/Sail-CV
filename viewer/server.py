@@ -63,7 +63,17 @@ def log(msg: str):
             log_queues.remove(q)
 
 
-CONTAINER_NAME = "sailcv-recon"
+CONTAINER_NAME      = "sailcv-recon"
+CALIB_CONTAINER     = "sailcv-calib"
+
+# --- Calibration state ---
+calib_lock = threading.Lock()
+calib_state = {
+    "running": False,
+    "status": None,   # "recording" | "calibrating" | "done" | "error"
+    "reprojection_error": None,
+    "error": None,
+}
 
 
 def reconstruction_loop(scene: str):
@@ -143,6 +153,84 @@ def reconstruction_loop(scene: str):
     with state_lock:
         state["running"] = False
         state["scene"] = None
+
+
+CALIB_PAIRS_DIR = OUTPUT_DIR / "calib_session"
+calib_pair_count = 0
+calib_pair_lock  = threading.Lock()
+
+
+def capture_frame_jpeg(cam_id: str) -> bytes:
+    """Grab one JPEG frame from camera via ffmpeg (runs on host, no Docker)."""
+    url = CAMERAS[cam_id]
+    cmd = [
+        "ffmpeg", "-y",
+        "-rtsp_transport", "tcp",
+        "-i", url,
+        "-frames:v", "1",
+        "-f", "image2pipe", "-vcodec", "mjpeg", "-",
+    ]
+    r = subprocess.run(cmd, capture_output=True, timeout=15)
+    if not r.stdout:
+        raise RuntimeError(f"ffmpeg returned no data for cam {cam_id}: {r.stderr.decode(errors='ignore')[-200:]}")
+    return r.stdout
+
+
+def run_calibration_docker(square_mm: float):
+    """Run calibrate_pairs.py in Docker on the collected image pairs."""
+    subprocess.run(["docker", "rm", "-f", CALIB_CONTAINER], capture_output=True)
+    cmd = [
+        "docker", "run", "--rm",
+        "--name", CALIB_CONTAINER,
+        "--runtime=nvidia",
+        "--memory=4g",
+        "--shm-size=512m",
+        "-w", "/app",
+        "-v", f"{PROJECT_DIR}/viewer:/app/viewer:ro",
+        "-v", f"{PROJECT_DIR}/src/reconstruction:/app/src/reconstruction:ro",
+        "-v", f"{OUTPUT_DIR}:/app/output:rw",
+        DOCKER_IMAGE,
+        "python3", "viewer/calibrate_pairs.py",
+        "--pairs-dir", "/app/output/calib_session",
+        "--square-mm", str(square_mm),
+    ]
+    log(f"[calib] Running calibration on {calib_pair_count} pairs")
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    def stream_stderr():
+        for line in proc.stderr:
+            log(line.rstrip())
+    threading.Thread(target=stream_stderr, daemon=True).start()
+
+    for raw in proc.stdout:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            log(f"[calib] {raw}")
+            continue
+        if "status" in event:
+            with calib_lock:
+                calib_state["status"] = event["status"]
+                if event["status"] == "done":
+                    calib_state["reprojection_error"] = event.get("reprojection_error")
+            rpe = event.get("reprojection_error")
+            log(f"[calib] {event['status']}" + (f" — {rpe:.4f}px" if rpe else ""))
+            broadcast({"calib_status": event["status"], **{k: v for k, v in event.items() if k != "status"}})
+        elif "error" in event:
+            with calib_lock:
+                calib_state["status"] = "error"
+                calib_state["error"] = event["error"]
+            log(f"[calib] ERROR: {event['error']}")
+            broadcast({"calib_error": event["error"]})
+
+    proc.wait()
+    if proc.returncode not in (0, -15):
+        log(f"[calib] Container exited with code {proc.returncode}")
+    with calib_lock:
+        calib_state["running"] = False
 
 
 # --- Camera streaming ---
@@ -253,6 +341,49 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_bytes(404, "text/plain", b"No frame yet")
                 return
             self.send_bytes(200, "image/jpeg", frame_file.read_bytes())
+
+        elif path == "/calibrate/status":
+            with calib_lock:
+                s = dict(calib_state)
+            s["pair_count"] = calib_pair_count
+            self.send_json(200, s)
+
+        elif path == "/calibrate/preview":
+            # Serve last captured pair side-by-side as JPEG
+            with calib_pair_lock:
+                n = calib_pair_count
+            if n == 0:
+                self.send_bytes(404, "text/plain", b"No pairs yet")
+                return
+            pair_dir = CALIB_PAIRS_DIR / f"pair_{n:03d}"
+            f1 = pair_dir / "cam1.jpg"
+            f2 = pair_dir / "cam2.jpg"
+            if not f1.exists() or not f2.exists():
+                self.send_bytes(404, "text/plain", b"Pair not found")
+                return
+            import PIL.Image, io
+            im1 = PIL.Image.open(f1).convert("RGB")
+            im2 = PIL.Image.open(f2).convert("RGB")
+            h = min(im1.height, im2.height)
+            scale = h / im1.height
+            w1 = int(im1.width * scale)
+            r1 = im1.resize((w1, h), PIL.Image.LANCZOS)
+            scale2 = h / im2.height
+            w2 = int(im2.width * scale2)
+            r2 = im2.resize((w2, h), PIL.Image.LANCZOS)
+            side_by_side = PIL.Image.new("RGB", (w1 + w2, h))
+            side_by_side.paste(r1, (0, 0))
+            side_by_side.paste(r2, (w1, 0))
+            buf = io.BytesIO()
+            side_by_side.save(buf, format="JPEG", quality=85)
+            self.send_bytes(200, "image/jpeg", buf.getvalue())
+
+        elif path == "/pointcloud":
+            f = OUTPUT_DIR / "live" / "pointcloud.json"
+            if not f.exists():
+                self.send_json(404, {"error": "No point cloud yet"})
+                return
+            self.send_bytes(200, "application/json", f.read_bytes())
 
         elif path == "/composite":
             f = OUTPUT_DIR / "live" / "composite.jpg"
@@ -368,6 +499,69 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/stop":
             stop_event.set()
             subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
+            self.send_json(200, {"stopped": True})
+
+        elif path == "/calibrate/capture":
+            # Grab one frame from each camera simultaneously, save as a pair
+            global calib_pair_count
+            results = {}
+            errors  = {}
+            def _grab(cam_id):
+                try:
+                    results[cam_id] = capture_frame_jpeg(cam_id)
+                except Exception as e:
+                    errors[cam_id] = str(e)
+            threads = [threading.Thread(target=_grab, args=(c,)) for c in ("1", "2")]
+            for t in threads: t.start()
+            for t in threads: t.join()
+            if errors:
+                self.send_json(500, {"error": str(errors)})
+                return
+            with calib_pair_lock:
+                calib_pair_count += 1
+                n = calib_pair_count
+            pair_dir = CALIB_PAIRS_DIR / f"pair_{n:03d}"
+            pair_dir.mkdir(parents=True, exist_ok=True)
+            (pair_dir / "cam1.jpg").write_bytes(results["1"])
+            (pair_dir / "cam2.jpg").write_bytes(results["2"])
+            log(f"[calib] Captured pair {n}")
+            broadcast({"calib_pair": n})
+            self.send_json(200, {"pair": n})
+
+        elif path == "/calibrate/reset":
+            import shutil
+            if CALIB_PAIRS_DIR.exists():
+                shutil.rmtree(CALIB_PAIRS_DIR)
+            CALIB_PAIRS_DIR.mkdir(parents=True, exist_ok=True)
+            with calib_pair_lock:
+                calib_pair_count = 0
+            log("[calib] Session reset")
+            self.send_json(200, {"reset": True})
+
+        elif path == "/calibrate/run":
+            from urllib.parse import parse_qs, urlparse
+            qs = parse_qs(urlparse(self.path).query)
+            square_mm = float(qs.get("square_mm", ["30.78"])[0])
+            with calib_lock:
+                if calib_state["running"]:
+                    self.send_json(409, {"error": "Calibration already running"})
+                    return
+                if calib_pair_count < 8:
+                    self.send_json(400, {"error": f"Need at least 8 pairs, have {calib_pair_count}"})
+                    return
+                calib_state["running"] = True
+                calib_state["status"] = "starting"
+                calib_state["reprojection_error"] = None
+                calib_state["error"] = None
+            t = threading.Thread(target=run_calibration_docker, args=(square_mm,), daemon=True)
+            t.start()
+            self.send_json(200, {"started": True, "pairs": calib_pair_count})
+
+        elif path == "/calibrate/stop":
+            subprocess.run(["docker", "rm", "-f", CALIB_CONTAINER], capture_output=True)
+            with calib_lock:
+                calib_state["running"] = False
+                calib_state["status"] = "stopped"
             self.send_json(200, {"stopped": True})
 
         else:

@@ -284,8 +284,43 @@ def main():
             composite, fw, fh = build_composite(img1, img2, top_pts0, top_pts1)
             composite.save(output_dir / "composite.jpg", quality=85)
 
+            # --- Build and save point cloud (subsample to ~8k pts) ---
+            pts3d_1 = raw["pts3d_1"]          # (H, W, 3)
+            pts3d_2 = raw["pts3d_2"]          # (H, W, 3)
+            col1    = raw["img1_colors"]       # (H, W, 3) in [-1, 1] or [0, 1] from view
+            col2    = raw["img2_colors"]
+
+            # Combine both clouds
+            pts_all = np.concatenate([pts3d_1.reshape(-1, 3), pts3d_2.reshape(-1, 3)], axis=0)
+            col_all = np.concatenate([col1.reshape(-1, 3),    col2.reshape(-1, 3)],    axis=0)
+
+            # Normalize colors to [0, 1]
+            col_min, col_max = col_all.min(), col_all.max()
+            if col_max > col_min:
+                col_all = (col_all - col_min) / (col_max - col_min)
+
+            # Filter: drop points too far away (outliers)
+            dist = np.linalg.norm(pts_all, axis=1)
+            mask = (dist > 0.01) & (dist < 20.0) & np.isfinite(dist)
+            pts_all = pts_all[mask]
+            col_all = col_all[mask]
+
+            # Subsample to at most 8000 points
+            MAX_PTS = 8000
+            if len(pts_all) > MAX_PTS:
+                idx = np.random.choice(len(pts_all), MAX_PTS, replace=False)
+                pts_all = pts_all[idx]
+                col_all = col_all[idx]
+
+            pc_data = {
+                "pts":    pts_all.astype(np.float32).tolist(),
+                "colors": (col_all * 255).astype(np.uint8).tolist(),
+            }
+            with open(output_dir / "pointcloud.json", "w") as f:
+                json.dump(pc_data, f)
+
             recon_ms = int((time.monotonic() - t0) * 1000)
-            logger.info(f"Frame {frame} done in {recon_ms}ms — {len(top_pts0)} matches from {len(matches_im0)}")
+            logger.info(f"Frame {frame} done in {recon_ms}ms — {len(top_pts0)} matches, {len(pts_all)} pts")
             emit({"frame": frame, "recon_ms": recon_ms, "num_matches": len(top_pts0)})
 
         except Exception as e:
