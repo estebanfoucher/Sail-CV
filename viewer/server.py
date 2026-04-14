@@ -9,11 +9,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
-PROJECT_DIR = Path(os.getenv("PROJECT_DIR", Path(__file__).parent.parent))
-OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", PROJECT_DIR / "output"))
+PROJECT_DIR = Path(os.getenv("PROJECT_DIR", Path(__file__).parent.parent)).resolve()
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", PROJECT_DIR / "output")).resolve()
 STATIC_DIR = Path(__file__).parent / "static"
 PORT = int(os.getenv("PORT", 7863))
 DOCKER_IMAGE = os.getenv("DOCKER_IMAGE", "docker-sailcv-3d-reconstruction:latest")
+
+CAMERAS = {
+    "1": "rtsp://admin:123456@192.168.1.105/cam/realmonitor?channel=1&subtype=0",
+    "2": "rtsp://admin:123456@192.168.1.141/cam/realmonitor?channel=1&subtype=0",
+}
 
 # --- Shared state ---
 state_lock = threading.Lock()
@@ -58,57 +63,129 @@ def log(msg: str):
             log_queues.remove(q)
 
 
-def run_reconstruction(scene: str):
-    """Run one reconstruction pass via Docker, streaming output. Returns elapsed ms."""
-    t0 = time.monotonic()
+CONTAINER_NAME = "sailcv-recon"
+
+
+def reconstruction_loop(scene: str):
+    """Run a single persistent Docker container that keeps the model in memory."""
+    global state
+    stop_event.clear()
+
+    # Kill any leftover container from a previous run
+    subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
+
     cmd = [
         "docker", "run", "--rm",
+        "--name", CONTAINER_NAME,
         "--runtime=nvidia",
+        "--memory=4g",
+        "--shm-size=1g",
         "-w", "/app",
+        "-v", f"{PROJECT_DIR}/viewer:/app/viewer:ro",
         "-v", f"{PROJECT_DIR}/assets/reconstruction:/app/assets/reconstruction:ro",
         "-v", f"{PROJECT_DIR}/checkpoints:/app/checkpoints:ro",
         "-v", f"{PROJECT_DIR}/src/reconstruction:/app/src/reconstruction:ro",
         "-v", f"{OUTPUT_DIR}:/app/output:rw",
         "-e", "DEVICE=cuda",
+        "-e", "CUDA_MEMORY_FRACTION=0.6",
         DOCKER_IMAGE,
-        "python3", "src/reconstruction/reconstruct_pair.py", "--scene", scene,
+        "python3", "viewer/reconstruct_loop.py",
+        *(["--debug-frames"] if os.getenv("DEBUG_FRAMES") else []),
     ]
+    log(f"[docker] Starting persistent container for scene '{scene}'")
     log(f"[docker] " + " ".join(cmd))
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    for line in proc.stdout:
-        log(line.rstrip())
-    proc.wait()
-    elapsed_ms = int((time.monotonic() - t0) * 1000)
-    if proc.returncode != 0:
-        raise RuntimeError(f"docker exited with code {proc.returncode}")
-    return elapsed_ms
 
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-def reconstruction_loop(scene: str):
-    global state
-    stop_event.clear()
-    log(f"[loop] Starting reconstruction loop for scene '{scene}'")
-    while not stop_event.is_set():
+    # Stream stderr (model logs) to log panel in background
+    def stream_stderr():
+        for line in proc.stderr:
+            log(line.rstrip())
+    threading.Thread(target=stream_stderr, daemon=True).start()
+
+    # Read stdout — each line is a JSON status event
+    for raw in proc.stdout:
+        if stop_event.is_set():
+            proc.terminate()
+            break
+        raw = raw.strip()
+        if not raw:
+            continue
         try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            log(f"[docker stdout] {raw}")
+            continue
+
+        if "status" in event:
+            log(f"[loop] {event['status']}")
+            continue
+
+        if "error" in event:
+            log(f"[loop] ERROR: {event['error']}")
+            broadcast({"error": event["error"]})
+            continue
+
+        if "frame" in event:
+            frame = event["frame"]
+            ms = event["recon_ms"]
             with state_lock:
-                frame_num = state["frame_count"] + 1
-            log(f"[loop] Frame {frame_num} — running reconstruction...")
-            ms = run_reconstruction(scene)
-            with state_lock:
-                state["frame_count"] += 1
+                state["frame_count"] = frame
                 state["last_recon_ms"] = ms
-                frame = state["frame_count"]
             log(f"[loop] Frame {frame} done in {ms}ms")
             broadcast({"frame": frame, "recon_ms": ms, "scene": scene})
-        except Exception as e:
-            log(f"[loop] ERROR: {e}")
-            broadcast({"error": str(e)})
-            time.sleep(2)
+
+    proc.wait()
+    if proc.returncode not in (0, -15):
+        log(f"[loop] Container exited with code {proc.returncode}")
 
     log("[loop] Stopped")
     with state_lock:
         state["running"] = False
         state["scene"] = None
+
+
+# --- Camera streaming ---
+
+def mjpeg_frames(cam_id: str):
+    """Yield raw JPEG bytes by decoding RTSP via ffmpeg."""
+    url = CAMERAS[cam_id]
+    cmd = [
+        "ffmpeg",
+        "-fflags", "nobuffer",
+        "-flags", "low_delay",
+        "-probesize", "32",
+        "-analyzeduration", "0",
+        "-rtsp_transport", "udp",
+        "-i", url,
+        "-f", "image2pipe", "-vcodec", "mjpeg",
+        "-q:v", "5", "-r", "15",
+        "-flush_packets", "1",
+        "-",
+    ]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    buf = b""
+    try:
+        while True:
+            chunk = proc.stdout.read(8192)
+            if not chunk:
+                break
+            buf += chunk
+            while True:
+                start = buf.find(b"\xff\xd8")
+                if start == -1:
+                    buf = b""
+                    break
+                end = buf.find(b"\xff\xd9", start + 2)
+                if end == -1:
+                    buf = buf[start:]
+                    break
+                frame = buf[start:end + 2]
+                buf = buf[end + 2:]
+                yield frame
+    finally:
+        proc.kill()
+        proc.wait()
 
 
 # --- HTTP Handler ---
@@ -165,6 +242,54 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/status":
             with state_lock:
                 self.send_json(200, dict(state))
+
+        elif path.startswith("/frame/"):
+            cam_id = path[7:]
+            if cam_id not in ("1", "2"):
+                self.send_bytes(404, "text/plain", b"Unknown camera")
+                return
+            frame_file = OUTPUT_DIR / "live" / f"frame{cam_id}.jpg"
+            if not frame_file.exists():
+                self.send_bytes(404, "text/plain", b"No frame yet")
+                return
+            self.send_bytes(200, "image/jpeg", frame_file.read_bytes())
+
+        elif path == "/composite":
+            f = OUTPUT_DIR / "live" / "composite.jpg"
+            if not f.exists():
+                self.send_bytes(404, "text/plain", b"No composite yet")
+                return
+            self.send_bytes(200, "image/jpeg", f.read_bytes())
+
+        elif path == "/matches":
+            matches_file = OUTPUT_DIR / "live" / "matches.json"
+            if not matches_file.exists():
+                self.send_json(404, {"error": "No matches yet"})
+                return
+            self.send_bytes(200, "application/json", matches_file.read_bytes())
+
+        elif path.startswith("/stream/"):
+            cam_id = path[8:]
+            if cam_id not in CAMERAS:
+                self.send_bytes(404, "text/plain", b"Unknown camera")
+                return
+            boundary = b"frame"
+            self.send_response(200)
+            self.send_header("Content-Type", f"multipart/x-mixed-replace; boundary=frame")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            try:
+                for frame in mjpeg_frames(cam_id):
+                    header = (
+                        b"--frame\r\n"
+                        b"Content-Type: image/jpeg\r\n"
+                        b"Content-Length: " + str(len(frame)).encode() + b"\r\n\r\n"
+                    )
+                    self.wfile.write(header + frame + b"\r\n")
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
         elif path == "/logs":
             q: queue.Queue = queue.Queue(maxsize=200)
@@ -242,6 +367,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/stop":
             stop_event.set()
+            subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
             self.send_json(200, {"stopped": True})
 
         else:

@@ -8,8 +8,8 @@ GST = "/Library/Frameworks/GStreamer.framework/Commands/gst-launch-1.0"
 GST_ENV = {**os.environ, "GST_PLUGIN_PATH": "/Library/Frameworks/GStreamer.framework/Libraries"}
 
 CAMERAS = {
-    "1": "rtsp://admin:123456@192.168.1.214/cam/realmonitor?channel=1&subtype=0",
-    "2": "rtsp://admin:123456@192.168.1.34/cam/realmonitor?channel=1&subtype=0",
+    "1": "rtsp://admin:123456@192.168.1.105/cam/realmonitor?channel=1&subtype=0",
+    "2": "rtsp://admin:123456@192.168.1.141/cam/realmonitor?channel=1&subtype=0",
 }
 
 
