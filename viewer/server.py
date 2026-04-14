@@ -1,47 +1,70 @@
-"""Lightweight PLY point cloud viewer server."""
+"""Lightweight PLY point cloud viewer — stdlib only, no dependencies."""
+import json
 import os
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
-import uvicorn
-
-app = FastAPI()
+from urllib.parse import unquote
 
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "/app/output"))
 STATIC_DIR = Path(__file__).parent / "static"
-
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-
-@app.get("/", response_class=HTMLResponse)
-async def index():
-    return FileResponse(STATIC_DIR / "index.html")
+PORT = int(os.getenv("PORT", 7863))
 
 
-@app.get("/scenes")
-async def list_scenes():
-    if not OUTPUT_DIR.exists():
-        return {"scenes": []}
-    scenes = [
-        d.name for d in OUTPUT_DIR.iterdir()
-        if d.is_dir() and any(d.glob("*.ply"))
-    ]
-    return {"scenes": sorted(scenes)}
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        print(f"{self.address_string()} - {fmt % args}")
 
+    def send(self, code, content_type, body):
+        if isinstance(body, str):
+            body = body.encode()
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", len(body))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
 
-@app.get("/ply/{scene}")
-async def get_ply(scene: str):
-    # Prevent path traversal
-    scene_dir = OUTPUT_DIR / scene
-    if not scene_dir.resolve().is_relative_to(OUTPUT_DIR.resolve()):
-        raise HTTPException(status_code=400, detail="Invalid scene name")
-    ply_files = list(scene_dir.glob("*.ply"))
-    if not ply_files:
-        raise HTTPException(status_code=404, detail=f"No PLY file found for scene '{scene}'")
-    return FileResponse(ply_files[0], media_type="application/octet-stream")
+    def do_GET(self):
+        path = unquote(self.path.split("?")[0])
+
+        if path == "/" or path == "/index.html":
+            self.serve_file(STATIC_DIR / "index.html", "text/html")
+
+        elif path == "/scenes":
+            scenes = []
+            if OUTPUT_DIR.exists():
+                scenes = sorted(
+                    d.name for d in OUTPUT_DIR.iterdir()
+                    if d.is_dir() and any(d.glob("*.ply"))
+                )
+            self.send(200, "application/json", json.dumps({"scenes": scenes}))
+
+        elif path.startswith("/ply/"):
+            scene = path[5:]
+            if ".." in scene or "/" in scene:
+                self.send(400, "text/plain", b"Invalid scene")
+                return
+            scene_dir = OUTPUT_DIR / scene
+            ply_files = list(scene_dir.glob("*.ply"))
+            if not ply_files:
+                self.send(404, "text/plain", f"No PLY found for '{scene}'")
+                return
+            self.serve_file(ply_files[0], "application/octet-stream")
+
+        else:
+            self.send(404, "text/plain", b"Not found")
+
+    def serve_file(self, path: Path, content_type: str):
+        try:
+            data = path.read_bytes()
+            self.send(200, content_type, data)
+        except FileNotFoundError:
+            self.send(404, "text/plain", b"File not found")
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 7863))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    output_dir = OUTPUT_DIR
+    output_dir_display = str(output_dir)
+    print(f"PLY viewer running at http://0.0.0.0:{PORT}")
+    print(f"Serving PLY files from: {output_dir_display}")
+    HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
