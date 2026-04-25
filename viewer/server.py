@@ -226,11 +226,18 @@ def reconstruction_loop(scene: str):
         if "frame" in event:
             frame = event["frame"]
             ms = event["recon_ms"]
+            timings = event.get("timings") or {}
             with state_lock:
                 state["frame_count"] = frame
                 state["last_recon_ms"] = ms
             log(f"[loop] Frame {frame} done in {ms}ms")
-            broadcast({"frame": frame, "recon_ms": ms, "scene": scene})
+            broadcast({
+                "frame": frame,
+                "recon_ms": ms,
+                "scene": scene,
+                "num_matches": event.get("num_matches"),
+                "timings": timings,
+            })
 
     proc.wait()
     if proc.returncode not in (0, -15):
@@ -472,6 +479,13 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self.send_bytes(200, "application/json", f.read_bytes())
 
+        elif path == "/params":
+            f = OUTPUT_DIR / "live" / "params.json"
+            if f.exists():
+                self.send_bytes(200, "application/json", f.read_bytes())
+            else:
+                self.send_json(200, {"subsample": 16})
+
         elif path == "/cameras":
             try:
                 payload = compute_camera_frusta()
@@ -598,6 +612,21 @@ class Handler(BaseHTTPRequestHandler):
             stop_event.set()
             subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
             self.send_json(200, {"stopped": True})
+
+        elif path == "/params":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                body = json.loads(self.rfile.read(length)) if length else {}
+                subsample = max(1, min(16, int(body.get("subsample", 16))))
+            except Exception as e:
+                self.send_json(400, {"error": f"bad payload: {e}"})
+                return
+            params_dir = OUTPUT_DIR / "live"
+            params_dir.mkdir(parents=True, exist_ok=True)
+            with open(params_dir / "params.json", "w") as f:
+                json.dump({"subsample": subsample}, f)
+            log(f"[params] subsample={subsample}")
+            self.send_json(200, {"subsample": subsample})
 
         elif path == "/calibrate/capture":
             # Grab one frame from each camera simultaneously, save as a pair

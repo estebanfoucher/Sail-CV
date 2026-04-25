@@ -51,7 +51,7 @@ def emit(obj: dict):
 
 
 def grab_frame(rtsp_url: str) -> PIL.Image.Image:
-    """Grab a single frame from an H.265 RTSP stream via ffmpeg."""
+    """One-shot RTSP frame grab. Slow (ffmpeg startup + keyframe wait); use RTSPGrabber for the loop."""
     cmd = [
         "ffmpeg", "-y",
         "-rtsp_transport", "tcp",
@@ -65,7 +65,6 @@ def grab_frame(rtsp_url: str) -> PIL.Image.Image:
         stderr = result.stderr.decode(errors="ignore")
         raise RuntimeError(f"ffmpeg returned no data. stderr: {stderr[-300:]}")
     import re
-    # Pick last WxH match (avoids codec info lines, gets stream resolution)
     matches = re.findall(r"(\d{3,5})x(\d{3,5})", result.stderr.decode(errors="ignore"))
     if not matches:
         raise RuntimeError("Could not parse frame dimensions from ffmpeg stderr")
@@ -75,6 +74,123 @@ def grab_frame(rtsp_url: str) -> PIL.Image.Image:
     if arr.size != expected:
         raise RuntimeError(f"Raw frame size mismatch: got {arr.size}, expected {expected} ({w}x{h})")
     return PIL.Image.fromarray(arr.reshape(h, w, 3))
+
+
+def _probe_size(rtsp_url: str) -> tuple[int, int]:
+    """Use ffprobe to get the stream's WxH so the rawvideo reader knows chunk size."""
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-rtsp_transport", "tcp",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "csv=p=0:s=x",
+        rtsp_url,
+    ]
+    out = subprocess.run(cmd, capture_output=True, timeout=15).stdout.decode().strip()
+    w, h = out.split("x")
+    return int(w), int(h)
+
+
+class RTSPGrabber:
+    """Long-lived ffmpeg subprocess piping rawvideo. Background thread holds the latest frame."""
+
+    def __init__(self, rtsp_url: str, name: str = "", output_width: int = 1024, fps: int = 4):
+        self.url = rtsp_url
+        self.name = name
+        self.fps = fps
+        src_w, src_h = _probe_size(rtsp_url)
+        # Downscale on the ffmpeg side to keep swscale (software) cheap.
+        scale = output_width / src_w
+        self.w = output_width
+        self.h = (int(src_h * scale) // 2) * 2  # keep even for yuv->rgb
+        self._frame_bytes = self.w * self.h * 3
+        self._latest: bytes | None = None
+        self._lock = threading.Lock()
+        self._first_frame = threading.Event()
+        self._stop = threading.Event()
+        self._proc: subprocess.Popen | None = None
+        self._thread = threading.Thread(target=self._run, daemon=True, name=f"grabber-{name}")
+        self._thread.start()
+        logger.info(f"[grabber-{name}] started ({src_w}x{src_h} -> {self.w}x{self.h} @ {fps}fps)")
+
+    def _spawn(self):
+        # fps filter throttles decode rate (we only need ~latest frame, not every camera frame).
+        # scale before format=rgb24 so swscale runs on the smaller image.
+        vf = f"fps={self.fps},scale={self.w}:{self.h},format=rgb24"
+        cmd = [
+            "ffmpeg",
+            "-loglevel", "warning",
+            "-rtsp_transport", "tcp",
+            "-i", self.url,
+            "-vf", vf,
+            "-f", "rawvideo",
+            "-an",
+            "-",
+        ]
+        self._proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # Drain stderr in a background thread so the pipe never blocks; log lines as they come.
+        def _log_stderr(p):
+            try:
+                for line in iter(p.stderr.readline, b""):
+                    s = line.decode(errors="ignore").rstrip()
+                    if s:
+                        logger.warning(f"[grabber-{self.name} ffmpeg] {s}")
+            except Exception:
+                pass
+        threading.Thread(target=_log_stderr, args=(self._proc,), daemon=True).start()
+
+    @staticmethod
+    def _read_exact(stream, n: int) -> bytes | None:
+        """Read exactly n bytes, accumulating across short reads. Returns None on EOF."""
+        buf = bytearray()
+        while len(buf) < n:
+            chunk = stream.read(n - len(buf))
+            if not chunk:
+                return None
+            buf.extend(chunk)
+        return bytes(buf)
+
+    def _run(self):
+        while not self._stop.is_set():
+            try:
+                self._spawn()
+                assert self._proc and self._proc.stdout
+                while not self._stop.is_set():
+                    buf = self._read_exact(self._proc.stdout, self._frame_bytes)
+                    if buf is None:
+                        break
+                    with self._lock:
+                        self._latest = buf
+                    if not self._first_frame.is_set():
+                        self._first_frame.set()
+                logger.warning(f"[grabber-{self.name}] ffmpeg stream ended, restarting")
+            except Exception as e:
+                logger.warning(f"[grabber-{self.name}] error: {e}, restarting in 1s")
+            finally:
+                if self._proc:
+                    try:
+                        self._proc.kill()
+                    except Exception:
+                        pass
+                    self._proc = None
+            if not self._stop.is_set():
+                time.sleep(1)
+
+    def get_latest(self, timeout: float = 10.0) -> PIL.Image.Image:
+        if not self._first_frame.wait(timeout):
+            raise RuntimeError(f"[grabber-{self.name}] no frame within {timeout}s")
+        with self._lock:
+            buf = self._latest
+        arr = np.frombuffer(buf, dtype=np.uint8).reshape(self.h, self.w, 3)
+        return PIL.Image.fromarray(arr)
+
+    def close(self):
+        self._stop.set()
+        if self._proc:
+            try:
+                self._proc.kill()
+            except Exception:
+                pass
 
 
 def select_top_matches(matches_im0, matches_im1, conf_scores, img_w, img_h, top_n=TOP_N):
@@ -163,7 +279,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--scene", default=None, help="Use static scene fixture instead of live RTSP")
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
-    parser.add_argument("--subsample", type=int, default=8)
+    parser.add_argument("--subsample", type=int, default=16)
     parser.add_argument("--debug-frames", action="store_true", help="Skip inference, only grab+display frames")
     args = parser.parse_args()
 
@@ -235,37 +351,71 @@ def main():
     engine.load_model()
     _stop_heartbeat.set()
     logger.info("Model loaded — starting loop")
+
+    # Persistent RTSP grabbers (long-lived ffmpeg, latest-frame reader)
+    grabbers: dict[str, RTSPGrabber] = {}
+    try:
+        grabbers["1"] = RTSPGrabber(CAMERAS["1"], name="1")
+        grabbers["2"] = RTSPGrabber(CAMERAS["2"], name="2")
+    except Exception as e:
+        logger.warning(f"Could not start RTSP grabbers ({e}); falling back to fixtures")
+
     emit({"status": "ready"})
+
+    params_path = output_dir / "params.json"
+
+    def read_subsample(default: int) -> int:
+        try:
+            if params_path.exists():
+                with open(params_path) as f:
+                    v = int(json.load(f).get("subsample", default))
+                return max(1, min(16, v))
+        except Exception:
+            pass
+        return default
 
     frame = 0
     while True:
         frame += 1
         t0 = time.monotonic()
+        timings = {}
+
+        def lap(prev: float) -> tuple[int, float]:
+            now = time.monotonic()
+            return int((now - prev) * 1000), now
+
         try:
-            # --- Grab frames ---
+            subsample = read_subsample(args.subsample)
+            # --- Grab frames (latest from long-lived ffmpeg streams) ---
+            t = t0
             try:
-                img1 = grab_frame(CAMERAS["1"])
-                img2 = grab_frame(CAMERAS["2"])
-                logger.info(f"Frame {frame}: grabbed live frames")
+                if "1" not in grabbers or "2" not in grabbers:
+                    raise RuntimeError("grabbers not initialized")
+                img1 = grabbers["1"].get_latest()
+                img2 = grabbers["2"].get_latest()
             except Exception as e:
                 logger.warning(f"RTSP grab failed ({e}), using fixture")
                 img1, img2 = static_img1, static_img2
+            timings["grab"], t = lap(t)
 
             # --- Preprocess ---
             images = [
                 preprocess_image(img1, size=512, idx=0),
                 preprocess_image(img2, size=512, idx=1),
             ]
+            timings["preproc"], t = lap(t)
 
-            # --- Inference ---
+            # --- Inference (sync GPU before timing the next step) ---
             output = engine.run_inference(images)
-            raw = engine.extract_raw_data(output, subsample=args.subsample)
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            timings["infer"], t = lap(t)
 
-            matches_im0 = raw["matches_im0"]  # pixel coords in img0
-            matches_im1 = raw["matches_im1"]  # pixel coords in img1
-
-            # Confidence: dot product of matched descriptors
-            desc1 = raw["pred1"]["desc"].squeeze(0).detach()  # (H, W, D)
+            # --- Match extraction + confidence + top-N selection ---
+            raw = engine.extract_raw_data(output, subsample=subsample)
+            matches_im0 = raw["matches_im0"]
+            matches_im1 = raw["matches_im1"]
+            desc1 = raw["pred1"]["desc"].squeeze(0).detach()
             desc2 = raw["pred2"]["desc"].squeeze(0).detach()
             H, W = desc1.shape[:2]
             pts0_np = matches_im0.cpu().numpy() if hasattr(matches_im0, 'cpu') else matches_im0
@@ -275,22 +425,20 @@ def main():
             d1 = desc1.reshape(-1, desc1.shape[-1])[pts0_idx]
             d2 = desc2.reshape(-1, desc2.shape[-1])[pts1_idx]
             conf_scores = (d1 * d2).sum(dim=-1).cpu().numpy().astype(float)
-
-            # --- Select top 20 (grid + confidence) ---
             top_pts0, top_pts1, top_scores = select_top_matches(
                 matches_im0, matches_im1, conf_scores, img_w, img_h
             )
+            timings["match"], t = lap(t)
 
-            # --- Build and save 2×2 composite ---
+            # --- Build composite + save per-camera frames (image I/O) ---
             composite, fw, fh = build_composite(img1, img2, top_pts0, top_pts1)
             composite.save(output_dir / "composite.jpg", quality=85)
-
-            # --- Save per-camera frames (downscaled) for camera-base point clouds ---
             for idx, im in enumerate((img1, img2), start=1):
                 w_target = 256
                 scale = w_target / im.width
                 small = im.resize((w_target, int(im.height * scale)), PIL.Image.LANCZOS)
                 small.save(output_dir / f"frame{idx}.jpg", quality=80)
+            timings["io"], t = lap(t)
 
             # --- Build and save point cloud (subsample to ~8k pts) ---
             pts3d_1 = raw["pts3d_1"]          # (H, W, 3)
@@ -326,10 +474,11 @@ def main():
             }
             with open(output_dir / "pointcloud.json", "w") as f:
                 json.dump(pc_data, f)
+            timings["pointcloud"], t = lap(t)
 
             recon_ms = int((time.monotonic() - t0) * 1000)
-            logger.info(f"Frame {frame} done in {recon_ms}ms — {len(top_pts0)} matches, {len(pts_all)} pts")
-            emit({"frame": frame, "recon_ms": recon_ms, "num_matches": len(top_pts0)})
+            logger.info(f"Frame {frame} done in {recon_ms}ms — subsample={subsample}, {len(top_pts0)} matches, {len(pts_all)} pts | {timings}")
+            emit({"frame": frame, "recon_ms": recon_ms, "num_matches": len(top_pts0), "timings": timings})
 
         except Exception as e:
             logger.error(f"Frame {frame} failed: {e}")

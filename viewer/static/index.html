@@ -63,6 +63,19 @@
       font-size: 11px; color: #333; pointer-events: none;
     }
 
+    #profile-bar {
+      flex-shrink: 0; padding: 4px 12px; background: #0a0a0a; border-top: 1px solid #1a1a1a;
+      font-size: 10px; color: #777; display: flex; align-items: center; gap: 10px;
+    }
+    #profile-track {
+      flex: 1; height: 10px; background: #181818; border-radius: 2px; overflow: hidden;
+      display: flex;
+    }
+    #profile-track > div { height: 100%; }
+    #profile-legend { display: flex; gap: 10px; flex-wrap: wrap; }
+    #profile-legend span { display: inline-flex; align-items: center; gap: 4px; }
+    #profile-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 1px; }
+
     #log-panel {
       height: 130px; flex-shrink: 0;
       background: rgba(0,0,0,0.9); border-top: 1px solid #1a1a1a;
@@ -104,6 +117,11 @@
       <input type="number" id="dist-threshold" value="1" min="0" step="0.1"
              style="width:60px;margin-left:4px;background:#1a1a1a;color:#eee;border:1px solid #444;padding:2px 4px;font-family:monospace;font-size:11px" />
     </label>
+    <label style="font-size:11px;color:#888">
+      subsample
+      <input type="number" id="subsample-input" value="16" min="1" max="16" step="1"
+             style="width:50px;margin-left:4px;background:#1a1a1a;color:#eee;border:1px solid #444;padding:2px 4px;font-family:monospace;font-size:11px" />
+    </label>
 
     <div id="stats">
       <div>recon <span id="s-recon">—</span></div>
@@ -123,6 +141,13 @@
       <div id="pc-overlay">Waiting for point cloud…</div>
       <div id="pc-hint">drag · scroll · right-drag</div>
     </div>
+  </div>
+
+  <div id="profile-bar">
+    <span style="color:#555">profile</span>
+    <div id="profile-track"></div>
+    <div id="profile-legend"></div>
+    <span id="profile-total" style="color:#aaa">—</span>
   </div>
 
   <div id="log-panel"></div>
@@ -248,6 +273,21 @@
       if (lastPointCloudData) updatePointCloud(lastPointCloudData);
     });
 
+    // Subsample (server-side, applies on next reconstructed frame)
+    const subsampleInput = document.getElementById('subsample-input');
+    fetch('/params').then(r => r.json()).then(p => {
+      if (p && p.subsample) subsampleInput.value = p.subsample;
+    }).catch(() => {});
+    subsampleInput.addEventListener('change', () => {
+      const v = parseInt(subsampleInput.value, 10);
+      if (!Number.isFinite(v) || v < 1 || v > 16) return;
+      fetch('/params', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subsample: v }),
+      });
+    });
+
     function fetchAndDrawCameras() {
       fetch('/cameras')
         .then(r => r.ok ? r.json() : null)
@@ -270,6 +310,49 @@
       renderer.render(scene, camera);
     }
     animate();
+
+    // ── Profiling bar (per-frame step breakdown) ──────────────────────
+    const PROFILE_STEPS = [
+      { key: 'grab',       label: 'grab',     color: '#e67e22' },
+      { key: 'preproc',    label: 'preproc',  color: '#f1c40f' },
+      { key: 'infer',      label: 'infer',    color: '#9b59b6' },
+      { key: 'match',      label: 'match',    color: '#3498db' },
+      { key: 'io',         label: 'io',       color: '#16a085' },
+      { key: 'pointcloud', label: 'pc',       color: '#e74c3c' },
+    ];
+    function renderProfile(timings, totalMs) {
+      const track  = document.getElementById('profile-track');
+      const legend = document.getElementById('profile-legend');
+      const totalEl = document.getElementById('profile-total');
+      track.innerHTML = '';
+      legend.innerHTML = '';
+      const sumKnown = PROFILE_STEPS.reduce((a, s) => a + (timings[s.key] || 0), 0);
+      const denom = Math.max(totalMs, sumKnown, 1);
+      for (const s of PROFILE_STEPS) {
+        const ms = timings[s.key] || 0;
+        if (ms <= 0) continue;
+        const seg = document.createElement('div');
+        seg.style.background = s.color;
+        seg.style.width = `${(ms / denom) * 100}%`;
+        seg.title = `${s.label}: ${ms} ms`;
+        track.appendChild(seg);
+        const item = document.createElement('span');
+        item.innerHTML = `<i style="background:${s.color}"></i>${s.label} ${ms}ms`;
+        legend.appendChild(item);
+      }
+      const other = Math.max(0, totalMs - sumKnown);
+      if (other > 5) {
+        const seg = document.createElement('div');
+        seg.style.background = '#444';
+        seg.style.width = `${(other / denom) * 100}%`;
+        seg.title = `other: ${other} ms`;
+        track.appendChild(seg);
+        const item = document.createElement('span');
+        item.innerHTML = `<i style="background:#444"></i>other ${other}ms`;
+        legend.appendChild(item);
+      }
+      totalEl.textContent = `total ${totalMs}ms`;
+    }
 
     function getDistanceThreshold() {
       const v = parseFloat(document.getElementById('dist-threshold')?.value);
@@ -398,6 +481,7 @@
         document.getElementById('s-frames').textContent  = frame;
         document.getElementById('s-matches').textContent = num_matches ?? '—';
         composite.src = `/composite?v=${frame}`;
+        if (data.timings) renderProfile(data.timings, recon_ms);
 
         // Fetch and render point cloud + refresh camera bases with the new frames
         fetch(`/pointcloud?v=${frame}`)
