@@ -206,13 +206,14 @@ def main():
                 time.sleep(1)
         return
 
-    # Calibration
-    calib_path = PROJECT_ROOT / "assets" / "reconstruction" / "scene_3" / "calibration.json"
+    # Calibration (canonical path, overwritten by calibration UI)
+    calib_path = Path(os.getenv("CALIBRATION_PATH", PROJECT_ROOT / "output" / "calibration" / "calibration.json"))
     with open(calib_path) as f:
         calibration_data = json.load(f)
     calibration_params = convert_calibration_parameters(calibration_data)
     img_w = calibration_params["image_size"][0]
     img_h = calibration_params["image_size"][1]
+    logger.info(f"Loaded calibration from {calib_path}")
 
     # Load static fixture images (fallback if no RTSP)
     fixture_dir = PROJECT_ROOT / "assets" / "reconstruction" / (args.scene or "scene_3")
@@ -283,6 +284,13 @@ def main():
             # --- Build and save 2×2 composite ---
             composite, fw, fh = build_composite(img1, img2, top_pts0, top_pts1)
             composite.save(output_dir / "composite.jpg", quality=85)
+
+            # --- Save per-camera frames (downscaled) for camera-base point clouds ---
+            for idx, im in enumerate((img1, img2), start=1):
+                w_target = 256
+                scale = w_target / im.width
+                small = im.resize((w_target, int(im.height * scale)), PIL.Image.LANCZOS)
+                small.save(output_dir / f"frame{idx}.jpg", quality=80)
 
             # --- Build and save point cloud (subsample to ~8k pts) ---
             pts3d_1 = raw["pts3d_1"]          # (H, W, 3)

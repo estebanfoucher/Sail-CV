@@ -90,6 +90,21 @@
     <button id="calib-stop-btn" style="display:none">Stop Calib</button>
     <span id="calib-status"></span>
 
+    <div class="sep"></div>
+    <label class="cam-toggle" style="color:#ff4040">
+      <input type="checkbox" id="cam1-img-toggle" checked /> cam1 image
+    </label>
+    <label class="cam-toggle" style="color:#40a0ff">
+      <input type="checkbox" id="cam2-img-toggle" checked /> cam2 image
+    </label>
+
+    <div class="sep"></div>
+    <label style="font-size:11px;color:#888">
+      max dist (m)
+      <input type="number" id="dist-threshold" value="1" min="0" step="0.1"
+             style="width:60px;margin-left:4px;background:#1a1a1a;color:#eee;border:1px solid #444;padding:2px 4px;font-family:monospace;font-size:11px" />
+    </label>
+
     <div id="stats">
       <div>recon <span id="s-recon">—</span></div>
       <div>fps <span id="s-fps">—</span></div>
@@ -148,6 +163,97 @@
 
     // Point cloud object (replaced each frame)
     let pointsMesh = null;
+    let lastPointCloudData = null;
+    let cameraMidpoint = null;  // [x,y,z] midpoint between the two camera apexes
+
+    // Camera frusta + base point clouds (per-camera Points stored for toggling)
+    let cameraObjs = [];          // wireframe LineSegments
+    let cameraBases = [null, null];  // base Points per camera index
+    const CAM_COLORS = [0xff4040, 0x40a0ff];
+
+    function clearCameras() {
+      for (const m of cameraObjs) {
+        scene.remove(m);
+        m.geometry.dispose();
+        m.material.dispose();
+      }
+      cameraObjs = [];
+      for (let i = 0; i < cameraBases.length; i++) {
+        const b = cameraBases[i];
+        if (b) { scene.remove(b); b.geometry.dispose(); b.material.dispose(); }
+        cameraBases[i] = null;
+      }
+    }
+
+    function applyBaseVisibility() {
+      const flags = [
+        document.getElementById('cam1-img-toggle')?.checked ?? true,
+        document.getElementById('cam2-img-toggle')?.checked ?? true,
+      ];
+      cameraBases.forEach((b, i) => { if (b) b.visible = flags[i]; });
+    }
+
+    function drawCameraFrusta(payload) {
+      clearCameras();
+      const cams = payload.cameras || [];
+      // Midpoint between the two camera apexes (vertex 0 of each frustum)
+      if (cams.length >= 2) {
+        const a = cams[0].vertices[0], b = cams[1].vertices[0];
+        cameraMidpoint = [(a[0]+b[0])/2, (a[1]+b[1])/2, (a[2]+b[2])/2];
+      }
+      cams.forEach((cam, i) => {
+        // Wireframe
+        const verts = cam.vertices;
+        const edges = cam.edges;
+        const wp = new Float32Array(edges.length * 6);
+        for (let e = 0; e < edges.length; e++) {
+          const [a, b] = edges[e];
+          wp[e*6+0] = verts[a][0]; wp[e*6+1] = verts[a][1]; wp[e*6+2] = verts[a][2];
+          wp[e*6+3] = verts[b][0]; wp[e*6+4] = verts[b][1]; wp[e*6+5] = verts[b][2];
+        }
+        const wgeo = new THREE.BufferGeometry();
+        wgeo.setAttribute('position', new THREE.BufferAttribute(wp, 3));
+        const wmat = new THREE.LineBasicMaterial({ color: CAM_COLORS[i % CAM_COLORS.length] });
+        const seg = new THREE.LineSegments(wgeo, wmat);
+        scene.add(seg);
+        cameraObjs.push(seg);
+
+        // Base point cloud (frame projected onto image plane)
+        const bp = cam.base_points || [];
+        const bc = cam.base_colors || [];
+        if (bp.length > 0) {
+          const pos = new Float32Array(bp.length * 3);
+          const col = new Float32Array(bp.length * 3);
+          for (let k = 0; k < bp.length; k++) {
+            pos[k*3]   = bp[k][0]; pos[k*3+1] = bp[k][1]; pos[k*3+2] = bp[k][2];
+            col[k*3]   = bc[k][0] / 255;
+            col[k*3+1] = bc[k][1] / 255;
+            col[k*3+2] = bc[k][2] / 255;
+          }
+          const bgeo = new THREE.BufferGeometry();
+          bgeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+          bgeo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
+          const bmat = new THREE.PointsMaterial({ size: 0.008, vertexColors: true, sizeAttenuation: true });
+          const pts = new THREE.Points(bgeo, bmat);
+          scene.add(pts);
+          cameraBases[i] = pts;
+        }
+      });
+      applyBaseVisibility();
+    }
+
+    document.getElementById('cam1-img-toggle').addEventListener('change', applyBaseVisibility);
+    document.getElementById('cam2-img-toggle').addEventListener('change', applyBaseVisibility);
+    document.getElementById('dist-threshold').addEventListener('input', () => {
+      if (lastPointCloudData) updatePointCloud(lastPointCloudData);
+    });
+
+    function fetchAndDrawCameras() {
+      fetch('/cameras')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) drawCameraFrusta(d); })
+        .catch(() => {});
+    }
 
     function resizeRenderer() {
       const w = pcPane.clientWidth, h = pcPane.clientHeight;
@@ -165,23 +271,45 @@
     }
     animate();
 
+    function getDistanceThreshold() {
+      const v = parseFloat(document.getElementById('dist-threshold')?.value);
+      return (isFinite(v) && v > 0) ? v : Infinity;
+    }
+
     function updatePointCloud(data) {
+      lastPointCloudData = data;
       if (pointsMesh) { scene.remove(pointsMesh); pointsMesh.geometry.dispose(); pointsMesh.material.dispose(); }
 
       const pts    = data.pts;
       const colors = data.colors;
       const n      = pts.length;
 
-      const positions = new Float32Array(n * 3);
-      const colArr    = new Float32Array(n * 3);
+      const cx = cameraMidpoint ? cameraMidpoint[0] : 0;
+      const cy = cameraMidpoint ? cameraMidpoint[1] : 0;
+      const cz = cameraMidpoint ? cameraMidpoint[2] : 0;
+      const maxDist = getDistanceThreshold();
+      const maxDist2 = maxDist === Infinity ? Infinity : maxDist * maxDist;
 
+      // First pass: count kept points
+      let kept = 0;
+      const keepMask = new Uint8Array(n);
       for (let i = 0; i < n; i++) {
-        positions[i*3]   = pts[i][0];
-        positions[i*3+1] = pts[i][1];
-        positions[i*3+2] = pts[i][2];
-        colArr[i*3]   = colors[i][0] / 255;
-        colArr[i*3+1] = colors[i][1] / 255;
-        colArr[i*3+2] = colors[i][2] / 255;
+        const dx = pts[i][0] - cx, dy = pts[i][1] - cy, dz = pts[i][2] - cz;
+        if (dx*dx + dy*dy + dz*dz <= maxDist2) { keepMask[i] = 1; kept++; }
+      }
+
+      const positions = new Float32Array(kept * 3);
+      const colArr    = new Float32Array(kept * 3);
+      let j = 0;
+      for (let i = 0; i < n; i++) {
+        if (!keepMask[i]) continue;
+        positions[j*3]   = pts[i][0];
+        positions[j*3+1] = pts[i][1];
+        positions[j*3+2] = pts[i][2];
+        colArr[j*3]   = colors[i][0] / 255;
+        colArr[j*3+1] = colors[i][1] / 255;
+        colArr[j*3+2] = colors[i][2] / 255;
+        j++;
       }
 
       const geo = new THREE.BufferGeometry();
@@ -193,7 +321,7 @@
       scene.add(pointsMesh);
 
       pcOverlay.style.display = 'none';
-      document.getElementById('s-pts').textContent = n;
+      document.getElementById('s-pts').textContent = `${kept}/${n}`;
     }
 
     // ── UI helpers ────────────────────────────────────────────────────
@@ -271,10 +399,14 @@
         document.getElementById('s-matches').textContent = num_matches ?? '—';
         composite.src = `/composite?v=${frame}`;
 
-        // Fetch and render point cloud
+        // Fetch and render point cloud + refresh camera bases with the new frames
         fetch(`/pointcloud?v=${frame}`)
           .then(r => r.ok ? r.json() : null)
           .then(d => { if (d) updatePointCloud(d); })
+          .catch(() => {});
+        fetch(`/cameras?v=${frame}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d) drawCameraFrusta(d); })
           .catch(() => {});
       };
     }
@@ -287,6 +419,7 @@
     fetch('/status').then(r => r.json()).then(s => {
       if (s.running) { showStop(); openEventStream(); }
       composite.src = `/composite?v=0`;
+      fetchAndDrawCameras();
     });
 
     // ── Calibration ───────────────────────────────────────────────────
@@ -313,6 +446,7 @@
           setCalibStatus(`done ✓ ${err}`, 'ok');
           calibStopBtn.style.display = 'none';
           calibRunBtn.disabled = false;
+          fetchAndDrawCameras();
         }
       }
       if (data.calib_error) {

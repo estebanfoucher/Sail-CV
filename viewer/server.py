@@ -3,17 +3,104 @@ import json
 import os
 import queue
 import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
+import numpy as np
+
 PROJECT_DIR = Path(os.getenv("PROJECT_DIR", Path(__file__).parent.parent)).resolve()
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", PROJECT_DIR / "output")).resolve()
 STATIC_DIR = Path(__file__).parent / "static"
 PORT = int(os.getenv("PORT", 7863))
 DOCKER_IMAGE = os.getenv("DOCKER_IMAGE", "docker-sailcv-3d-reconstruction:latest")
+CALIBRATION_PATH = Path(os.getenv("CALIBRATION_PATH", OUTPUT_DIR / "calibration" / "calibration.json")).resolve()
+
+sys.path.insert(0, str(PROJECT_DIR / "src" / "reconstruction"))
+from cameras.cameras import create_cameras_from_stereo_calibration
+
+import cv2
+
+
+def _load_frame_rgb(path: Path, max_width: int = 128) -> np.ndarray | None:
+    """Load JPEG, convert to RGB, downscale so width <= max_width."""
+    if not path.exists():
+        return None
+    bgr = cv2.imread(str(path))
+    if bgr is None:
+        return None
+    h, w = bgr.shape[:2]
+    if w > max_width:
+        scale = max_width / w
+        bgr = cv2.resize(bgr, (max_width, int(h * scale)), interpolation=cv2.INTER_AREA)
+    return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+
+
+PYRAMID_HEIGHT_M = 0.03  # frustum depth (apex → image plane) in metres
+
+
+def _base_pointcloud(cam) -> tuple[list, list]:
+    """Per-pixel point cloud on the camera's image-plane base (vectorized bilinear interp).
+
+    Mirrors the math in cameras.py:get_pyramid_with_texture_coords (lines 207-243):
+    for each pixel (col=j, row=i_flipped), uv ∈ [0,1] → bilinear blend of the 4
+    image-plane corners → world-space point. Color sampled from the image.
+    """
+    img = cam.image  # RGB, HxWx3
+    if img is None or img.size == 0 or img.shape[0] < 2 or img.shape[1] < 2:
+        return [], []
+    H, W = img.shape[:2]
+    corners = cam.get_image_plane_corners(focal_length=PYRAMID_HEIGHT_M)  # (4, 3) world coords
+
+    js = np.arange(W)
+    rows = np.arange(H)
+    is_flipped = (H - 1 - rows)
+    u = (js / max(W - 1, 1))[None, :]              # (1, W)
+    v = (is_flipped / max(H - 1, 1))[:, None]       # (H, 1)
+    w0 = (1 - u) * (1 - v)
+    w1 = u * (1 - v)
+    w2 = u * v
+    w3 = (1 - u) * v
+    weights = np.stack([w0, w1, w2, w3], axis=-1)  # (H, W, 4)
+    verts = weights @ corners                       # (H, W, 3)
+    pts = verts.reshape(-1, 3).astype(np.float32).tolist()
+    cols = img.reshape(-1, 3).astype(np.uint8).tolist()
+    return pts, cols
+
+
+def compute_camera_frusta() -> dict | None:
+    """Read calibration + latest frames, return frusta + per-camera base point clouds."""
+    if not CALIBRATION_PATH.exists():
+        return None
+    with open(CALIBRATION_PATH) as f:
+        calibration = json.load(f)
+
+    live_dir = OUTPUT_DIR / "live"
+    img1 = _load_frame_rgb(live_dir / "frame1.jpg")
+    img2 = _load_frame_rgb(live_dir / "frame2.jpg")
+    dummy = np.zeros((1, 1, 3), dtype=np.uint8)
+    cam1, cam2 = create_cameras_from_stereo_calibration(
+        calibration,
+        img1 if img1 is not None else dummy,
+        img2 if img2 is not None else dummy,
+        scale_factor=0.001,
+    )
+
+    out = []
+    for cam, img in ((cam1, img1), (cam2, img2)):
+        verts, edges = cam.get_pyramid_vertices(focal_length=PYRAMID_HEIGHT_M)
+        base_pts, base_cols = _base_pointcloud(cam) if img is not None else ([], [])
+        out.append({
+            "name": cam.name,
+            "vertices": verts.tolist(),
+            "edges": edges,
+            "base_points": base_pts,
+            "base_colors": base_cols,
+        })
+    return {"cameras": out}
 
 CAMERAS = {
     "1": "rtsp://admin:123456@192.168.1.105/cam/realmonitor?channel=1&subtype=0",
@@ -384,6 +471,17 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(404, {"error": "No point cloud yet"})
                 return
             self.send_bytes(200, "application/json", f.read_bytes())
+
+        elif path == "/cameras":
+            try:
+                payload = compute_camera_frusta()
+            except Exception as e:
+                self.send_json(500, {"error": f"frustum compute failed: {e}"})
+                return
+            if payload is None:
+                self.send_json(404, {"error": f"No calibration at {CALIBRATION_PATH}"})
+                return
+            self.send_json(200, payload)
 
         elif path == "/composite":
             f = OUTPUT_DIR / "live" / "composite.jpg"
