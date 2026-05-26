@@ -23,6 +23,44 @@ sys.path.insert(0, str(PROJECT_DIR / "src" / "reconstruction"))
 from cameras.cameras import create_cameras_from_stereo_calibration
 
 import cv2
+from datetime import datetime
+
+
+# --- Calibration management ---
+DEFAULT_CALIB_DIR = Path("/tmp/sailcv_calibrations")
+DEFAULT_CALIB_DIR.mkdir(exist_ok=True)
+
+calibration_lock = threading.Lock()
+current_calibration_name = "none"  # Display name of currently loaded calibration
+
+
+def get_default_calibration_path() -> Path | None:
+    """Find the most recent calibration in the default directory, or None."""
+    calib_files = sorted(DEFAULT_CALIB_DIR.glob("calibration_*.json"), reverse=True)
+    return calib_files[0] if calib_files else None
+
+
+def get_active_calibration_path() -> Path | None:
+    """Return the active calibration path (env override, or default)."""
+    env_path = Path(os.getenv("CALIBRATION_PATH", ""))
+    if env_path != Path("") and env_path.exists():
+        return env_path.resolve()
+    return get_default_calibration_path()
+
+
+def update_current_calibration_name():
+    """Update the display name of the current calibration."""
+    global current_calibration_name
+    path = get_active_calibration_path()
+    if path is None:
+        current_calibration_name = "none"
+    else:
+        # Extract timestamp from filename (calibration_YYYYMMDD_HHMMSS.json)
+        name = path.stem
+        if name.startswith("calibration_"):
+            current_calibration_name = name.replace("calibration_", "")
+        else:
+            current_calibration_name = name
 
 
 def _load_frame_rgb(path: Path, max_width: int = 128) -> np.ndarray | None:
@@ -73,9 +111,10 @@ def _base_pointcloud(cam) -> tuple[list, list]:
 
 def compute_camera_frusta() -> dict | None:
     """Read calibration + latest frames, return frusta + per-camera base point clouds."""
-    if not CALIBRATION_PATH.exists():
+    calib_path = get_active_calibration_path()
+    if calib_path is None or not calib_path.exists():
         return None
-    with open(CALIBRATION_PATH) as f:
+    with open(calib_path) as f:
         calibration = json.load(f)
 
     live_dir = OUTPUT_DIR / "live"
@@ -171,6 +210,10 @@ def reconstruction_loop(scene: str):
     # Kill any leftover container from a previous run
     subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
 
+    # Determine calibration path to pass to container
+    calib_path = get_active_calibration_path()
+    calib_path_arg = str(calib_path) if calib_path else ""
+
     cmd = [
         "docker", "run", "--rm",
         "--name", CONTAINER_NAME,
@@ -183,8 +226,10 @@ def reconstruction_loop(scene: str):
         "-v", f"{PROJECT_DIR}/checkpoints:/app/checkpoints:ro",
         "-v", f"{PROJECT_DIR}/src/reconstruction:/app/src/reconstruction:ro",
         "-v", f"{OUTPUT_DIR}:/app/output:rw",
+        "-v", f"{DEFAULT_CALIB_DIR}:/tmp/sailcv_calibrations:ro",
         "-e", "DEVICE=cuda",
         "-e", "CUDA_MEMORY_FRACTION=0.6",
+        *(["--env", f"CALIBRATION_PATH={calib_path_arg}"] if calib_path_arg else []),
         DOCKER_IMAGE,
         "python3", "viewer/reconstruct_loop.py",
         *(["--debug-frames"] if os.getenv("DEBUG_FRAMES") else []),
@@ -310,9 +355,11 @@ def run_calibration_docker(square_mm: float):
                 calib_state["status"] = event["status"]
                 if event["status"] == "done":
                     calib_state["reprojection_error"] = event.get("reprojection_error")
+                    # Update the current calibration name after successful calibration
+                    update_current_calibration_name()
             rpe = event.get("reprojection_error")
             log(f"[calib] {event['status']}" + (f" — {rpe:.4f}px" if rpe else ""))
-            broadcast({"calib_status": event["status"], **{k: v for k, v in event.items() if k != "status"}})
+            broadcast({"calib_status": event["status"], "calibration_name": current_calibration_name, **{k: v for k, v in event.items() if k != "status"}})
         elif "error" in event:
             with calib_lock:
                 calib_state["status"] = "error"
@@ -691,6 +738,52 @@ class Handler(BaseHTTPRequestHandler):
                 calib_state["status"] = "stopped"
             self.send_json(200, {"stopped": True})
 
+        elif path == "/calibrations":
+            # List all available calibrations
+            calib_files = sorted(DEFAULT_CALIB_DIR.glob("calibration_*.json"), reverse=True)
+            calibrations = [
+                {
+                    "name": f.stem.replace("calibration_", ""),
+                    "path": str(f),
+                    "modified": f.stat().st_mtime,
+                }
+                for f in calib_files
+            ]
+            self.send_json(200, {"calibrations": calibrations, "current": current_calibration_name})
+
+        elif path == "/calibration/current":
+            # Get current calibration name
+            self.send_json(200, {"current": current_calibration_name})
+
+        elif path == "/calibration/select":
+            # Select a calibration by name
+            if self.command != "POST":
+                self.send_json(405, {"error": "Method not allowed"})
+                return
+            try:
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                calib_name = body.get("name")
+                if not calib_name:
+                    self.send_json(400, {"error": "Missing 'name' in request"})
+                    return
+
+                # Find the calibration file
+                calib_file = DEFAULT_CALIB_DIR / f"calibration_{calib_name}.json"
+                if not calib_file.exists():
+                    self.send_json(404, {"error": f"Calibration not found: {calib_name}"})
+                    return
+
+                # Verify it's valid JSON
+                with open(calib_file) as f:
+                    json.load(f)
+
+                with calibration_lock:
+                    update_current_calibration_name()
+
+                self.send_json(200, {"current": current_calibration_name, "selected": calib_name})
+            except Exception as e:
+                self.send_json(400, {"error": str(e)})
+
         else:
             self.send_bytes(404, "text/plain", b"Not found")
 
@@ -705,4 +798,6 @@ if __name__ == "__main__":
     print(f"PLY viewer at http://0.0.0.0:{PORT}")
     print(f"Project dir: {PROJECT_DIR}")
     print(f"Output dir:  {OUTPUT_DIR}")
+    update_current_calibration_name()
+    print(f"Current calibration: {current_calibration_name}")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

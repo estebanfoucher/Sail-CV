@@ -11,7 +11,9 @@ Stdout: JSON status lines consumed by server.py.
 
 import argparse
 import json
+import shutil
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import cv2
@@ -23,6 +25,8 @@ sys.path.insert(0, "/app/src/reconstruction")
 from loguru import logger
 
 OUTPUT_DIR = Path("/app/output")
+DEFAULT_CALIB_DIR = Path("/tmp/sailcv_calibrations")
+DEFAULT_CALIB_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def emit(obj: dict):
@@ -69,7 +73,10 @@ def main():
     parser.add_argument("--cols", type=int, default=6)
     parser.add_argument("--rows", type=int, default=9)
     parser.add_argument("--square-mm", type=float, default=30.78)
-    parser.add_argument("--output", type=Path, default=OUTPUT_DIR / "calibration" / "calibration.json")
+    # Default output: timestamped file in /tmp/sailcv_calibrations
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    default_output = DEFAULT_CALIB_DIR / f"calibration_{timestamp}.json"
+    parser.add_argument("--output", type=Path, default=default_output)
     args = parser.parse_args()
 
     sq_m = args.square_mm / 1000.0
@@ -170,6 +177,12 @@ def main():
     with open(args.output, "w") as f:
         json.dump(result, f, indent=2)
     logger.info(f"Saved calibration to {args.output}")
+
+    # Also copy to legacy location for backwards compatibility
+    legacy_path = OUTPUT_DIR / "calibration" / "calibration.json"
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(args.output, legacy_path)
+    logger.info(f"Copied calibration to {legacy_path}")
 
     emit({"status": "done", "reprojection_error": float(rms), "output": str(args.output)})
 

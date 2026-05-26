@@ -31,10 +31,30 @@ sys.path.insert(0, "/app/mast3r/dust3r")
 
 from stereo.convert_calibration import convert_calibration_parameters
 from stereo.image import preprocess_image, resize_image
+from stereo.pipeline import run_pipeline
 from stereo.mast3r import MASt3RInferenceEngine
 
 PROJECT_ROOT = Path("/app")
 DEFAULT_CHECKPOINT = PROJECT_ROOT / "checkpoints" / "MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth"
+DEFAULT_CALIB_DIR = Path("/tmp/sailcv_calibrations")
+
+
+def get_calibration_path() -> Path:
+    """Find calibration: env var > latest in /tmp/sailcv_calibrations > legacy location."""
+    # 1. Check environment variable
+    if "CALIBRATION_PATH" in os.environ:
+        path = Path(os.environ["CALIBRATION_PATH"])
+        if path.exists():
+            return path
+
+    # 2. Check latest in /tmp/sailcv_calibrations
+    if DEFAULT_CALIB_DIR.exists():
+        calib_files = sorted(DEFAULT_CALIB_DIR.glob("calibration_*.json"), reverse=True)
+        if calib_files:
+            return calib_files[0]
+
+    # 3. Fall back to legacy location
+    return PROJECT_ROOT / "output" / "calibration" / "calibration.json"
 
 CAMERAS = {
     "1": os.getenv("CAM1_URL", "rtsp://admin:123456@192.168.1.105/cam/realmonitor?channel=1&subtype=0"),
@@ -322,14 +342,16 @@ def main():
                 time.sleep(1)
         return
 
-    # Calibration (canonical path, overwritten by calibration UI)
-    calib_path = Path(os.getenv("CALIBRATION_PATH", PROJECT_ROOT / "output" / "calibration" / "calibration.json"))
+    # Calibration (check env > /tmp/sailcv_calibrations > legacy location)
+    calib_path = get_calibration_path()
     with open(calib_path) as f:
         calibration_data = json.load(f)
     calibration_params = convert_calibration_parameters(calibration_data)
     img_w = calibration_params["image_size"][0]
     img_h = calibration_params["image_size"][1]
-    logger.info(f"Loaded calibration from {calib_path}")
+    # Extract calibration name from path for logging
+    calib_name = calib_path.stem.replace("calibration_", "") if "calibration_" in calib_path.stem else calib_path.stem
+    logger.info(f"Loaded calibration '{calib_name}' from {calib_path}")
 
     # Load static fixture images (fallback if no RTSP)
     fixture_dir = PROJECT_ROOT / "assets" / "reconstruction" / (args.scene or "scene_3")
@@ -398,86 +420,35 @@ def main():
                 img1, img2 = static_img1, static_img2
             timings["grab"], t = lap(t)
 
-            # --- Preprocess ---
-            images = [
-                preprocess_image(img1, size=512, idx=0),
-                preprocess_image(img2, size=512, idx=1),
-            ]
-            timings["preproc"], t = lap(t)
-
-            # --- Inference (sync GPU before timing the next step) ---
-            output = engine.run_inference(images)
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
-            timings["infer"], t = lap(t)
-
-            # --- Match extraction + confidence + top-N selection ---
-            raw = engine.extract_raw_data(output, subsample=subsample)
-            matches_im0 = raw["matches_im0"]
-            matches_im1 = raw["matches_im1"]
-            desc1 = raw["pred1"]["desc"].squeeze(0).detach()
-            desc2 = raw["pred2"]["desc"].squeeze(0).detach()
-            H, W = desc1.shape[:2]
-            pts0_np = matches_im0.cpu().numpy() if hasattr(matches_im0, 'cpu') else matches_im0
-            pts1_np = matches_im1.cpu().numpy() if hasattr(matches_im1, 'cpu') else matches_im1
-            pts0_idx = np.clip(pts0_np[:, 1], 0, H-1).astype(int) * W + np.clip(pts0_np[:, 0], 0, W-1).astype(int)
-            pts1_idx = np.clip(pts1_np[:, 1], 0, H-1).astype(int) * W + np.clip(pts1_np[:, 0], 0, W-1).astype(int)
-            d1 = desc1.reshape(-1, desc1.shape[-1])[pts0_idx]
-            d2 = desc2.reshape(-1, desc2.shape[-1])[pts1_idx]
-            conf_scores = (d1 * d2).sum(dim=-1).cpu().numpy().astype(float)
-            top_pts0, top_pts1, top_scores = select_top_matches(
-                matches_im0, matches_im1, conf_scores, img_w, img_h
+            # --- Pure pipeline: preproc → infer → match → composite → pointcloud ---
+            result = run_pipeline(
+                engine, img1, img2,
+                image_size=(img_w, img_h),
+                subsample=subsample,
+                calibration_params=calibration_params,
             )
-            timings["match"], t = lap(t)
+            timings.update(result.timings_ms)
+            t = time.monotonic()
 
-            # --- Build composite + save per-camera frames (image I/O) ---
-            composite, fw, fh = build_composite(img1, img2, top_pts0, top_pts1)
-            composite.save(output_dir / "composite.jpg", quality=85)
-            for idx, im in enumerate((img1, img2), start=1):
+            # --- Save composite ---
+            result.composite.save(output_dir / "composite.jpg", quality=85)
+            for idx, im in enumerate((result.img1, result.img2), start=1):
                 w_target = 256
                 scale = w_target / im.width
                 small = im.resize((w_target, int(im.height * scale)), PIL.Image.LANCZOS)
                 small.save(output_dir / f"frame{idx}.jpg", quality=80)
             timings["io"], t = lap(t)
 
-            # --- Build and save point cloud (subsample to ~8k pts) ---
-            pts3d_1 = raw["pts3d_1"]          # (H, W, 3)
-            pts3d_2 = raw["pts3d_2"]          # (H, W, 3)
-            col1    = raw["img1_colors"]       # (H, W, 3) in [-1, 1] or [0, 1] from view
-            col2    = raw["img2_colors"]
-
-            # Combine both clouds
-            pts_all = np.concatenate([pts3d_1.reshape(-1, 3), pts3d_2.reshape(-1, 3)], axis=0)
-            col_all = np.concatenate([col1.reshape(-1, 3),    col2.reshape(-1, 3)],    axis=0)
-
-            # Normalize colors to [0, 1]
-            col_min, col_max = col_all.min(), col_all.max()
-            if col_max > col_min:
-                col_all = (col_all - col_min) / (col_max - col_min)
-
-            # Filter: drop points too far away (outliers)
-            dist = np.linalg.norm(pts_all, axis=1)
-            mask = (dist > 0.01) & (dist < 20.0) & np.isfinite(dist)
-            pts_all = pts_all[mask]
-            col_all = col_all[mask]
-
-            # Subsample to at most 8000 points
-            MAX_PTS = 8000
-            if len(pts_all) > MAX_PTS:
-                idx = np.random.choice(len(pts_all), MAX_PTS, replace=False)
-                pts_all = pts_all[idx]
-                col_all = col_all[idx]
-
+            # --- Save point cloud ---
             pc_data = {
-                "pts":    pts_all.astype(np.float32).tolist(),
-                "colors": (col_all * 255).astype(np.uint8).tolist(),
+                "pts":    result.pts3d.astype(np.float32).tolist(),
+                "colors": result.colors.astype(np.uint8).tolist(),
             }
             with open(output_dir / "pointcloud.json", "w") as f:
                 json.dump(pc_data, f)
-            timings["pointcloud"], t = lap(t)
 
             recon_ms = int((time.monotonic() - t0) * 1000)
-            logger.info(f"Frame {frame} done in {recon_ms}ms — subsample={subsample}, {len(top_pts0)} matches, {len(pts_all)} pts | {timings}")
+            logger.info(f"Frame {frame} done in {recon_ms}ms — subsample={subsample}, {len(result.top_pts0)} matches, {len(result.pts3d)} pts | {timings}")
             emit({"frame": frame, "recon_ms": recon_ms, "num_matches": len(top_pts0), "timings": timings})
 
         except Exception as e:
