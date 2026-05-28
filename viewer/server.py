@@ -540,7 +540,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(500, {"error": f"frustum compute failed: {e}"})
                 return
             if payload is None:
-                self.send_json(404, {"error": f"No calibration at {CALIBRATION_PATH}"})
+                calib_path = get_active_calibration_path()
+                self.send_json(404, {"error": f"No calibration available (checked: {calib_path})"})
                 return
             self.send_json(200, payload)
 

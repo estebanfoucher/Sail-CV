@@ -57,8 +57,8 @@ def get_calibration_path() -> Path:
     return PROJECT_ROOT / "output" / "calibration" / "calibration.json"
 
 CAMERAS = {
-    "1": os.getenv("CAM1_URL", "rtsp://admin:123456@192.168.1.105/cam/realmonitor?channel=1&subtype=0"),
-    "2": os.getenv("CAM2_URL", "rtsp://admin:123456@192.168.1.141/cam/realmonitor?channel=1&subtype=0"),
+    "1": os.getenv("CAM1_URL", "rtsp://192.168.1.34:554/stream1"),
+    "2": os.getenv("CAM2_URL", "rtsp://192.168.1.214:554/stream1"),
 }
 
 TOP_N = 20
@@ -449,7 +449,7 @@ def main():
 
             recon_ms = int((time.monotonic() - t0) * 1000)
             logger.info(f"Frame {frame} done in {recon_ms}ms — subsample={subsample}, {len(result.top_pts0)} matches, {len(result.pts3d)} pts | {timings}")
-            emit({"frame": frame, "recon_ms": recon_ms, "num_matches": len(top_pts0), "timings": timings})
+            emit({"frame": frame, "recon_ms": recon_ms, "num_matches": len(result.top_pts0), "timings": timings})
 
         except Exception as e:
             logger.error(f"Frame {frame} failed: {e}")
