@@ -305,6 +305,9 @@ SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 screenshot_lock = threading.Lock()
 active_session: str | None = None  # name of the active session folder
 
+# Screenshot categories, each stored in its own subfolder per session.
+SHOT_KINDS = ("normal", "intrinsic", "extrinsic")
+
 
 def list_sessions() -> list[str]:
     """Session folder names, newest first."""
@@ -314,21 +317,26 @@ def list_sessions() -> list[str]:
     )
 
 
-def list_pairs(session: str) -> list[dict]:
-    """Stereo pairs in a session, grouped by timestamp, oldest first."""
-    sess_dir = SCREENSHOT_DIR / session
-    if not sess_dir.is_dir():
+def list_pairs(session: str, kind: str) -> list[dict]:
+    """Stereo pairs in a session/kind subfolder, grouped by timestamp, oldest first."""
+    kind_dir = SCREENSHOT_DIR / session / kind
+    if not kind_dir.is_dir():
         return []
     stamps = sorted(
-        {f.name[len("shot_"):-len("_cam1.jpg")] for f in sess_dir.glob("shot_*_cam1.jpg")}
+        {f.name[len("shot_"):-len("_cam1.jpg")] for f in kind_dir.glob("shot_*_cam1.jpg")}
     )
     pairs = []
     for ts in stamps:
         cam1 = f"shot_{ts}_cam1.jpg"
         cam2 = f"shot_{ts}_cam2.jpg"
-        if (sess_dir / cam1).exists() and (sess_dir / cam2).exists():
+        if (kind_dir / cam1).exists() and (kind_dir / cam2).exists():
             pairs.append({"timestamp": ts, "cam1": cam1, "cam2": cam2})
     return pairs
+
+
+def list_all_pairs(session: str) -> dict[str, list[dict]]:
+    """All pairs in a session, grouped by kind."""
+    return {kind: list_pairs(session, kind) for kind in SHOT_KINDS}
 
 
 def _safe_segment(name: str) -> bool:
@@ -634,21 +642,24 @@ class Handler(BaseHTTPRequestHandler):
                 with screenshot_lock:
                     session = active_session
             if session is None:
-                self.send_json(200, {"session": None, "pairs": []})
+                self.send_json(200, {"session": None, "pairs": {k: [] for k in SHOT_KINDS}})
                 return
             if not _safe_segment(session):
                 self.send_json(400, {"error": "Invalid session"})
                 return
-            self.send_json(200, {"session": session, "pairs": list_pairs(session)})
+            self.send_json(200, {"session": session, "pairs": list_all_pairs(session)})
 
         elif path.startswith("/shot/"):
             rest = path[len("/shot/"):]
-            parts = rest.split("/", 1)
-            if len(parts) != 2 or not all(_safe_segment(p) for p in parts):
+            parts = rest.split("/")
+            if len(parts) != 3 or not all(_safe_segment(p) for p in parts):
                 self.send_bytes(400, "text/plain", b"Invalid path")
                 return
-            session, fname = parts
-            f = SCREENSHOT_DIR / session / fname
+            session, kind, fname = parts
+            if kind not in SHOT_KINDS:
+                self.send_bytes(400, "text/plain", b"Invalid kind")
+                return
+            f = SCREENSHOT_DIR / session / kind / fname
             if not f.exists():
                 self.send_bytes(404, "text/plain", b"Not found")
                 return
@@ -787,12 +798,18 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/screenshot":
             # take_stereo_screenshot: grab both cameras simultaneously into the active session
+            from urllib.parse import parse_qs, urlparse
+            kind = parse_qs(urlparse(self.path).query).get("kind", ["normal"])[0]
+            if kind not in SHOT_KINDS:
+                self.send_json(400, {"error": f"Invalid kind '{kind}', expected one of {SHOT_KINDS}"})
+                return
             with screenshot_lock:
                 session = active_session
                 if session is None:
                     session = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                    (SCREENSHOT_DIR / session).mkdir(parents=True, exist_ok=True)
                     active_session = session
+            kind_dir = SCREENSHOT_DIR / session / kind
+            kind_dir.mkdir(parents=True, exist_ok=True)
             results, errors = {}, {}
             def _grab(cam_id):
                 try:
@@ -806,12 +823,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(500, {"error": str(errors)})
                 return
             ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
-            sess_dir = SCREENSHOT_DIR / session
-            (sess_dir / f"shot_{ts}_cam1.jpg").write_bytes(results["1"])
-            (sess_dir / f"shot_{ts}_cam2.jpg").write_bytes(results["2"])
-            log(f"[shot] Captured {ts} in {session}")
-            broadcast({"screenshot": ts, "session": session})
-            self.send_json(200, {"session": session, "timestamp": ts})
+            (kind_dir / f"shot_{ts}_cam1.jpg").write_bytes(results["1"])
+            (kind_dir / f"shot_{ts}_cam2.jpg").write_bytes(results["2"])
+            log(f"[shot] Captured {kind} {ts} in {session}")
+            broadcast({"screenshot": ts, "session": session, "kind": kind})
+            self.send_json(200, {"session": session, "timestamp": ts, "kind": kind})
 
         elif path == "/calibrate/reset":
             import shutil

@@ -29,11 +29,19 @@
     #status.ok { color: #2ecc71; }
     #status.err { color: #e74c3c; }
 
-    #gallery {
-      flex: 1; overflow-y: auto; padding: 16px;
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px;
-      align-content: start;
+    #gallery { flex: 1; overflow-y: auto; padding: 16px; }
+    .section { margin-bottom: 28px; }
+    .section h2 {
+      font-size: 12px; font-weight: normal; color: #888; text-transform: uppercase;
+      letter-spacing: 0.05em; margin-bottom: 10px; border-bottom: 1px solid #1a1a1a; padding-bottom: 6px;
     }
+    .section h2 .count { color: #555; margin-left: 6px; }
+    .section-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px;
+    }
+    .section-empty { color: #444; font-size: 11px; padding: 8px 0; }
+    #shot-intrinsic-btn { border-color: #8e44ad; color: #9b59b6; }
+    #shot-extrinsic-btn { border-color: #d35400; color: #e67e22; }
     .pair {
       border: 1px solid #1a1a1a; border-radius: 6px; overflow: hidden; background: #050505;
     }
@@ -41,7 +49,7 @@
     .pair .imgs img { width: 50%; display: block; border-right: 1px solid #1a1a1a; }
     .pair .imgs img:last-child { border-right: none; }
     .pair .ts { font-size: 11px; color: #777; padding: 6px 10px; border-top: 1px solid #1a1a1a; }
-    #empty { color: #444; font-size: 12px; padding: 40px; grid-column: 1 / -1; text-align: center; }
+    #empty { color: #444; font-size: 12px; padding: 40px; text-align: center; }
   </style>
 </head>
 <body>
@@ -51,16 +59,25 @@
     <div class="sep"></div>
     <button id="new-btn">New Session</button>
     <select id="session-select"></select>
-    <button id="shot-btn">Take Stereo Screenshot</button>
+    <div class="sep"></div>
+    <button id="shot-normal-btn" data-kind="normal">Normal</button>
+    <button id="shot-intrinsic-btn" data-kind="intrinsic">Intrinsic Calib</button>
+    <button id="shot-extrinsic-btn" data-kind="extrinsic">Extrinsic Calib</button>
     <span id="status"></span>
   </div>
   <div id="gallery"><div id="empty">No screenshots yet.</div></div>
 
   <script>
+    const KINDS = [
+      { key: 'normal', label: 'Normal' },
+      { key: 'intrinsic', label: 'Intrinsic Calibration' },
+      { key: 'extrinsic', label: 'Extrinsic Calibration' },
+    ];
+
     const sessionSelect = document.getElementById('session-select');
     const gallery = document.getElementById('gallery');
     const statusEl = document.getElementById('status');
-    const shotBtn = document.getElementById('shot-btn');
+    const shotBtns = Array.from(document.querySelectorAll('[data-kind]'));
     const newBtn = document.getElementById('new-btn');
 
     function setStatus(msg, cls = '') {
@@ -86,6 +103,19 @@
       await loadPairs();
     }
 
+    function renderPair(session, kind, p) {
+      const div = document.createElement('div');
+      div.className = 'pair';
+      const base = `/shot/${encodeURIComponent(session)}/${kind}`;
+      div.innerHTML = `
+        <div class="imgs">
+          <img src="${base}/${p.cam1}" alt="cam1" loading="lazy" />
+          <img src="${base}/${p.cam2}" alt="cam2" loading="lazy" />
+        </div>
+        <div class="ts">${p.timestamp}</div>`;
+      return div;
+    }
+
     async function loadPairs() {
       const session = selectedSession();
       if (!session) {
@@ -93,23 +123,24 @@
         return;
       }
       const { pairs } = await (await fetch(`/session/pairs?session=${encodeURIComponent(session)}`)).json();
-      if (!pairs.length) {
-        gallery.innerHTML = '<div id="empty">No screenshots in this session yet.</div>';
-        return;
-      }
       gallery.innerHTML = '';
-      // newest first
-      for (const p of pairs.slice().reverse()) {
-        const div = document.createElement('div');
-        div.className = 'pair';
-        const base = `/shot/${encodeURIComponent(session)}`;
-        div.innerHTML = `
-          <div class="imgs">
-            <img src="${base}/${p.cam1}" alt="cam1" loading="lazy" />
-            <img src="${base}/${p.cam2}" alt="cam2" loading="lazy" />
-          </div>
-          <div class="ts">${p.timestamp}</div>`;
-        gallery.appendChild(div);
+      for (const { key, label } of KINDS) {
+        const list = pairs[key] || [];
+        const section = document.createElement('div');
+        section.className = 'section';
+        section.innerHTML = `<h2>${label}<span class="count">(${list.length})</span></h2>`;
+        if (!list.length) {
+          const e = document.createElement('div');
+          e.className = 'section-empty';
+          e.textContent = 'No screenshots yet.';
+          section.appendChild(e);
+        } else {
+          const grid = document.createElement('div');
+          grid.className = 'section-grid';
+          for (const p of list.slice().reverse()) grid.appendChild(renderPair(session, key, p));
+          section.appendChild(grid);
+        }
+        gallery.appendChild(section);
       }
     }
 
@@ -127,21 +158,25 @@
       }
     });
 
-    shotBtn.addEventListener('click', async () => {
-      shotBtn.disabled = true;
-      setStatus('capturing…');
-      try {
-        const res = await fetch('/screenshot', { method: 'POST' });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'capture failed');
-        if (sessionSelect.value !== data.session) await loadSessions(data.session);
-        setStatus(`captured ${data.timestamp}`, 'ok');
-      } catch (e) {
-        setStatus(String(e.message || e), 'err');
-      } finally {
-        shotBtn.disabled = false;
-      }
-    });
+    for (const btn of shotBtns) {
+      btn.addEventListener('click', async () => {
+        const kind = btn.dataset.kind;
+        shotBtns.forEach(b => b.disabled = true);
+        setStatus(`capturing ${kind}…`);
+        try {
+          const res = await fetch(`/screenshot?kind=${kind}`, { method: 'POST' });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'capture failed');
+          if (sessionSelect.value !== data.session) await loadSessions(data.session);
+          else await loadPairs();
+          setStatus(`captured ${kind} ${data.timestamp}`, 'ok');
+        } catch (e) {
+          setStatus(String(e.message || e), 'err');
+        } finally {
+          shotBtns.forEach(b => b.disabled = false);
+        }
+      });
+    }
 
     sessionSelect.addEventListener('change', loadPairs);
 
