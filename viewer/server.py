@@ -142,8 +142,8 @@ def compute_camera_frusta() -> dict | None:
     return {"cameras": out}
 
 CAMERAS = {
-    "1": "rtsp://admin:123456@192.168.1.105/cam/realmonitor?channel=1&subtype=0",
-    "2": "rtsp://admin:123456@192.168.1.141/cam/realmonitor?channel=1&subtype=0",
+    "1": os.getenv("CAM1_URL", "rtsp://192.168.1.34:554/stream1"),
+    "2": os.getenv("CAM2_URL", "rtsp://192.168.1.214:554/stream1"),
 }
 
 # --- Shared state ---
@@ -299,6 +299,42 @@ calib_pair_count = 0
 calib_pair_lock  = threading.Lock()
 
 
+# --- Stereo screenshot sessions ---
+SCREENSHOT_DIR = OUTPUT_DIR / "screenshots"
+SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+screenshot_lock = threading.Lock()
+active_session: str | None = None  # name of the active session folder
+
+
+def list_sessions() -> list[str]:
+    """Session folder names, newest first."""
+    return sorted(
+        (d.name for d in SCREENSHOT_DIR.iterdir() if d.is_dir() and d.name.startswith("session_")),
+        reverse=True,
+    )
+
+
+def list_pairs(session: str) -> list[dict]:
+    """Stereo pairs in a session, grouped by timestamp, oldest first."""
+    sess_dir = SCREENSHOT_DIR / session
+    if not sess_dir.is_dir():
+        return []
+    stamps = sorted(
+        {f.name[len("shot_"):-len("_cam1.jpg")] for f in sess_dir.glob("shot_*_cam1.jpg")}
+    )
+    pairs = []
+    for ts in stamps:
+        cam1 = f"shot_{ts}_cam1.jpg"
+        cam2 = f"shot_{ts}_cam2.jpg"
+        if (sess_dir / cam1).exists() and (sess_dir / cam2).exists():
+            pairs.append({"timestamp": ts, "cam1": cam1, "cam2": cam2})
+    return pairs
+
+
+def _safe_segment(name: str) -> bool:
+    return ".." not in name and "/" not in name and "\\" not in name
+
+
 def capture_frame_jpeg(cam_id: str) -> bytes:
     """Grab one JPEG frame from camera via ffmpeg (runs on host, no Docker)."""
     url = CAMERAS[cam_id]
@@ -446,6 +482,9 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             self.serve_file(STATIC_DIR / "index.html", "text/html")
 
+        elif path == "/screenshots.html":
+            self.serve_file(STATIC_DIR / "screenshots.html", "text/html")
+
         elif path == "/scenes":
             scenes = []
             if OUTPUT_DIR.exists():
@@ -582,6 +621,39 @@ class Handler(BaseHTTPRequestHandler):
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
+        elif path == "/sessions":
+            with screenshot_lock:
+                current = active_session
+            self.send_json(200, {"sessions": list_sessions(), "active": current})
+
+        elif path == "/session/pairs":
+            from urllib.parse import parse_qs, urlparse
+            qs = parse_qs(urlparse(self.path).query)
+            session = qs.get("session", [None])[0]
+            if session is None:
+                with screenshot_lock:
+                    session = active_session
+            if session is None:
+                self.send_json(200, {"session": None, "pairs": []})
+                return
+            if not _safe_segment(session):
+                self.send_json(400, {"error": "Invalid session"})
+                return
+            self.send_json(200, {"session": session, "pairs": list_pairs(session)})
+
+        elif path.startswith("/shot/"):
+            rest = path[len("/shot/"):]
+            parts = rest.split("/", 1)
+            if len(parts) != 2 or not all(_safe_segment(p) for p in parts):
+                self.send_bytes(400, "text/plain", b"Invalid path")
+                return
+            session, fname = parts
+            f = SCREENSHOT_DIR / session / fname
+            if not f.exists():
+                self.send_bytes(404, "text/plain", b"Not found")
+                return
+            self.send_bytes(200, "image/jpeg", f.read_bytes())
+
         elif path == "/logs":
             q: queue.Queue = queue.Queue(maxsize=200)
             with log_lock:
@@ -702,6 +774,44 @@ class Handler(BaseHTTPRequestHandler):
             log(f"[calib] Captured pair {n}")
             broadcast({"calib_pair": n})
             self.send_json(200, {"pair": n})
+
+        elif path == "/session/new":
+            global active_session
+            name = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            (SCREENSHOT_DIR / name).mkdir(parents=True, exist_ok=True)
+            with screenshot_lock:
+                active_session = name
+            log(f"[shot] New session {name}")
+            broadcast({"session": name})
+            self.send_json(200, {"session": name})
+
+        elif path == "/screenshot":
+            # take_stereo_screenshot: grab both cameras simultaneously into the active session
+            with screenshot_lock:
+                session = active_session
+                if session is None:
+                    session = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                    (SCREENSHOT_DIR / session).mkdir(parents=True, exist_ok=True)
+                    active_session = session
+            results, errors = {}, {}
+            def _grab(cam_id):
+                try:
+                    results[cam_id] = capture_frame_jpeg(cam_id)
+                except Exception as e:
+                    errors[cam_id] = str(e)
+            threads = [threading.Thread(target=_grab, args=(c,)) for c in ("1", "2")]
+            for t in threads: t.start()
+            for t in threads: t.join()
+            if errors:
+                self.send_json(500, {"error": str(errors)})
+                return
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+            sess_dir = SCREENSHOT_DIR / session
+            (sess_dir / f"shot_{ts}_cam1.jpg").write_bytes(results["1"])
+            (sess_dir / f"shot_{ts}_cam2.jpg").write_bytes(results["2"])
+            log(f"[shot] Captured {ts} in {session}")
+            broadcast({"screenshot": ts, "session": session})
+            self.send_json(200, {"session": session, "timestamp": ts})
 
         elif path == "/calibrate/reset":
             import shutil
