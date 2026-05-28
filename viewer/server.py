@@ -308,6 +308,22 @@ active_session: str | None = None  # name of the active session folder
 # Screenshot categories, each stored in its own subfolder per session.
 SHOT_KINDS = ("normal", "intrinsic", "extrinsic")
 
+# Rig board specs (committed config) used for per-session calibration.
+CALIB_BOARDS_DIR = Path(__file__).parent / "calib_boards"
+CHECKERBOARD_SPECS_PATH = CALIB_BOARDS_DIR / "checkerboard_specs.yml"
+CHARUCO_SPECS_PATH = CALIB_BOARDS_DIR / "charuco_specs.yml"
+CALIBRATION_FILENAME = "calibration.json"
+
+# Per-session calibration job state.
+session_calib_lock = threading.Lock()
+session_calib_state = {
+    "running": False,
+    "session": None,
+    "status": None,   # "intrinsics" | "extrinsics" | "done" | "error"
+    "error": None,
+    "progress": None,  # {phase,label,current,total,found,detected}
+}
+
 
 def list_sessions() -> list[str]:
     """Session folder names, newest first."""
@@ -416,6 +432,166 @@ def run_calibration_docker(square_mm: float):
         log(f"[calib] Container exited with code {proc.returncode}")
     with calib_lock:
         calib_state["running"] = False
+
+
+def session_calibration_path(session: str) -> Path:
+    return SCREENSHOT_DIR / session / CALIBRATION_FILENAME
+
+
+def load_session_calibration(session: str) -> dict | None:
+    """Return the stored calibration summary for a session, or None."""
+    f = session_calibration_path(session)
+    if not f.exists():
+        return None
+    try:
+        with open(f) as fh:
+            return json.load(fh)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+class _ImageFolderReader:
+    """Minimal VideoReader stand-in: get_frames(indices) -> list[ndarray]."""
+
+    def __init__(self, paths):
+        self.paths = paths
+
+    def get_frames(self, indices):
+        return [cv2.imread(str(self.paths[i])) for i in indices]
+
+
+def _compute_session_intrinsics(intrinsic_dir: Path, cam: str, pattern_size, square_size, on_progress=None):
+    """Calibrate one camera from a session's intrinsic checkerboard pairs.
+
+    Processes one image at a time so callers can stream per-image progress.
+    """
+    from mv_utils.intrinsics_calibration import calibrate_camera, find_corners_in_images
+
+    paths = sorted(intrinsic_dir.glob(f"shot_*_{cam}.jpg"))
+    if len(paths) < 3:
+        raise RuntimeError(f"{cam}: only {len(paths)} intrinsic shots (need >= 3)")
+    reader = _ImageFolderReader(paths)
+    obj_acc, img_acc = [], []
+    for i in range(len(paths)):
+        obj, img, ok = find_corners_in_images([i], reader, pattern_size, square_size)
+        found = bool(ok)
+        if found:
+            obj_acc.extend(obj)
+            img_acc.extend(img)
+        if on_progress is not None:
+            on_progress(cam, i + 1, len(paths), found, len(obj_acc))
+    if len(obj_acc) < 3:
+        raise RuntimeError(f"{cam}: corners found in only {len(obj_acc)}/{len(paths)} shots (need >= 3)")
+    sample = cv2.imread(str(paths[0]))
+    image_size = (sample.shape[1], sample.shape[0])
+    K, dist, err = calibrate_camera(obj_acc, img_acc, image_size)
+    return {
+        "camera_matrix": K.tolist(),
+        "dist_coeffs": dist.tolist(),
+        "reprojection_error": float(err),
+        "views_used": len(obj_acc),
+        "views_total": len(paths),
+    }, K, dist, image_size
+
+
+def run_session_calibration(session: str):
+    """Run intrinsic then extrinsic calibration on a session, write calibration.json."""
+    import numpy as np
+    import yaml
+
+    def _set(status, error=None):
+        with session_calib_lock:
+            session_calib_state["status"] = status
+            session_calib_state["error"] = error
+            if status in ("intrinsics", "extrinsics", "starting"):
+                session_calib_state["progress"] = None
+        broadcast({"session_calib": status, "session": session, **({"error": error} if error else {})})
+        log(f"[session-calib] {session}: {status}" + (f" — {error}" if error else ""))
+
+    def _progress(phase, label, current, total, found, detected):
+        p = {"phase": phase, "label": label, "current": current, "total": total,
+             "found": found, "detected": detected}
+        with session_calib_lock:
+            session_calib_state["progress"] = p
+        broadcast({"session_calib": "progress", "session": session, "progress": p})
+
+    try:
+        session_dir = SCREENSHOT_DIR / session
+        intrinsic_dir = session_dir / "intrinsic"
+        extrinsic_dir = session_dir / "extrinsic"
+
+        cb = yaml.safe_load(CHECKERBOARD_SPECS_PATH.read_text())
+        pattern_size = (cb["inner_corners_x"], cb["inner_corners_y"])
+        square_size = cb["square_size_mm"]
+
+        _set("intrinsics")
+
+        def _intr_progress(cam, current, total, found, detected):
+            _progress("intrinsics", f"{cam} corner detection", current, total, found, detected)
+
+        intr1, K1, d1, image_size = _compute_session_intrinsics(
+            intrinsic_dir, "cam1", pattern_size, square_size, _intr_progress)
+        intr2, K2, d2, _ = _compute_session_intrinsics(
+            intrinsic_dir, "cam2", pattern_size, square_size, _intr_progress)
+        log(f"[session-calib] intrinsics cam1 err={intr1['reprojection_error']:.4f}px "
+            f"({intr1['views_used']}/{intr1['views_total']}), "
+            f"cam2 err={intr2['reprojection_error']:.4f}px ({intr2['views_used']}/{intr2['views_total']})")
+
+        _set("extrinsics")
+        from mv_utils.extrinsics_calibration import CharucoDetector, calibrate_stereo_many
+
+        detector = CharucoDetector(config_path=str(CHARUCO_SPECS_PATH))
+        cam1_paths = sorted(extrinsic_dir.glob("shot_*_cam1.jpg"))
+        obj_list, ip1_list, ip2_list = [], [], []
+        for idx, p1 in enumerate(cam1_paths):
+            p2 = p1.with_name(p1.name.replace("_cam1.jpg", "_cam2.jpg"))
+            found = False
+            if p2.exists():
+                p3d, q1, q2 = detector.get_correspondences(cv2.imread(str(p1)), cv2.imread(str(p2)))
+                if p3d is not None:
+                    obj_list.append(p3d)
+                    ip1_list.append(q1)
+                    ip2_list.append(q2)
+                    found = True
+            _progress("extrinsics", "charuco matching", idx + 1, len(cam1_paths), found, len(obj_list))
+        try:
+            detector.cleanup()
+        except Exception:
+            pass
+
+        if len(obj_list) < 1:
+            raise RuntimeError(f"no charuco correspondences from {len(cam1_paths)} extrinsic pairs")
+
+        res = calibrate_stereo_many(obj_list, ip1_list, ip2_list, K1, d1, K2, d2, image_size)
+        T = np.array(res["translation_vector"])
+        baseline = float(np.linalg.norm(T))
+
+        calibration = {
+            "created": datetime.now().isoformat(timespec="seconds"),
+            "session": session,
+            "image_size": [int(image_size[0]), int(image_size[1])],
+            "intrinsics": {"cam1": intr1, "cam2": intr2},
+            "extrinsics": {
+                "rotation_matrix": res["rotation_matrix"],
+                "translation_vector": res["translation_vector"],
+                "baseline_m": baseline,
+                "reprojection_error": float(res["reprojection_error"]),
+                "pairs_used": len(obj_list),
+                "pairs_total": len(cam1_paths),
+            },
+        }
+        with open(session_calibration_path(session), "w") as fh:
+            json.dump(calibration, fh, indent=2)
+        log(f"[session-calib] {session}: done — baseline={baseline:.4f}m "
+            f"stereo_err={res['reprojection_error']:.4f} ({len(obj_list)}/{len(cam1_paths)} pairs)")
+        with session_calib_lock:
+            session_calib_state["status"] = "done"
+        broadcast({"session_calib": "done", "session": session, "calibration": calibration})
+    except Exception as e:
+        _set("error", str(e))
+    finally:
+        with session_calib_lock:
+            session_calib_state["running"] = False
 
 
 # --- Camera streaming ---
@@ -649,6 +825,24 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self.send_json(200, {"session": session, "pairs": list_all_pairs(session)})
 
+        elif path == "/session/calibration":
+            from urllib.parse import parse_qs, urlparse
+            session = parse_qs(urlparse(self.path).query).get("session", [None])[0]
+            if session is None or not _safe_segment(session):
+                self.send_json(400, {"error": "Invalid session"})
+                return
+            with session_calib_lock:
+                job = dict(session_calib_state)
+            running = job["running"] and job["session"] == session
+            self.send_json(200, {
+                "session": session,
+                "calibration": load_session_calibration(session),
+                "running": running,
+                "status": job["status"] if job["session"] == session else None,
+                "error": job["error"] if job["session"] == session else None,
+                "progress": job["progress"] if job["session"] == session else None,
+            })
+
         elif path.startswith("/shot/"):
             rest = path[len("/shot/"):]
             parts = rest.split("/")
@@ -796,18 +990,46 @@ class Handler(BaseHTTPRequestHandler):
             broadcast({"session": name})
             self.send_json(200, {"session": name})
 
+        elif path == "/session/calibrate":
+            from urllib.parse import parse_qs, urlparse
+            session = parse_qs(urlparse(self.path).query).get("session", [None])[0]
+            if session is None:
+                with screenshot_lock:
+                    session = active_session
+            if session is None or not _safe_segment(session):
+                self.send_json(400, {"error": "Invalid session"})
+                return
+            if not (SCREENSHOT_DIR / session).is_dir():
+                self.send_json(404, {"error": f"Session not found: {session}"})
+                return
+            with session_calib_lock:
+                if session_calib_state["running"]:
+                    self.send_json(409, {"error": f"Calibration already running for {session_calib_state['session']}"})
+                    return
+                session_calib_state.update(running=True, session=session, status="starting", error=None, progress=None)
+            threading.Thread(target=run_session_calibration, args=(session,), daemon=True).start()
+            self.send_json(200, {"started": True, "session": session})
+
         elif path == "/screenshot":
             # take_stereo_screenshot: grab both cameras simultaneously into the active session
             from urllib.parse import parse_qs, urlparse
-            kind = parse_qs(urlparse(self.path).query).get("kind", ["normal"])[0]
+            qs = parse_qs(urlparse(self.path).query)
+            kind = qs.get("kind", ["normal"])[0]
             if kind not in SHOT_KINDS:
                 self.send_json(400, {"error": f"Invalid kind '{kind}', expected one of {SHOT_KINDS}"})
                 return
+            requested = qs.get("session", [None])[0]
+            if requested is not None and not _safe_segment(requested):
+                self.send_json(400, {"error": "Invalid session"})
+                return
             with screenshot_lock:
-                session = active_session
-                if session is None:
-                    session = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                    active_session = session
+                if requested is not None:
+                    session = requested
+                else:
+                    session = active_session
+                    if session is None:
+                        session = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                active_session = session
             kind_dir = SCREENSHOT_DIR / session / kind
             kind_dir.mkdir(parents=True, exist_ok=True)
             results, errors = {}, {}

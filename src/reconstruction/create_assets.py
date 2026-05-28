@@ -5,7 +5,7 @@ import numpy as np
 from loguru import logger
 from video import FFmpegVideoWriter, StereoVideoReader
 
-from calibration import Scene
+from mv_utils import Scene
 from stereo.image import crop_to_match_resolution
 
 save_asset_dict_videos = {

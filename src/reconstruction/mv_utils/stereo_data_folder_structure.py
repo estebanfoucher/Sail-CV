@@ -1,7 +1,7 @@
 import os
 
 import yaml
-from loguru import logger
+from ._log import logger
 
 
 class StereoDataFolderStructure:

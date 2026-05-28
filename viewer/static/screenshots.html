@@ -42,6 +42,20 @@
     .section-empty { color: #444; font-size: 11px; padding: 8px 0; }
     #shot-intrinsic-btn { border-color: #8e44ad; color: #9b59b6; }
     #shot-extrinsic-btn { border-color: #d35400; color: #e67e22; }
+    #calib-btn { border-color: #16a085; color: #1abc9c; }
+
+    #calib-panel {
+      margin: 0 16px 16px; padding: 10px 14px; border: 1px solid #1a1a1a;
+      border-radius: 6px; background: #050505; font-size: 12px; color: #999;
+    }
+    #calib-panel.none { color: #555; }
+    #calib-panel.err { border-color: #5a1a1a; color: #e74c3c; }
+    #calib-panel .row { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 6px; }
+    #calib-panel .metric b { color: #ddd; font-weight: normal; }
+    #calib-panel .label { color: #16a085; text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px; }
+    #calib-panel .created { color: #555; font-size: 10px; }
+    #calib-panel .bar { margin-top: 6px; height: 6px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
+    #calib-panel .bar-fill { height: 100%; background: #16a085; transition: width 0.2s ease; }
     .pair {
       border: 1px solid #1a1a1a; border-radius: 6px; overflow: hidden; background: #050505;
     }
@@ -63,8 +77,11 @@
     <button id="shot-normal-btn" data-kind="normal">Normal</button>
     <button id="shot-intrinsic-btn" data-kind="intrinsic">Intrinsic Calib</button>
     <button id="shot-extrinsic-btn" data-kind="extrinsic">Extrinsic Calib</button>
+    <div class="sep"></div>
+    <button id="calib-btn">Run Calibration</button>
     <span id="status"></span>
   </div>
+  <div id="calib-panel" class="none">No calibration for this session.</div>
   <div id="gallery"><div id="empty">No screenshots yet.</div></div>
 
   <script>
@@ -79,6 +96,69 @@
     const statusEl = document.getElementById('status');
     const shotBtns = Array.from(document.querySelectorAll('[data-kind]'));
     const newBtn = document.getElementById('new-btn');
+    const calibBtn = document.getElementById('calib-btn');
+    const calibPanel = document.getElementById('calib-panel');
+
+    const fmt = (x, d = 4) => (x === null || x === undefined) ? '—' : Number(x).toFixed(d);
+
+    function renderCalibration(data) {
+      const c = data.calibration;
+      if (data.running) {
+        calibPanel.className = '';
+        const p = data.progress;
+        const stage = data.status || 'running';
+        let bar = '';
+        if (p && p.total) {
+          const pct = Math.round((p.current / p.total) * 100);
+          bar = `
+            <div class="row" style="margin-top:8px">
+              <span class="metric">${p.label}: <b>${p.current}/${p.total}</b> — detected <b>${p.detected}</b></span>
+            </div>
+            <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>`;
+        }
+        calibPanel.innerHTML = `<span class="label">Calibrating</span> — ${stage}…${bar}`;
+        return;
+      }
+      if (data.status === 'error') {
+        calibPanel.className = 'err';
+        calibPanel.textContent = `Calibration failed: ${data.error || 'unknown error'}`;
+        return;
+      }
+      if (!c) {
+        calibPanel.className = 'none';
+        calibPanel.textContent = 'No calibration for this session.';
+        return;
+      }
+      const i = c.intrinsics, e = c.extrinsics;
+      calibPanel.className = '';
+      calibPanel.innerHTML = `
+        <span class="label">Calibration</span> <span class="created">${c.created || ''}</span>
+        <div class="row">
+          <span class="metric">cam1 intrinsic err: <b>${fmt(i.cam1.reprojection_error)} px</b> (${i.cam1.views_used}/${i.cam1.views_total})</span>
+          <span class="metric">cam2 intrinsic err: <b>${fmt(i.cam2.reprojection_error)} px</b> (${i.cam2.views_used}/${i.cam2.views_total})</span>
+        </div>
+        <div class="row">
+          <span class="metric">baseline: <b>${fmt(e.baseline_m, 4)} m</b></span>
+          <span class="metric">stereo reproj err: <b>${fmt(e.reprojection_error)} px</b></span>
+          <span class="metric">pairs used: <b>${e.pairs_used}/${e.pairs_total}</b></span>
+        </div>`;
+    }
+
+    async function loadCalibration() {
+      const session = selectedSession();
+      if (!session) {
+        calibPanel.className = 'none';
+        calibPanel.textContent = 'No session selected.';
+        calibBtn.disabled = true;
+        return;
+      }
+      calibBtn.disabled = false;
+      try {
+        const data = await (await fetch(`/session/calibration?session=${encodeURIComponent(session)}`)).json();
+        renderCalibration(data);
+        calibBtn.disabled = !!data.running;
+      } catch (e) { /* ignore */ }
+    }
 
     function setStatus(msg, cls = '') {
       statusEl.textContent = msg;
@@ -101,6 +181,7 @@
       const target = preferred || active || sessions[0];
       if (target) sessionSelect.value = target;
       await loadPairs();
+      await loadCalibration();
     }
 
     function renderPair(session, kind, p) {
@@ -164,7 +245,9 @@
         shotBtns.forEach(b => b.disabled = true);
         setStatus(`capturing ${kind}…`);
         try {
-          const res = await fetch(`/screenshot?kind=${kind}`, { method: 'POST' });
+          const session = selectedSession();
+          const q = `kind=${kind}` + (session ? `&session=${encodeURIComponent(session)}` : '');
+          const res = await fetch(`/screenshot?${q}`, { method: 'POST' });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || 'capture failed');
           if (sessionSelect.value !== data.session) await loadSessions(data.session);
@@ -178,13 +261,45 @@
       });
     }
 
-    sessionSelect.addEventListener('change', loadPairs);
+    calibBtn.addEventListener('click', async () => {
+      const session = selectedSession();
+      if (!session) return;
+      calibBtn.disabled = true;
+      setStatus('starting calibration…');
+      calibPanel.className = '';
+      calibPanel.innerHTML = '<span class="label">Calibrating</span> — starting…';
+      try {
+        const res = await fetch(`/session/calibrate?session=${encodeURIComponent(session)}`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'failed to start');
+        setStatus('calibrating…', 'ok');
+      } catch (e) {
+        setStatus(String(e.message || e), 'err');
+        calibBtn.disabled = false;
+        await loadCalibration();
+      }
+    });
+
+    sessionSelect.addEventListener('change', async () => { await loadPairs(); await loadCalibration(); });
 
     // Live updates: refresh when a screenshot lands in the session we're viewing.
     const events = new EventSource('/events');
     events.onmessage = (e) => {
       let data;
       try { data = JSON.parse(e.data); } catch { return; }
+      if (data.session_calib !== undefined) {
+        if (data.session === selectedSession()) {
+          if (data.session_calib === 'done' || data.session_calib === 'error') {
+            calibBtn.disabled = false;
+            loadCalibration();
+          } else if (data.session_calib === 'progress') {
+            renderCalibration({ running: true, status: (data.progress && data.progress.phase), progress: data.progress });
+          } else {
+            renderCalibration({ running: true, status: data.session_calib });
+          }
+        }
+        return;
+      }
       if (data.screenshot !== undefined) {
         if (data.session === selectedSession()) loadPairs();
         else loadSessions(data.session);

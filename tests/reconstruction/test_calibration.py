@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from calibration import Scene
+from mv_utils import Scene
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 

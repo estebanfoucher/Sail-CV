@@ -47,6 +47,28 @@ RTSP cams → reconstruct_loop (Docker, MASt3R) → OUTPUT_DIR/live + stdout JSO
 `python3 viewer/server.py`, then open `http://<jetson>:7863`. Camera IPs and
 network setup are in [`hardware setup and specs.md`](hardware%20setup%20and%20specs.md).
 
+## Calibration algorithm
+
+### Intrinsics (per camera, independent)
+
+Each camera is calibrated on its own — stereo sync is not needed. Reference
+implementation: `SailCV-3D-reconstruction/src/mv_utils/intrinsics_calibration.py`.
+
+1. **Collect views.** Capture many frames of a checkerboard held at varied
+   distances, angles, and positions across the frame. In the demo, the
+   `intrinsic` screenshot kind supplies these — each camera's image is used
+   independently. Aim for ~15–30 good views.
+2. **Detect corners.** Per frame: grayscale, then
+   `cv2.findChessboardCorners(gray, (inner_corners_x, inner_corners_y))`,
+   refined with `cv2.cornerSubPix`. Build a flat 3D object-point grid scaled by
+   `square_size_mm`. Pattern dims come from `checkerboard_specs.yml`.
+3. **Calibrate.** Accumulate object/image points over all frames where corners
+   were found, then `cv2.calibrateCamera(object_points, image_points, image_size)`
+   → `camera_matrix` (K), `dist_coeffs`, and mean reprojection error (target
+   < ~0.5 px). Use the orientation-corrected frame size for `image_size`.
+4. **Save** per camera as `intrinsics.json` (`camera_matrix`, `dist_coeffs`,
+   `reprojection_error`); these feed the extrinsic stereo step.
+
 ## How-tos
 
 ### Launch the server on the Jetson from your Mac

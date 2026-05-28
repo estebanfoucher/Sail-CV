@@ -2,9 +2,8 @@ from typing import Any
 
 import cv2
 import numpy as np
-import pupil_apriltags as apriltag
 import yaml
-from loguru import logger
+from ._log import logger
 
 
 def calibrate_stereo_many(
@@ -116,6 +115,8 @@ class StereoTagDetector:
 
     def _create_detector(self):
         """Create AprilTag detector with configured parameters."""
+        import pupil_apriltags as apriltag
+
         tag_config = self.config.get("apriltag", {})
 
         return apriltag.Detector(
@@ -212,12 +213,7 @@ class StereoTagDetector:
         if img1 is None or img2 is None:
             raise ValueError("Images cannot be None")
 
-        # Warn if images have different shapes, but allow it
-        if img1.shape != img2.shape:
-            logger.warning(
-                f"Images have different shapes: img1={img1.shape}, img2={img2.shape}. "
-                "This is allowed but may affect detection quality."
-            )
+        assert img1.shape == img2.shape, "Images must have the same shape"
 
         # Detect tags in both images
         detections1 = self.detect_tags(img1)
@@ -935,7 +931,6 @@ class CharucoDetector:
             self.charuco_detector = None
             self.charuco_board = None
             self.dictionary = None
-
 
 def get_summary(results: dict[str, Any]) -> str:
     """Get a summary of the calibration results."""

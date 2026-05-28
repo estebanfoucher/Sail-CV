@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from calibration import Scene
+from mv_utils import Scene
 
 
 def calibrate_scene(scene_name: str, stereo_data_folder_path: str | None = None):
