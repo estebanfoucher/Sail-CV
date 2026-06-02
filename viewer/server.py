@@ -480,7 +480,8 @@ class _ImageFolderReader:
 
 
 def call_inference_server(img1_bytes: bytes, img2_bytes: bytes, calibration: dict,
-                          subsample: int = 8, timeout: int = 300) -> dict:
+                          subsample: int = 8, timeout: int = 300,
+                          crop1: str = "", crop2: str = "", rotate: int = 0) -> dict:
     """POST a stereo pair + calibration to the reconstruction inference server.
 
     Returns the parsed JSON {timing, profile, stats, ply_base64}. Uses stdlib
@@ -512,6 +513,12 @@ def call_inference_server(img1_bytes: bytes, img2_bytes: bytes, calibration: dic
     _file("image2", "cam2.jpg", img2_bytes)
     _field("calibration", json.dumps(calibration))
     _field("subsample", subsample)
+    if crop1:
+        _field("crop1", crop1)
+    if crop2:
+        _field("crop2", crop2)
+    if rotate:
+        _field("rotate", rotate)
     body.write(f"--{boundary}--".encode() + crlf)
 
     req = Request(
@@ -614,7 +621,8 @@ live_recon_state = {"running": False, "frame": 0, "session": None}
 live_recon_stop = threading.Event()
 
 
-def live_reconstruction_loop(session: str, calibration: dict, subsample: int):
+def live_reconstruction_loop(session: str, calibration: dict, subsample: int,
+                             crop1: str = "", crop2: str = "", rotate: int = 0):
     """Continuously grab live camera frames, reconstruct via the inference
     server, and broadcast each new point cloud over SSE for the web viewer."""
     import base64
@@ -667,7 +675,8 @@ def live_reconstruction_loop(session: str, calibration: dict, subsample: int):
 
             infer_t0 = time.time()
             result = call_inference_server(results["1"], results["2"], calibration,
-                                           subsample=subsample)
+                                           subsample=subsample, crop1=crop1, crop2=crop2,
+                                           rotate=rotate)
             request_ms = round((time.time() - infer_t0) * 1000)
             (scene_dir / "point_cloud.ply").write_bytes(
                 base64.b64decode(result["ply_base64"]))
@@ -1327,8 +1336,15 @@ class Handler(BaseHTTPRequestHandler):
             img1 = (kind_dir / pair["cam1"]).read_bytes()
             img2 = (kind_dir / pair["cam2"]).read_bytes()
             subsample = int(qs.get("subsample", ["8"])[0])
+            crop1 = qs.get("crop1", [""])[0]
+            crop2 = qs.get("crop2", [""])[0]
             try:
-                result = call_inference_server(img1, img2, calibration, subsample=subsample)
+                rotate = int(qs.get("rotate", ["0"])[0])
+            except ValueError:
+                rotate = 0
+            try:
+                result = call_inference_server(img1, img2, calibration, subsample=subsample,
+                                               crop1=crop1, crop2=crop2, rotate=rotate)
             except URLError as e:
                 self.send_json(502, {"error": f"Inference server unreachable at {INFERENCE_URL}: {e}"})
                 return
@@ -1369,6 +1385,12 @@ class Handler(BaseHTTPRequestHandler):
                 subsample = max(1, min(16, int(qs.get("subsample", ["8"])[0])))
             except ValueError:
                 subsample = 8
+            crop1 = qs.get("crop1", [""])[0]
+            crop2 = qs.get("crop2", [""])[0]
+            try:
+                rotate = int(qs.get("rotate", ["0"])[0])
+            except ValueError:
+                rotate = 0
             with live_recon_lock:
                 if live_recon_state["running"]:
                     self.send_json(409, {"error": "Live reconstruction already running"})
@@ -1376,7 +1398,7 @@ class Handler(BaseHTTPRequestHandler):
                 live_recon_state.update(running=True, session=session, frame=0)
             threading.Thread(
                 target=live_reconstruction_loop,
-                args=(session, calibration, subsample),
+                args=(session, calibration, subsample, crop1, crop2, rotate),
                 daemon=True,
             ).start()
             self.send_json(200, {"started": True, "session": session,

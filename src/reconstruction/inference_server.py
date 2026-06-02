@@ -27,8 +27,11 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from PIL.ImageOps import exif_transpose
 
-from stereo.convert_calibration import convert_calibration_parameters
-from stereo.image import preprocess_image, resize_image
+from stereo.convert_calibration import (
+    calculate_resize_and_crop_params,
+    flatten_viewer_calibration,
+)
+from stereo.image import preprocess_image
 from stereo.mast3r import MASt3RInferenceEngine
 from stereo.triangulation import extract_colors_from_image, triangulate_points
 
@@ -123,6 +126,93 @@ def _load_pil(upload: UploadFile) -> PIL.Image.Image:
     return exif_transpose(img).convert("RGB")
 
 
+def _parse_crop(crop_str: str, width: int, height: int):
+    """Parse a UI crop spec into an integer pixel box (x0, y0, x1, y1) in the
+    raw image, or None for the full frame.
+
+    Spec JSON: {"cx", "cy", "w_frac", "h_frac"} where cx/cy are the crop center
+    in raw pixels and w_frac/h_frac are the crop size as a fraction of the raw
+    image width/height. Out-of-range values are clamped to the image.
+    """
+    if not crop_str:
+        return None
+    try:
+        d = json.loads(crop_str)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not d:
+        return None
+    try:
+        cx, cy = float(d["cx"]), float(d["cy"])
+        wf, hf = float(d["w_frac"]), float(d["h_frac"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    cw = max(8.0, wf * width)
+    ch = max(8.0, hf * height)
+    x0 = max(0, min(int(round(cx - cw / 2)), width - 2))
+    y0 = max(0, min(int(round(cy - ch / 2)), height - 2))
+    x1 = max(x0 + 2, min(int(round(cx + cw / 2)), width))
+    y1 = max(y0 + 2, min(int(round(cy + ch / 2)), height))
+    if x0 == 0 and y0 == 0 and x1 == width and y1 == height:
+        return None
+    return (x0, y0, x1, y1)
+
+
+_ROTATIONS = {
+    90: PIL.Image.ROTATE_90,    # counter-clockwise
+    180: PIL.Image.ROTATE_180,
+    270: PIL.Image.ROTATE_270,
+}
+
+
+def _rotate_pil(img: PIL.Image.Image, rot: int) -> PIL.Image.Image:
+    """Rotate by a multiple of 90° (CCW) using lossless transposes."""
+    t = _ROTATIONS.get(rot % 360)
+    return img.transpose(t) if t is not None else img
+
+
+def _remap_to_raw(matches, box, raw_size, target_size, patch_size, rot=0):
+    """Map MASt3R match coords (in the processed grid of the rotated crop) back
+    to raw image pixel coords. Inverts, in order: MASt3R's resize+center-crop,
+    the optional 90°/180°/270° rotation, then the crop offset.
+
+    `box` is the (x0, y0, x1, y1) crop in raw coords, or None for the full frame.
+    With box=None and rot=0 this reproduces the legacy coordinates exactly.
+    """
+    m = np.asarray(matches, dtype=np.float64).reshape(-1, 2)
+    if box is None:
+        x0, y0 = 0, 0
+        crop_w, crop_h = raw_size
+    else:
+        x0, y0, x1, y1 = box
+        crop_w, crop_h = x1 - x0, y1 - y0
+
+    rot = rot % 360
+    # Dimensions actually fed to MASt3R (rotation swaps W/H for 90/270).
+    fed = (crop_h, crop_w) if rot in (90, 270) else (crop_w, crop_h)
+    p = calculate_resize_and_crop_params(fed, target_size, patch_size)
+    s = p["scale_factor"]
+    ox, oy = p["crop_offset"]
+    # Coords in the rotated-crop pixel grid.
+    u = (m[:, 0] + ox) / s
+    v = (m[:, 1] + oy) / s
+
+    # Invert the rotation back into the un-rotated crop's pixel coords.
+    if rot == 90:      # ROTATE_90 (CCW): xc = W-1-v, yc = u
+        xc, yc = (crop_w - 1) - v, u
+    elif rot == 270:   # ROTATE_270 (CW): xc = v, yc = H-1-u
+        xc, yc = v, (crop_h - 1) - u
+    elif rot == 180:
+        xc, yc = (crop_w - 1) - u, (crop_h - 1) - v
+    else:
+        xc, yc = u, v
+
+    raw = np.empty_like(m)
+    raw[:, 0] = xc + x0
+    raw[:, 1] = yc + y0
+    return raw
+
+
 @app.post("/reconstruct")
 def reconstruct(
     image1: UploadFile = File(...),
@@ -132,6 +222,9 @@ def reconstruct(
     target_size: int = Form(DEFAULT_TARGET_SIZE),
     patch_size: int = Form(DEFAULT_PATCH_SIZE),
     bound_distance: float = Form(BOUND_DISTANCE),
+    crop1: str = Form(""),
+    crop2: str = Form(""),
+    rotate: int = Form(0),
 ):
     engine = get_engine()
     if engine is None:
@@ -148,19 +241,28 @@ def reconstruct(
     with _stage(timing, "load_images"):
         img1 = _load_pil(image1)
         img2 = _load_pil(image2)
+    W1, H1 = img1.size
+    W2, H2 = img2.size
 
-    with _stage(timing, "convert_calibration"):
-        try:
-            calib_params = convert_calibration_parameters(
-                calib_data, target_size=target_size, patch_size=patch_size
-            )
-        except (KeyError, ValueError) as e:
-            raise HTTPException(status_code=400, detail=f"Bad calibration: {e}")
+    # Optional per-camera rectangle crop (raw pixels). Cropping focuses MASt3R
+    # on the region of interest and discards peripheral (fish-eye) content.
+    box1 = _parse_crop(crop1, W1, H1)
+    box2 = _parse_crop(crop2, W2, H2)
+    rot = rotate % 360
+    if rot not in (0, 90, 180, 270):
+        rot = 0
+
+    try:
+        flat_calib = flatten_viewer_calibration(calib_data)
+    except (KeyError, ValueError, TypeError) as e:
+        raise HTTPException(status_code=400, detail=f"Bad calibration: {e}")
 
     with _stage(timing, "preprocess"):
+        src1 = _rotate_pil(img1.crop(box1) if box1 else img1, rot)
+        src2 = _rotate_pil(img2.crop(box2) if box2 else img2, rot)
         images = [
-            preprocess_image(img1, size=target_size, idx=0),
-            preprocess_image(img2, size=target_size, idx=1),
+            preprocess_image(src1, size=target_size, idx=0),
+            preprocess_image(src2, size=target_size, idx=1),
         ]
 
     with _stage(timing, "inference"):
@@ -171,12 +273,18 @@ def reconstruct(
         matches_im0 = raw["matches_im0"]
         matches_im1 = raw["matches_im1"]
 
+    # Map matches from the processed (cropped) grid back to raw image pixels so
+    # we can triangulate with the unmodified raw-resolution intrinsics — no
+    # on-the-fly cropped-camera calibration needed.
+    matches_raw0 = _remap_to_raw(matches_im0, box1, (W1, H1), target_size, patch_size, rot)
+    matches_raw1 = _remap_to_raw(matches_im1, box2, (W2, H2), target_size, patch_size, rot)
+
     with _stage(timing, "triangulation"):
-        point_cloud = triangulate_points(matches_im0, matches_im1, calib_params)
+        point_cloud = triangulate_points(matches_raw0, matches_raw1, flat_calib)
 
     with _stage(timing, "colorize"):
-        img1_array = np.array(resize_image(img1, size=target_size))
-        colors = extract_colors_from_image(matches_im0, img1_array)
+        img1_array = np.array(img1)
+        colors = extract_colors_from_image(matches_raw0, img1_array)
 
     with _stage(timing, "build_ply"):
         ply_bytes, kept = _build_ply_bytes(point_cloud, colors, bound_distance)
@@ -203,7 +311,10 @@ def reconstruct(
         "points_kept": int(kept),
         "points_dropped": int(len(point_cloud) - kept),
         "bound_distance": bound_distance,
-        "mast3r_image_size": list(calib_params.get("image_size", [])),
+        "raw_image_size": [int(W1), int(H1)],
+        "crop1": list(box1) if box1 else None,
+        "crop2": list(box2) if box2 else None,
+        "rotate": rot,
     }
 
     logger.info(

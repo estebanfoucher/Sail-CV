@@ -34,7 +34,18 @@
     #left { width: 38%; min-width: 320px; display: flex; flex-direction: column; border-right: 1px solid #1a1a1a; overflow-y: auto; }
     .imgwrap { padding: 8px; }
     .imgwrap .cap { font-size: 10px; color: #555; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
-    .imgwrap img { width: 100%; display: block; border: 1px solid #1a1a1a; border-radius: 4px; background: #000; min-height: 40px; }
+    .imgbox { position: relative; overflow: hidden; border: 1px solid #1a1a1a; border-radius: 4px; background: #000; }
+    .imgwrap img { width: 100%; display: block; min-height: 40px; }
+    .crop-rect { position: absolute; border: 2px solid #ff3b3b; box-sizing: border-box;
+      pointer-events: none; display: none; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); }
+    .crop-badge { position: absolute; top: 1px; left: 2px; font: 10px/1 monospace;
+      color: #fff; background: rgba(255,59,59,0.85); padding: 1px 3px; border-radius: 2px; }
+    .imgbox.cropmove { cursor: move; }
+    .crop-ctl { display: none; gap: 6px; align-items: center; margin-top: 5px; flex-wrap: wrap; }
+    .crop-ctl.on { display: flex; }
+    .crop-ctl label { font-size: 10px; color: #888; display: flex; align-items: center; gap: 3px; }
+    .crop-ctl input { width: 52px; background: #1a1a1a; color: #eee; border: 1px solid #444;
+      padding: 2px 4px; font-family: monospace; font-size: 11px; }
     #pc-pane { flex: 1; position: relative; overflow: hidden; }
     #pc-canvas { width: 100%; height: 100%; display: block; }
     #pc-overlay {
@@ -108,13 +119,45 @@
              title="Full aperture angle of a cone at the camera-baseline midpoint, pointing along the averaged camera axis. Keeps points inside the cone. 0 or ≥180 = no limit."
              style="width:64px;margin-left:4px;background:#1a1a1a;color:#eee;border:1px solid #444;padding:2px 4px;font-family:monospace;font-size:11px" />
     </label>
+    <label style="font-size:11px;color:#888"
+           title="Restrict MASt3R matching to a rectangle of each raw frame (drawn in red on the images). Matches are remapped to raw pixels and triangulated with the raw intrinsics.">
+      <input type="checkbox" id="crop-enable" style="vertical-align:middle" /> crop ROI
+    </label>
+    <label style="font-size:11px;color:#888"
+           title="Rotate the cropped content by 90° steps before MASt3R matching (applied to both cameras). Matches are un-rotated and remapped to raw pixels.">rot°
+      <select id="crop-rot"
+              style="margin-left:4px;background:#1a1a1a;color:#eee;border:1px solid #444;padding:2px 4px;font-family:monospace;font-size:11px">
+        <option value="0" selected>0</option>
+        <option value="90">90</option>
+        <option value="180">180</option>
+        <option value="270">270</option>
+      </select>
+    </label>
     <span id="status"></span>
   </div>
 
   <div id="main">
     <div id="left">
-      <div class="imgwrap"><div class="cap">cam1</div><img id="img1" src="" alt="cam1" /></div>
-      <div class="imgwrap"><div class="cap">cam2</div><img id="img2" src="" alt="cam2" /></div>
+      <div class="imgwrap">
+        <div class="cap">cam1</div>
+        <div class="imgbox"><img id="img1" src="" alt="cam1" /><div class="crop-rect" id="crop-rect1"></div></div>
+        <div class="crop-ctl" id="crop-ctl1">
+          <label>cx<input type="number" id="crop1-cx" step="10"></label>
+          <label>cy<input type="number" id="crop1-cy" step="10"></label>
+          <label>w%<input type="number" id="crop1-w" min="5" max="100" step="5"></label>
+          <label>h%<input type="number" id="crop1-h" min="5" max="100" step="5"></label>
+        </div>
+      </div>
+      <div class="imgwrap">
+        <div class="cap">cam2</div>
+        <div class="imgbox"><img id="img2" src="" alt="cam2" /><div class="crop-rect" id="crop-rect2"></div></div>
+        <div class="crop-ctl" id="crop-ctl2">
+          <label>cx<input type="number" id="crop2-cx" step="10"></label>
+          <label>cy<input type="number" id="crop2-cy" step="10"></label>
+          <label>w%<input type="number" id="crop2-w" min="5" max="100" step="5"></label>
+          <label>h%<input type="number" id="crop2-h" min="5" max="100" step="5"></label>
+        </div>
+      </div>
     </div>
     <div id="pc-pane">
       <canvas id="pc-canvas"></canvas>
@@ -616,7 +659,7 @@
       pcOverlay.textContent = 'Running MASt3R inference…';
       try {
         const subsample = document.getElementById('subsample-select').value;
-        const q = `session=${encodeURIComponent(session)}&kind=${pair.kind}&timestamp=${encodeURIComponent(pair.timestamp)}&subsample=${subsample}`;
+        const q = `session=${encodeURIComponent(session)}&kind=${pair.kind}&timestamp=${encodeURIComponent(pair.timestamp)}&subsample=${subsample}${cropQuery()}`;
         const res = await fetch(`/session/reconstruct?${q}`, { method: 'POST' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'reconstruction failed');
@@ -642,7 +685,7 @@
       if (!session) return;
       const subsample = document.getElementById('subsample-select').value;
       try {
-        const res = await fetch(`/live-reconstruct/start?session=${encodeURIComponent(session)}&subsample=${subsample}`, { method: 'POST' });
+        const res = await fetch(`/live-reconstruct/start?session=${encodeURIComponent(session)}&subsample=${subsample}${cropQuery()}`, { method: 'POST' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'failed to start');
         liveOn = true; liveScene = data.scene; liveFirstFrame = true;
@@ -692,6 +735,119 @@
         setStatus(`live error: ${msg.live_recon_error}`, 'err');
       }
     };
+
+    // ── Crop ROI (per-camera rectangle fed to MASt3R) ──────────────────
+    const cropEnable = document.getElementById('crop-enable');
+    const cropRot = document.getElementById('crop-rot');
+    const cropEls = {
+      1: { img: img1, rect: document.getElementById('crop-rect1'), ctl: document.getElementById('crop-ctl1'),
+           cx: document.getElementById('crop1-cx'), cy: document.getElementById('crop1-cy'),
+           w: document.getElementById('crop1-w'), h: document.getElementById('crop1-h') },
+      2: { img: img2, rect: document.getElementById('crop-rect2'), ctl: document.getElementById('crop-ctl2'),
+           cx: document.getElementById('crop2-cx'), cy: document.getElementById('crop2-cy'),
+           w: document.getElementById('crop2-w'), h: document.getElementById('crop2-h') },
+    };
+    // A rotation badge in each rectangle's corner.
+    for (const n of [1, 2]) {
+      const b = document.createElement('span');
+      b.className = 'crop-badge'; b.style.display = 'none';
+      cropEls[n].rect.appendChild(b);
+      cropEls[n].badge = b;
+    }
+
+    function cropDefaults(n) {
+      // Prefill center = image center, 60% × 60%, once we know the raw size.
+      const e = cropEls[n];
+      const nw = e.img.naturalWidth, nh = e.img.naturalHeight;
+      if (!nw || !nh) return;
+      if (e.cx.value === '') e.cx.value = Math.round(nw / 2);
+      if (e.cy.value === '') e.cy.value = Math.round(nh / 2);
+      if (e.w.value === '') e.w.value = 60;
+      if (e.h.value === '') e.h.value = 60;
+    }
+
+    function updateCropOverlay(n) {
+      const e = cropEls[n];
+      const on = cropEnable.checked;
+      e.ctl.classList.toggle('on', on);
+      e.img.parentElement.classList.toggle('cropmove', on);
+      const nw = e.img.naturalWidth, nh = e.img.naturalHeight;
+      const dw = e.img.clientWidth, dh = e.img.clientHeight;
+      if (!on || !nw || !nh || !dw || !dh) { e.rect.style.display = 'none'; return; }
+      const cx = parseFloat(e.cx.value), cy = parseFloat(e.cy.value);
+      const wf = parseFloat(e.w.value) / 100, hf = parseFloat(e.h.value) / 100;
+      if (![cx, cy, wf, hf].every(Number.isFinite)) { e.rect.style.display = 'none'; return; }
+      const sx = dw / nw, sy = dh / nh;
+      const wPx = wf * dw, hPx = hf * dh;
+      e.rect.style.display = 'block';
+      e.rect.style.left = (cx * sx - wPx / 2) + 'px';
+      e.rect.style.top = (cy * sy - hPx / 2) + 'px';
+      e.rect.style.width = wPx + 'px';
+      e.rect.style.height = hPx + 'px';
+      const rot = parseInt(cropRot.value, 10) || 0;
+      e.badge.style.display = rot ? 'block' : 'none';
+      e.badge.textContent = rot ? `⟳${rot}°` : '';
+    }
+
+    function updateAllCrops() { cropDefaults(1); cropDefaults(2); updateCropOverlay(1); updateCropOverlay(2); }
+
+    // Crop spec sent to the server (JSON string), or '' when disabled.
+    function cropParam(n) {
+      if (!cropEnable.checked) return '';
+      const e = cropEls[n];
+      const cx = parseFloat(e.cx.value), cy = parseFloat(e.cy.value);
+      const wf = parseFloat(e.w.value) / 100, hf = parseFloat(e.h.value) / 100;
+      if (![cx, cy, wf, hf].every(Number.isFinite)) return '';
+      return JSON.stringify({ cx, cy, w_frac: wf, h_frac: hf });
+    }
+    function cropQuery() {
+      const c1 = cropParam(1), c2 = cropParam(2);
+      let q = '';
+      if (c1) q += `&crop1=${encodeURIComponent(c1)}`;
+      if (c2) q += `&crop2=${encodeURIComponent(c2)}`;
+      const rot = parseInt(cropRot.value, 10) || 0;
+      if (rot) q += `&rotate=${rot}`;
+      return q;
+    }
+
+    // Drag the crop rectangle to move its center (per camera, raw-pixel space).
+    function enableCropDrag(n) {
+      const e = cropEls[n];
+      const box = e.img.parentElement;  // .imgbox
+      let drag = null;
+      box.addEventListener('pointerdown', (ev) => {
+        if (!cropEnable.checked || !e.img.naturalWidth) return;
+        const r = e.img.getBoundingClientRect();
+        drag = {
+          x: ev.clientX, y: ev.clientY,
+          cx: parseFloat(e.cx.value) || 0, cy: parseFloat(e.cy.value) || 0,
+          scale: e.img.naturalWidth / r.width,
+        };
+        box.setPointerCapture(ev.pointerId);
+        ev.preventDefault();
+      });
+      box.addEventListener('pointermove', (ev) => {
+        if (!drag) return;
+        const nw = e.img.naturalWidth, nh = e.img.naturalHeight;
+        e.cx.value = Math.round(Math.max(0, Math.min(nw, drag.cx + (ev.clientX - drag.x) * drag.scale)));
+        e.cy.value = Math.round(Math.max(0, Math.min(nh, drag.cy + (ev.clientY - drag.y) * drag.scale)));
+        updateCropOverlay(n);
+      });
+      const end = (ev) => { if (drag) { drag = null; try { box.releasePointerCapture(ev.pointerId); } catch (_) {} } };
+      box.addEventListener('pointerup', end);
+      box.addEventListener('pointercancel', end);
+    }
+
+    cropEnable.addEventListener('change', updateAllCrops);
+    cropRot.addEventListener('change', updateAllCrops);
+    for (const n of [1, 2]) {
+      cropEls[n].img.addEventListener('load', () => { cropDefaults(n); updateCropOverlay(n); });
+      for (const f of ['cx', 'cy', 'w', 'h']) {
+        cropEls[n][f].addEventListener('input', () => updateCropOverlay(n));
+      }
+      enableCropDrag(n);
+    }
+    window.addEventListener('resize', () => { updateCropOverlay(1); updateCropOverlay(2); });
 
     sessionSelect.addEventListener('change', () => { if (liveOn) stopLive(); loadPairs(); });
     pairSelect.addEventListener('change', () => { if (!liveOn) showPairImages(); });
