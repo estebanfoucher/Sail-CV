@@ -524,6 +524,189 @@ def call_inference_server(img1_bytes: bytes, img2_bytes: bytes, calibration: dic
         return json.loads(resp.read().decode("utf-8"))
 
 
+class CameraStream:
+    """Persistent ffmpeg RTSP reader. Keeps a single connection open and
+    decodes a continuous MJPEG stream, retaining only the latest frame.
+
+    Opening an RTSP connection + waiting for the first keyframe costs several
+    seconds; doing it once (instead of per-frame) is what makes the live loop
+    fast. After the first frame, get_latest() returns instantly.
+    """
+
+    def __init__(self, cam_id: str, url: str, fps: int = 10):
+        self.cam_id = cam_id
+        self.url = url
+        self.fps = fps
+        self.proc = None
+        self.thread = None
+        self.lock = threading.Lock()
+        self.latest = None
+        self.running = False
+
+    def start(self):
+        if self.running:
+            return
+        self.running = True
+        cmd = [
+            "ffmpeg", "-nostdin",
+            "-rtsp_transport", "tcp",
+            "-fflags", "nobuffer", "-flags", "low_delay",
+            "-i", self.url,
+            "-an",
+            "-vf", f"fps={self.fps}",
+            "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "5", "-",
+        ]
+        self.proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=10 ** 8)
+        self.thread = threading.Thread(target=self._reader, daemon=True)
+        self.thread.start()
+
+    def _reader(self):
+        buf = b""
+        SOI, EOI = b"\xff\xd8", b"\xff\xd9"
+        try:
+            while self.running:
+                chunk = self.proc.stdout.read(65536)
+                if not chunk:
+                    break
+                buf += chunk
+                # Keep only the most recent complete JPEG in the buffer.
+                while True:
+                    start = buf.find(SOI)
+                    if start < 0:
+                        break
+                    end = buf.find(EOI, start + 2)
+                    if end < 0:
+                        break
+                    with self.lock:
+                        self.latest = buf[start:end + 2]
+                    buf = buf[end + 2:]
+        finally:
+            self.running = False
+
+    def get_latest(self, timeout: float = 12.0) -> bytes:
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            with self.lock:
+                if self.latest is not None:
+                    return self.latest
+            if not self.running:
+                raise RuntimeError(f"cam {self.cam_id}: stream ended before a frame arrived")
+            time.sleep(0.03)
+        raise RuntimeError(f"cam {self.cam_id}: no frame within {timeout}s")
+
+    def stop(self):
+        self.running = False
+        if self.proc:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+        self.proc = None
+        with self.lock:
+            self.latest = None
+
+
+# --- Live reconstruction (inference-server based, no Docker) ---
+live_recon_lock = threading.Lock()
+live_recon_state = {"running": False, "frame": 0, "session": None}
+live_recon_stop = threading.Event()
+
+
+def live_reconstruction_loop(session: str, calibration: dict, subsample: int):
+    """Continuously grab live camera frames, reconstruct via the inference
+    server, and broadcast each new point cloud over SSE for the web viewer."""
+    import base64
+    live_recon_stop.clear()
+    frame = 0
+    scene = f"live_recon_{session}"
+    scene_dir = OUTPUT_DIR / scene
+    scene_dir.mkdir(parents=True, exist_ok=True)
+    live_dir = OUTPUT_DIR / "live"
+    live_dir.mkdir(parents=True, exist_ok=True)
+    log(f"[live-recon] start session={session} subsample={subsample} scene={scene}")
+
+    # Open one persistent RTSP stream per camera (connection cost paid once).
+    streams = {c: CameraStream(c, CAMERAS[c]) for c in ("1", "2")}
+    for s in streams.values():
+        s.start()
+
+    try:
+      while not live_recon_stop.is_set():
+        try:
+            loop_t0 = time.time()
+            results: dict = {}
+            errors: dict = {}
+            cap_ms: dict = {}
+
+            def _grab(cam_id):
+                t0 = time.time()
+                try:
+                    results[cam_id] = streams[cam_id].get_latest()
+                except Exception as e:  # noqa: BLE001
+                    errors[cam_id] = str(e)
+                cap_ms[cam_id] = round((time.time() - t0) * 1000)
+
+            threads = [threading.Thread(target=_grab, args=(c,)) for c in ("1", "2")]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            capture_ms = round((time.time() - loop_t0) * 1000)
+            if errors:
+                log(f"[live-recon] capture error: {errors}")
+                broadcast({"live_recon_error": str(errors)})
+                if live_recon_stop.wait(2):
+                    break
+                continue
+
+            # Persist the grabbed frames so the web viewer can show the live feed.
+            (live_dir / "frame1.jpg").write_bytes(results["1"])
+            (live_dir / "frame2.jpg").write_bytes(results["2"])
+
+            infer_t0 = time.time()
+            result = call_inference_server(results["1"], results["2"], calibration,
+                                           subsample=subsample)
+            request_ms = round((time.time() - infer_t0) * 1000)
+            (scene_dir / "point_cloud.ply").write_bytes(
+                base64.b64decode(result["ply_base64"]))
+            frame += 1
+            loop_ms = round((time.time() - loop_t0) * 1000)
+            with live_recon_lock:
+                live_recon_state["frame"] = frame
+            log(f"[live-recon] frame {frame}: loop={loop_ms}ms "
+                f"capture={capture_ms}ms (cam1={cap_ms.get('1')}ms cam2={cap_ms.get('2')}ms) "
+                f"request={request_ms}ms server_total={round((result.get('timing',{}).get('total') or 0)*1000)}ms")
+            broadcast({
+                "live_recon": "done",
+                "scene": scene,
+                "frame": frame,
+                "stats": result.get("stats"),
+                "timing": result.get("timing"),
+                "loop_timing": {
+                    "loop_ms": loop_ms,
+                    "capture_ms": capture_ms,
+                    "cam1_ms": cap_ms.get("1"),
+                    "cam2_ms": cap_ms.get("2"),
+                    "request_ms": request_ms,
+                },
+            })
+        except Exception as e:  # noqa: BLE001
+            log(f"[live-recon] error: {e}")
+            broadcast({"live_recon_error": str(e)})
+            if live_recon_stop.wait(2):
+                break
+    finally:
+        for s in streams.values():
+            s.stop()
+
+    with live_recon_lock:
+        live_recon_state["running"] = False
+        live_recon_state["session"] = None
+    log("[live-recon] stopped")
+
+
 def _compute_session_intrinsics(intrinsic_dir: Path, cam: str, pattern_size, square_size, on_progress=None):
     """Calibrate one camera from a session's intrinsic checkerboard pairs.
 
@@ -908,13 +1091,21 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(400, {"error": f"Invalid kind '{kind}'"})
                 return
             ts = qs.get("timestamp", [None])[0]
-            pairs = list_pairs(session, kind)
+            live = qs.get("live", ["0"])[0] in ("1", "true")
             img1 = img2 = None
-            if pairs:
-                pair = next((p for p in pairs if p["timestamp"] == ts), pairs[-1]) if ts else pairs[-1]
-                kind_dir = SCREENSHOT_DIR / session / kind
-                img1 = _load_frame_rgb(kind_dir / pair["cam1"])
-                img2 = _load_frame_rgb(kind_dir / pair["cam2"])
+            if live:
+                # Use the frames the live loop just grabbed (same images fed to
+                # reconstruction), not the stored session pair.
+                live_dir = OUTPUT_DIR / "live"
+                img1 = _load_frame_rgb(live_dir / "frame1.jpg")
+                img2 = _load_frame_rgb(live_dir / "frame2.jpg")
+            else:
+                pairs = list_pairs(session, kind)
+                if pairs:
+                    pair = next((p for p in pairs if p["timestamp"] == ts), pairs[-1]) if ts else pairs[-1]
+                    kind_dir = SCREENSHOT_DIR / session / kind
+                    img1 = _load_frame_rgb(kind_dir / pair["cam1"])
+                    img2 = _load_frame_rgb(kind_dir / pair["cam2"])
             try:
                 payload = build_frusta(_flatten_calibration(calibration), img1, img2)
             except Exception as e:
@@ -1162,6 +1353,38 @@ class Handler(BaseHTTPRequestHandler):
                 f"in {result.get('timing', {}).get('total')}s")
             broadcast({"reconstruct": "done", **response})
             self.send_json(200, response)
+
+        elif path == "/live-reconstruct/start":
+            from urllib.parse import parse_qs, urlparse
+            qs = parse_qs(urlparse(self.path).query)
+            session = qs.get("session", [None])[0]
+            if session is None or not _safe_segment(session):
+                self.send_json(400, {"error": "Invalid session"})
+                return
+            calibration = load_session_calibration(session)
+            if calibration is None:
+                self.send_json(404, {"error": f"No calibration for session {session}"})
+                return
+            try:
+                subsample = max(1, min(16, int(qs.get("subsample", ["8"])[0])))
+            except ValueError:
+                subsample = 8
+            with live_recon_lock:
+                if live_recon_state["running"]:
+                    self.send_json(409, {"error": "Live reconstruction already running"})
+                    return
+                live_recon_state.update(running=True, session=session, frame=0)
+            threading.Thread(
+                target=live_reconstruction_loop,
+                args=(session, calibration, subsample),
+                daemon=True,
+            ).start()
+            self.send_json(200, {"started": True, "session": session,
+                                 "subsample": subsample, "scene": f"live_recon_{session}"})
+
+        elif path == "/live-reconstruct/stop":
+            live_recon_stop.set()
+            self.send_json(200, {"stopped": True})
 
         elif path == "/screenshot":
             # take_stereo_screenshot: grab both cameras simultaneously into the active session

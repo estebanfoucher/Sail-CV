@@ -19,6 +19,8 @@
     }
     button:disabled { opacity: 0.4; cursor: default; }
     #recon-btn { border-color: #9b59b6; color: #b07cc6; }
+    #live-btn { border-color: #27ae60; color: #2ecc71; }
+    #live-btn.live-on { border-color: #e74c3c; color: #fff; background: #c0392b; }
     select {
       background: #1a1a1a; color: #eee; border: 1px solid #444;
       padding: 5px 8px; border-radius: 4px; font-family: monospace; font-size: 12px; max-width: 240px;
@@ -39,7 +41,32 @@
       position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
       font-size: 12px; color: #444; pointer-events: none; text-align: center;
     }
-    #pc-hint { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #333; pointer-events: none; }
+    #pc-hint { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #555; pointer-events: none; white-space: nowrap; }
+    #nav-pad {
+      position: absolute; bottom: 28px; right: 12px; display: flex; flex-direction: column;
+      align-items: center; gap: 4px; user-select: none;
+    }
+    #nav-pad .nav-row { display: flex; gap: 4px; }
+    #nav-pad .nav-zoom { margin-top: 8px; }
+    .navb {
+      width: 32px; height: 32px; padding: 0; font-size: 13px; line-height: 1;
+      background: rgba(20,20,20,0.78); color: #ccc; border: 1px solid #444; border-radius: 4px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .navb:hover { background: rgba(45,45,45,0.9); color: #fff; border-color: #666; }
+    .navb:active { background: #3a3a3a; }
+    #cam-params {
+      position: absolute; top: 8px; left: 8px; background: rgba(15,15,15,0.82);
+      border: 1px solid #333; border-radius: 5px; padding: 6px 8px; user-select: none;
+    }
+    #cam-params .cp-title { font-size: 9px; color: #777; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+    #cam-params .cp-row { display: flex; gap: 5px; margin-top: 4px; }
+    #cam-params label { display: flex; flex-direction: column; font-size: 9px; color: #888; gap: 2px; }
+    #cam-params input {
+      width: 58px; background: #1a1a1a; color: #eee; border: 1px solid #444;
+      padding: 2px 4px; font-family: monospace; font-size: 11px; border-radius: 3px;
+    }
+    #cam-params input:focus { border-color: #9b59b6; outline: none; }
 
     #info {
       flex-shrink: 0; padding: 8px 12px; border-top: 1px solid #1a1a1a; background: #080808;
@@ -69,6 +96,7 @@
       </select>
     </label>
     <button id="recon-btn">Reconstruct</button>
+    <button id="live-btn">Start live</button>
     <div class="sep"></div>
     <label style="font-size:11px;color:#888">max dist (m)
       <input type="number" id="dist-input" value="0" min="0" step="0.05"
@@ -76,7 +104,7 @@
              style="width:64px;margin-left:4px;background:#1a1a1a;color:#eee;border:1px solid #444;padding:2px 4px;font-family:monospace;font-size:11px" />
     </label>
     <label style="font-size:11px;color:#888">cone (°)
-      <input type="number" id="cone-input" value="90" min="0" max="180" step="5"
+      <input type="number" id="cone-input" value="0" min="0" max="180" step="5"
              title="Full aperture angle of a cone at the camera-baseline midpoint, pointing along the averaged camera axis. Keeps points inside the cone. 0 or ≥180 = no limit."
              style="width:64px;margin-left:4px;background:#1a1a1a;color:#eee;border:1px solid #444;padding:2px 4px;font-family:monospace;font-size:11px" />
     </label>
@@ -90,8 +118,39 @@
     </div>
     <div id="pc-pane">
       <canvas id="pc-canvas"></canvas>
+      <div id="cam-params">
+        <div class="cp-title">camera</div>
+        <div class="cp-row">
+          <label>pos X<input type="number" id="cp-px" step="0.05"></label>
+          <label>pos Y<input type="number" id="cp-py" step="0.05"></label>
+          <label>pos Z<input type="number" id="cp-pz" step="0.05"></label>
+        </div>
+        <div class="cp-row">
+          <label>pitch°<input type="number" id="cp-rx" step="1"></label>
+          <label>yaw°<input type="number" id="cp-ry" step="1"></label>
+          <label>roll°<input type="number" id="cp-rz" step="1"></label>
+        </div>
+        <div class="cp-row">
+          <label title="Mouse/trackpad drag rotation speed. Raise this if rotating feels too slow when zoomed in.">rotate sens
+            <input type="number" id="cp-sens" step="0.25" min="0.1" value="1">
+          </label>
+        </div>
+      </div>
       <div id="pc-overlay">Select a session + pair, then Reconstruct.</div>
-      <div id="pc-hint">drag · scroll · right-drag</div>
+      <div id="nav-pad">
+        <div class="nav-row"><button class="navb" data-act="up" title="Rotate up (↑)">▲</button></div>
+        <div class="nav-row">
+          <button class="navb" data-act="left" title="Rotate left (←)">◀</button>
+          <button class="navb" data-act="reset" title="Reset view (Home)">⟲</button>
+          <button class="navb" data-act="right" title="Rotate right (→)">▶</button>
+        </div>
+        <div class="nav-row"><button class="navb" data-act="down" title="Rotate down (↓)">▼</button></div>
+        <div class="nav-row nav-zoom">
+          <button class="navb" data-act="zoomin" title="Zoom in (+)">＋</button>
+          <button class="navb" data-act="zoomout" title="Zoom out (−)">－</button>
+        </div>
+      </div>
+      <div id="pc-hint">drag-rotate · scroll/＋－-zoom · right-drag-pan · arrows-rotate · Home-reset</div>
     </div>
   </div>
 
@@ -174,7 +233,7 @@
       cameraObjs = []; cameraBases = [];
     }
 
-    function drawCameraFrusta(payload) {
+    function drawCameraFrusta(payload, reframe = false) {
       clearCameras();
       const cams = payload.cameras || [];
       if (cams.length >= 2 && cams[0].vertices && cams[1].vertices) {
@@ -201,7 +260,7 @@
         const botMid = [ (v[3][0]+v[4][0])/2, (v[3][1]+v[4][1])/2, (v[3][2]+v[4][2])/2 ];
         const up = norm3([topMid[0]-botMid[0], topMid[1]-botMid[1], topMid[2]-botMid[2]]);
         cam1View = { pos: apex, forward: fwd, up: up };
-        applyDefaultView();
+        if (reframe) applyDefaultView();
       } else {
         cam1View = null;
       }
@@ -245,13 +304,21 @@
       });
     }
 
-    async function fetchCameras() {
+    async function fetchCameras(live = false) {
       const session = selectedSession(), pair = selectedPair();
-      if (!session || !pair) { clearCameras(); return; }
+      if (!session) { clearCameras(); return; }
       try {
-        const q = `session=${encodeURIComponent(session)}&kind=${pair.kind}&timestamp=${encodeURIComponent(pair.timestamp)}`;
+        let q = `session=${encodeURIComponent(session)}`;
+        if (live) {
+          // Build frusta from the live-grabbed frames (same images fed to recon).
+          q += `&live=1&t=${Date.now()}`;
+        } else {
+          if (!pair) { clearCameras(); return; }
+          q += `&kind=${pair.kind}&timestamp=${encodeURIComponent(pair.timestamp)}`;
+        }
         const res = await fetch(`/session/cameras?${q}`);
-        if (res.ok) drawCameraFrusta(await res.json());
+        // Only reframe the view on manual pair selection, never on live updates.
+        if (res.ok) drawCameraFrusta(await res.json(), !live);
         else clearCameras();
       } catch (e) { clearCameras(); }
     }
@@ -272,7 +339,108 @@
     }
     animate();
 
-    function loadPLY(url) {
+    // ── On-screen / keyboard camera navigation ─────────────────────────
+    const ROT_STEP_BASE = 0.20;  // radians per rotate press at sensitivity 1
+    const ZOOM_STEP = 0.85;      // multiplier per zoom-in press (<1 = closer)
+    let rotSens = 1;             // shared sensitivity (drag + buttons + keys)
+    const ROT_STEP = () => ROT_STEP_BASE * rotSens;
+
+    const sensEl = document.getElementById('cp-sens');
+    function applySensitivity() {
+      const s = parseFloat(sensEl.value);
+      rotSens = (Number.isNaN(s) || s <= 0) ? 1 : s;
+      controls.rotateSpeed = rotSens;
+    }
+    sensEl.addEventListener('change', applySensitivity);
+    sensEl.addEventListener('input', applySensitivity);
+    applySensitivity();
+
+    // Orbit the camera around controls.target. dAz = around the up axis,
+    // dPol = around the camera's right axis. Works for any camera.up.
+    function orbit(dAz, dPol) {
+      const offset = camera.position.clone().sub(controls.target);
+      const up = camera.up.clone().normalize();
+      offset.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(up, dAz));
+      const right = new THREE.Vector3().crossVectors(offset.clone().normalize(), up).normalize();
+      offset.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(right, dPol));
+      camera.position.copy(controls.target).add(offset);
+      camera.lookAt(controls.target);
+      controls.update();
+    }
+    function dolly(factor) {
+      const offset = camera.position.clone().sub(controls.target).multiplyScalar(factor);
+      camera.position.copy(controls.target).add(offset);
+      controls.update();
+    }
+    function navAction(act) {
+      switch (act) {
+        case 'left':    orbit(ROT_STEP(), 0); break;
+        case 'right':   orbit(-ROT_STEP(), 0); break;
+        case 'up':      orbit(0, ROT_STEP()); break;
+        case 'down':    orbit(0, -ROT_STEP()); break;
+        case 'zoomin':  dolly(ZOOM_STEP); break;
+        case 'zoomout': dolly(1 / ZOOM_STEP); break;
+        case 'reset':   applyDefaultView(); break;
+      }
+    }
+    document.getElementById('nav-pad').addEventListener('click', (e) => {
+      const b = e.target.closest('.navb'); if (b) navAction(b.dataset.act);
+    });
+    window.addEventListener('keydown', (e) => {
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+      const map = { ArrowLeft:'left', ArrowRight:'right', ArrowUp:'up', ArrowDown:'down',
+                    '+':'zoomin', '=':'zoomin', '-':'zoomout', '_':'zoomout', Home:'reset' };
+      const act = map[e.key];
+      if (act) { e.preventDefault(); navAction(act); }
+    });
+
+    // ── Camera position/orientation fields (two-way bound) ─────────────
+    const cpEls = {
+      px: document.getElementById('cp-px'), py: document.getElementById('cp-py'), pz: document.getElementById('cp-pz'),
+      rx: document.getElementById('cp-rx'), ry: document.getElementById('cp-ry'), rz: document.getElementById('cp-rz'),
+    };
+    const RAD2DEG = 180 / Math.PI, DEG2RAD = Math.PI / 180;
+    let editingFields = false;     // user is typing in a field
+    let applyingFields = false;    // we are programmatically moving the camera
+
+    function syncFieldsFromCamera() {
+      if (editingFields) return;   // don't clobber what the user is typing
+      const p = camera.position, e = camera.rotation; // Euler, order XYZ, radians
+      cpEls.px.value = p.x.toFixed(3); cpEls.py.value = p.y.toFixed(3); cpEls.pz.value = p.z.toFixed(3);
+      cpEls.rx.value = (e.x * RAD2DEG).toFixed(1);
+      cpEls.ry.value = (e.y * RAD2DEG).toFixed(1);
+      cpEls.rz.value = (e.z * RAD2DEG).toFixed(1);
+    }
+
+    function applyFieldsToCamera() {
+      const v = (el) => parseFloat(el.value);
+      const px = v(cpEls.px), py = v(cpEls.py), pz = v(cpEls.pz);
+      const rx = v(cpEls.rx), ry = v(cpEls.ry), rz = v(cpEls.rz);
+      if ([px, py, pz, rx, ry, rz].some((n) => Number.isNaN(n))) return;
+      applyingFields = true;
+      camera.position.set(px, py, pz);
+      camera.rotation.set(rx * DEG2RAD, ry * DEG2RAD, rz * DEG2RAD, 'XYZ');
+      // Keep OrbitControls consistent: aim the target along the new forward axis
+      // at the current orbit distance so subsequent mouse-orbit still works.
+      const dist = camera.position.distanceTo(controls.target) || (sceneRadius * 2.5) || 1;
+      const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      controls.target.copy(camera.position).add(fwd.multiplyScalar(dist));
+      controls.update();
+      applyingFields = false;
+    }
+
+    // Live-update the fields whenever the camera moves (orbit, damping, buttons).
+    controls.addEventListener('change', () => { if (!applyingFields) syncFieldsFromCamera(); });
+    for (const el of Object.values(cpEls)) {
+      el.addEventListener('focus', () => { editingFields = true; });
+      el.addEventListener('blur', () => { editingFields = false; syncFieldsFromCamera(); });
+      el.addEventListener('change', applyFieldsToCamera);
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter') applyFieldsToCamera(); });
+    }
+    syncFieldsFromCamera();
+
+    function loadPLY(url, keepView = false) {
       const loader = new PLYLoader();
       loader.load(url, (geometry) => {
         // Retain the full (unfiltered) data so the distance filter can rebuild.
@@ -287,7 +455,7 @@
         const size = new THREE.Vector3(); box.getSize(size);
         sceneRadius = Math.max(size.length() / 2, 0.05);
 
-        applyDefaultView();
+        if (!keepView) applyDefaultView();
         applyPointFilter();
         pcOverlay.style.display = 'none';
         document.getElementById('pc-overlay').textContent = '';
@@ -463,8 +631,70 @@
       }
     });
 
-    sessionSelect.addEventListener('change', loadPairs);
-    pairSelect.addEventListener('change', () => { showPairImages(); });
+    // ── Live reconstruction loop ───────────────────────────────────────
+    const liveBtn = document.getElementById('live-btn');
+    let liveOn = false;
+    let liveScene = null;
+    let liveFirstFrame = true;
+
+    async function startLive() {
+      const session = selectedSession();
+      if (!session) return;
+      const subsample = document.getElementById('subsample-select').value;
+      try {
+        const res = await fetch(`/live-reconstruct/start?session=${encodeURIComponent(session)}&subsample=${subsample}`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'failed to start');
+        liveOn = true; liveScene = data.scene; liveFirstFrame = true;
+        liveBtn.textContent = 'Stop live'; liveBtn.classList.add('live-on');
+        reconBtn.disabled = true;
+        setStatus('live: starting…');
+      } catch (e) {
+        setStatus(String(e.message || e), 'err');
+      }
+    }
+
+    async function stopLive() {
+      try { await fetch('/live-reconstruct/stop', { method: 'POST' }); } catch (e) {}
+      liveOn = false; liveScene = null;
+      liveBtn.textContent = 'Start live'; liveBtn.classList.remove('live-on');
+      reconBtn.disabled = false;
+      // Restore the images selected in the pair dropdown.
+      showPairImages();
+      setStatus('live stopped');
+    }
+
+    liveBtn.addEventListener('click', () => { liveOn ? stopLive() : startLive(); });
+
+    // SSE: reload the cloud whenever a new live frame is ready.
+    const es = new EventSource('/events');
+    es.onmessage = (ev) => {
+      let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg.live_recon === 'done') {
+        loadPLY(`/ply/${encodeURIComponent(msg.scene)}?t=${Date.now()}`, !liveFirstFrame);
+        liveFirstFrame = false;
+        // Show the frames the loop just grabbed (not the selected pair).
+        const t = Date.now();
+        img1.src = `/frame/1?t=${t}`;
+        img2.src = `/frame/2?t=${t}`;
+        // Rebuild the frusta from those same live frames.
+        fetchCameras(true);
+        renderInfo({ timing: msg.timing, stats: msg.stats, profile: {} });
+        const lt = msg.loop_timing;
+        if (lt) {
+          setStatus(`live f${msg.frame} · loop ${(lt.loop_ms/1000).toFixed(1)}s ` +
+                    `(grab ${lt.capture_ms}ms · req ${lt.request_ms}ms) · ` +
+                    `${msg.stats?.points_kept ?? '?'} pts`, 'ok');
+        } else {
+          setStatus(`live · frame ${msg.frame} · ${msg.stats?.points_kept ?? '?'} pts`, 'ok');
+        }
+      } else if (msg.live_recon_error) {
+        setStatus(`live error: ${msg.live_recon_error}`, 'err');
+      }
+    };
+
+    sessionSelect.addEventListener('change', () => { if (liveOn) stopLive(); loadPairs(); });
+    pairSelect.addEventListener('change', () => { if (!liveOn) showPairImages(); });
     document.getElementById('dist-input').addEventListener('change', applyPointFilter);
     document.getElementById('dist-input').addEventListener('input', applyPointFilter);
     document.getElementById('cone-input').addEventListener('change', applyPointFilter);
