@@ -112,6 +112,14 @@ class ProcessingService:
 
             logger.info(f"Processing pair with render_cameras={render_cameras}")
 
+            if not render_cameras and self.output_dir is not None:
+                import shutil
+
+                for pyramid_dir in self.output_dir.glob("camera_pyramids_*"):
+                    if pyramid_dir.is_dir():
+                        shutil.rmtree(pyramid_dir)
+                        logger.debug(f"Removed stale camera pyramids: {pyramid_dir}")
+
             # Process the pair with SAM if available
             logger.info(f"Processing with SAM: {sam_instance is not None}, Point prompts: {point_prompt_1}, {point_prompt_2}")
 

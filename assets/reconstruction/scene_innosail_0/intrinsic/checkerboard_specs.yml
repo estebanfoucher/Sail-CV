@@ -1,0 +1,4 @@
+inner_corners_x: 10
+inner_corners_y: 7
+square_size_mm: 15
+description: "10x7 inner corners checkerboard with 15mm squares"

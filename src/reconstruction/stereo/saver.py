@@ -10,7 +10,7 @@ from loguru import logger
 
 
 def save_point_cloud_ply(
-    points: np.ndarray, colors: np.ndarray, filename: str, bound_distance: float = 20
+    points: np.ndarray, colors: np.ndarray, filename: str, bound_distance: float = 1.0
 ) -> None:
     """
     Save point cloud as PLY file.
@@ -96,7 +96,7 @@ def save_pixel_pairs(
 
 
 def save_point_cloud_obj(
-    points: np.ndarray, colors: np.ndarray, filename: str, bound_distance: float = 20
+    points: np.ndarray, colors: np.ndarray, filename: str, bound_distance: float = 1.0
 ) -> None:
     """
     Save point cloud as OBJ file.

@@ -42,12 +42,16 @@ class PointCloudVisualizer:
         return model3d_viewer, viz_status
 
     @staticmethod
-    def update_point_cloud_display(ply_file_path: Optional[str]) -> Tuple[Optional[str], str]:
+    def update_point_cloud_display(
+        ply_file_path: Optional[str],
+        include_camera_pyramids: bool = True,
+    ) -> Tuple[Optional[str], str]:
         """
-        Update the point cloud display with new file and camera pyramids
+        Update the point cloud display with new file and optional camera pyramids.
 
         Args:
             ply_file_path: Path to the PLY file (we'll convert to OBJ for better compatibility)
+            include_camera_pyramids: If False, show only the point cloud (no camera pyramids)
 
         Returns:
             tuple: (combined_obj_file_path, status_message)
@@ -66,35 +70,28 @@ class PointCloudVisualizer:
             if not os.path.exists(point_cloud_obj):
                 return None, f"❌ Point cloud OBJ file not found: {point_cloud_obj}"
 
-            # Look for camera pyramid OBJ files
-            camera_obj_files = []
-            print(f"Looking for camera pyramid files in: {ply_dir}")
-            print(f"Base name: {base_name}")
-            if os.path.exists(ply_dir):
-                all_files = os.listdir(ply_dir)
-                print(f"All files in directory: {all_files}")
-
-                # Look for camera pyramid subdirectory
-                # Extract frame number from base_name (e.g., "point_cloud_frame_26" -> "frame_26")
+            camera_obj_files: list[str] = []
+            if include_camera_pyramids:
                 frame_name = base_name.replace("point_cloud_", "")
-                camera_pyramid_dir = os.path.join(ply_dir, f"camera_pyramids_{frame_name}")
-                print(f"Looking for camera pyramid directory: {camera_pyramid_dir}")
-
+                camera_pyramid_dir = os.path.join(
+                    ply_dir, f"camera_pyramids_{frame_name}"
+                )
                 if os.path.exists(camera_pyramid_dir):
-                    pyramid_files = os.listdir(camera_pyramid_dir)
-                    print(f"Files in camera pyramid directory: {pyramid_files}")
-                    # Look for camera pyramid files with the correct naming pattern
-                    for file in pyramid_files:
-                        if (file.startswith("camera_1_pyramid") or file.startswith("camera_2_pyramid")) and file.endswith('.obj'):
-                            camera_obj_files.append(os.path.join(camera_pyramid_dir, file))
-                            print(f"Found camera pyramid OBJ file: {file}")
-                else:
-                    print(f"Camera pyramid directory not found: {camera_pyramid_dir}")
-            print(f"Camera pyramid OBJ files found: {len(camera_obj_files)}")
+                    for file in os.listdir(camera_pyramid_dir):
+                        if (
+                            file.startswith("camera_1_pyramid")
+                            or file.startswith("camera_2_pyramid")
+                        ) and file.endswith(".obj"):
+                            camera_obj_files.append(
+                                os.path.join(camera_pyramid_dir, file)
+                            )
 
-            # Combine all OBJ files into one
-            combined_obj_path = os.path.join(ply_dir, f"combined_{base_name}.obj")
-            PointCloudVisualizer._combine_obj_files([point_cloud_obj] + camera_obj_files, combined_obj_path)
+            obj_paths = [point_cloud_obj] + camera_obj_files
+            combined_obj_path = os.path.join(
+                ply_dir,
+                f"combined_{base_name}{'_with_cameras' if camera_obj_files else ''}.obj",
+            )
+            PointCloudVisualizer._combine_obj_files(obj_paths, combined_obj_path)
 
             # Get file size and point count for status
             file_size = os.path.getsize(combined_obj_path) / 1024  # KB

@@ -1,0 +1,6 @@
+pattern_type: charuco
+charuco:
+  checker_size: 0.015  # 50mm in meters
+  target_size: 0.011  # 37mm in meters
+  array_size: [11, 8]  # [squares_x, squares_y]
+  dictionary: "DICT_4X4_50"

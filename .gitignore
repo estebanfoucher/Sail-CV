@@ -114,6 +114,8 @@ ehthumbs.db
 *.jpeg
 *.png
 !assets/**/*.png
+!assets/reconstruction/scene_innosail_0/**/*.jpg
+!assets/reconstruction/scene_innosail_0/**/*.jpeg
 *.bmp
 *.tiff
 *.tif

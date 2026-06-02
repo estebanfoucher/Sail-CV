@@ -1,0 +1,8 @@
+
+==================================================STEREO CALIBRATION RESULTS==================================================
+Success: True
+Reprojection Error: 1.185198
+Number of Correspondences: 223
+Rotation (roll, pitch, yaw): (-4.11°, 16.39°, -5.11°)
+Translation: (-0.126866, 0.004056, 0.014771) m
+Computed baseline distance: 0.127787 m

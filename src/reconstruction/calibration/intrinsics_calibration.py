@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 from loguru import logger
 
+from .image_utils import load_orientation_corrected_image
 from .utils import load_parameters
 
 # High-performance checkerboard detector thresholds
@@ -415,6 +416,109 @@ def find_corners_in_images(
         f"Successfully processed {len(successful_images)}/{len(image_numbers_list)} images"
     )
     return object_points, image_points, successful_images
+
+
+def find_corners_in_image_paths(
+    image_paths: list[Path | str],
+    pattern_size: tuple[int, int],
+    square_size: float,
+    target_H: int | None = None,
+    target_W: int | None = None,
+) -> tuple[list, list, list[str]]:
+    """Find checkerboard corners in a list of image files (no video reader)."""
+    object_points: list = []
+    image_points: list = []
+    successful_paths: list[str] = []
+
+    objp = np.zeros((pattern_size[0] * pattern_size[1], 3), np.float32)
+    objp[:, :2] = np.mgrid[0 : pattern_size[0], 0 : pattern_size[1]].T.reshape(-1, 2)
+    objp *= square_size
+
+    if target_H is not None and target_W is not None:
+        from stereo.image import crop_to_match_resolution
+
+    for image_path in sorted(image_paths):
+        path_str = str(image_path)
+        try:
+            frame = load_orientation_corrected_image(path_str)
+        except (OSError, ValueError) as exc:
+            logger.warning(f"Could not read image {path_str}: {exc}")
+            continue
+
+        if target_H is not None and target_W is not None:
+            H, W = frame.shape[:2]
+            if target_H != H or target_W != W:
+                frame = crop_to_match_resolution(frame, target_H, target_W)
+
+        found, corners = detect_checkerboard_fast(frame, pattern_size, debug=False)
+        if found and corners is not None:
+            object_points.append(objp)
+            image_points.append(corners)
+            successful_paths.append(path_str)
+            logger.debug(f"Found corners in {Path(path_str).name}")
+
+    logger.info(
+        f"Checkerboard detected in {len(successful_paths)}/{len(image_paths)} images"
+    )
+    return object_points, image_points, successful_paths
+
+
+def calibrate_camera_from_image_folder(
+    image_folder: Path | str,
+    checkerboard_specs_path: str,
+    save_path: str,
+    target_H: int | None = None,
+    target_W: int | None = None,
+    glob_pattern: str = "*.jpg",
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """Calibrate intrinsics from still images in a folder."""
+    folder = Path(image_folder)
+    specs = load_parameters(checkerboard_specs_path)
+    pattern_size = (
+        specs["inner_corners_x"],
+        specs["inner_corners_y"],
+    )
+    square_size = specs["square_size_mm"]
+    image_paths = sorted(folder.glob(glob_pattern))
+
+    object_points, image_points, successful_paths = find_corners_in_image_paths(
+        image_paths,
+        pattern_size,
+        square_size,
+        target_H=target_H,
+        target_W=target_W,
+    )
+    if not object_points:
+        raise RuntimeError(f"No checkerboard detections in {folder}")
+
+    sample = load_orientation_corrected_image(successful_paths[0])
+    if target_H is not None and target_W is not None:
+        from stereo.image import crop_to_match_resolution
+
+        sample = crop_to_match_resolution(sample, target_H, target_W)
+    image_size = (sample.shape[1], sample.shape[0])
+
+    camera_matrix, dist_coeffs, reprojection_error = calibrate_camera(
+        object_points, image_points, image_size
+    )
+
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(save_path, "w") as f:
+        json.dump(
+            {
+                "camera_matrix": camera_matrix.tolist(),
+                "dist_coeffs": dist_coeffs.tolist(),
+                "reprojection_error": reprojection_error,
+            },
+            f,
+            indent=2,
+        )
+    logger.info(
+        f"Saved intrinsics to {save_path} "
+        f"(reprojection_error={reprojection_error:.4f}px, "
+        f"{len(successful_paths)} images)"
+    )
+    return camera_matrix, dist_coeffs, reprojection_error
 
 
 def calibrate_camera(

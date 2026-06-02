@@ -258,8 +258,9 @@ class EventHandler:
                 # Update download file component (use download_file_path which may be a zip)
                 download_file_update = gr.File(value=download_file_path, visible=True)
 
-                # Update 3D visualization (use original ply_file_path to find camera pyramids)
-                obj_file_path, viz_status = PointCloudVisualizer.update_point_cloud_display(ply_file_path)
+                obj_file_path, viz_status = PointCloudVisualizer.update_point_cloud_display(
+                    ply_file_path, include_camera_pyramids=render_cameras
+                )
 
                 # Update Model3D component
                 if obj_file_path:
