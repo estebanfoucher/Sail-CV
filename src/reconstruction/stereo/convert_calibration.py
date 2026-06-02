@@ -87,6 +87,40 @@ def transform_camera_matrix(camera_matrix, transform_params):
     return K
 
 
+def flatten_viewer_calibration(calibration_data):
+    """Normalize a viewer-style nested calibration into the flat pipeline schema.
+
+    The viewer writes calibration.json as
+        {"intrinsics": {"cam1": {"camera_matrix", "dist_coeffs"}, "cam2": {...}},
+         "extrinsics": {"rotation_matrix", "translation_vector"}, "image_size": [...]}
+    while the reconstruction pipeline expects flat keys
+        {"camera_matrix1", "camera_matrix2", "dist_coeffs1", "dist_coeffs2",
+         "rotation_matrix", "translation_vector", "image_size"}.
+
+    Already-flat calibrations are returned unchanged.
+    """
+    if "camera_matrix1" in calibration_data:
+        return calibration_data
+
+    intr = calibration_data["intrinsics"]
+    extr = calibration_data["extrinsics"]
+
+    def _dist(coeffs):
+        # Pipeline reads dist_coeffs1[0]; keep the extra nesting level.
+        arr = np.array(coeffs, dtype=np.float64).reshape(1, -1)
+        return arr.tolist()
+
+    return {
+        "camera_matrix1": intr["cam1"]["camera_matrix"],
+        "camera_matrix2": intr["cam2"]["camera_matrix"],
+        "dist_coeffs1": _dist(intr["cam1"]["dist_coeffs"]),
+        "dist_coeffs2": _dist(intr["cam2"]["dist_coeffs"]),
+        "rotation_matrix": extr["rotation_matrix"],
+        "translation_vector": extr["translation_vector"],
+        "image_size": calibration_data["image_size"],
+    }
+
+
 def convert_calibration_parameters(
     calibration_data, original_size=None, target_size=512, patch_size=16
 ):
@@ -102,6 +136,9 @@ def convert_calibration_parameters(
     Returns:
         Converted calibration data
     """
+    # Accept either the viewer's nested schema or the flat pipeline schema.
+    calibration_data = flatten_viewer_calibration(calibration_data)
+
     # Use image_size from calibration_data if original_size not provided
     if original_size is None:
         if "image_size" in calibration_data:

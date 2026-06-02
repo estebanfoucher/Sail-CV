@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D Reconstruction</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a0a; color: #eee; font-family: monospace; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+    #header {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 10px 16px; border-bottom: 1px solid #1a1a1a; flex-shrink: 0;
+    }
+    #header h1 { font-size: 13px; color: #555; font-weight: normal; margin-right: 8px; }
+    a.nav { font-size: 11px; color: #888; text-decoration: none; border: 1px solid #333; padding: 4px 10px; border-radius: 4px; }
+    button {
+      background: #1a1a1a; color: #eee; border: 1px solid #444;
+      padding: 5px 14px; border-radius: 4px; font-family: monospace; font-size: 12px; cursor: pointer;
+    }
+    button:disabled { opacity: 0.4; cursor: default; }
+    #recon-btn { border-color: #9b59b6; color: #b07cc6; }
+    select {
+      background: #1a1a1a; color: #eee; border: 1px solid #444;
+      padding: 5px 8px; border-radius: 4px; font-family: monospace; font-size: 12px; max-width: 240px;
+    }
+    .sep { width: 1px; height: 20px; background: #222; }
+    #status { font-size: 11px; color: #555; margin-left: auto; }
+    #status.ok { color: #2ecc71; }
+    #status.err { color: #e74c3c; }
+
+    #main { flex: 1; display: flex; overflow: hidden; background: #050505; }
+    #left { width: 38%; min-width: 320px; display: flex; flex-direction: column; border-right: 1px solid #1a1a1a; overflow-y: auto; }
+    .imgwrap { padding: 8px; }
+    .imgwrap .cap { font-size: 10px; color: #555; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .imgwrap img { width: 100%; display: block; border: 1px solid #1a1a1a; border-radius: 4px; background: #000; min-height: 40px; }
+    #pc-pane { flex: 1; position: relative; overflow: hidden; }
+    #pc-canvas { width: 100%; height: 100%; display: block; }
+    #pc-overlay {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      font-size: 12px; color: #444; pointer-events: none; text-align: center;
+    }
+    #pc-hint { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #333; pointer-events: none; }
+
+    #info {
+      flex-shrink: 0; padding: 8px 12px; border-top: 1px solid #1a1a1a; background: #080808;
+      font-size: 11px; color: #888; display: flex; flex-wrap: wrap; gap: 16px;
+    }
+    #info b { color: #ddd; font-weight: normal; }
+    #info .grp { color: #555; }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <h1>3D Reconstruction</h1>
+    <a class="nav" href="/">← 3D Viewer</a>
+    <a class="nav" href="/screenshots.html">Screenshots</a>
+    <div class="sep"></div>
+    <select id="session-select"></select>
+    <select id="pair-select"></select>
+    <label style="font-size:11px;color:#888">subsample
+      <select id="subsample-select"
+              title="MASt3R matching stride. Lower = denser cloud / slower; higher = sparser / faster."
+              style="margin-left:4px;background:#1a1a1a;color:#eee;border:1px solid #444;padding:2px 4px;font-family:monospace;font-size:11px">
+        <option value="16">16 (sparse)</option>
+        <option value="8" selected>8 (default)</option>
+        <option value="4">4</option>
+        <option value="2">2</option>
+        <option value="1">1 (dense)</option>
+      </select>
+    </label>
+    <button id="recon-btn">Reconstruct</button>
+    <div class="sep"></div>
+    <label style="font-size:11px;color:#888">max dist (m)
+      <input type="number" id="dist-input" value="0" min="0" step="0.05"
+             title="0 = no limit. Filters points by distance from the camera-baseline midpoint."
+             style="width:64px;margin-left:4px;background:#1a1a1a;color:#eee;border:1px solid #444;padding:2px 4px;font-family:monospace;font-size:11px" />
+    </label>
+    <label style="font-size:11px;color:#888">cone (°)
+      <input type="number" id="cone-input" value="90" min="0" max="180" step="5"
+             title="Full aperture angle of a cone at the camera-baseline midpoint, pointing along the averaged camera axis. Keeps points inside the cone. 0 or ≥180 = no limit."
+             style="width:64px;margin-left:4px;background:#1a1a1a;color:#eee;border:1px solid #444;padding:2px 4px;font-family:monospace;font-size:11px" />
+    </label>
+    <span id="status"></span>
+  </div>
+
+  <div id="main">
+    <div id="left">
+      <div class="imgwrap"><div class="cap">cam1</div><img id="img1" src="" alt="cam1" /></div>
+      <div class="imgwrap"><div class="cap">cam2</div><img id="img2" src="" alt="cam2" /></div>
+    </div>
+    <div id="pc-pane">
+      <canvas id="pc-canvas"></canvas>
+      <div id="pc-overlay">Select a session + pair, then Reconstruct.</div>
+      <div id="pc-hint">drag · scroll · right-drag</div>
+    </div>
+  </div>
+
+  <div id="info"></div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+
+    // ── Three.js setup ─────────────────────────────────────────────────
+    const pcPane = document.getElementById('pc-pane');
+    const pcCanvas = document.getElementById('pc-canvas');
+    const pcOverlay = document.getElementById('pc-overlay');
+
+    const renderer = new THREE.WebGLRenderer({ canvas: pcCanvas, antialias: false });
+    renderer.setPixelRatio(window.devicePixelRatio);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050505);
+    scene.add(new THREE.AxesHelper(0.1));
+
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.001, 1000);
+    camera.position.set(0, 0, 1);
+
+    const controls = new OrbitControls(camera, pcCanvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.1;
+
+    let pointsMesh = null;
+    let fullPositions = null;   // Float32Array of all PLY xyz (unfiltered)
+    let fullColors = null;      // Float32Array of all PLY rgb (or null)
+    let cameraMidpoint = null;  // [x,y,z] midpoint between the two camera centers
+    let cam1View = null;        // {pos, forward, up} of camera 1 for default framing
+    let coneAxis = null;        // normalized avg of the two camera forward axes
+    let sceneCenter = null;     // THREE.Vector3 centre of the loaded cloud
+    let sceneRadius = 0;        // bounding radius of the loaded cloud
+
+    function norm3(v) {
+      const m = Math.hypot(v[0], v[1], v[2]) || 1;
+      return [v[0]/m, v[1]/m, v[2]/m];
+    }
+
+    // Frame the cloud from camera 1's orientation (CV convention: +Y down),
+    // so the default view is upright rather than flipped. Falls back to a
+    // +Z-forward / -Y-up view (cam 1 is the calibration reference) if no
+    // frustum pose is available yet.
+    function applyDefaultView() {
+      if (!sceneCenter) return;
+      const c = sceneCenter, r = sceneRadius;
+      const fwd = cam1View ? cam1View.forward : [0, 0, 1];
+      const up  = cam1View ? cam1View.up      : [0, -1, 0];
+      const dist = r * 2.5;
+      camera.up.set(up[0], up[1], up[2]);
+      camera.position.set(c.x - fwd[0]*dist, c.y - fwd[1]*dist, c.z - fwd[2]*dist);
+      camera.near = r / 100;
+      camera.far = r * 100;
+      camera.updateProjectionMatrix();
+      controls.target.copy(c);
+      controls.update();
+    }
+
+    // ── Camera frusta (wireframe pyramids + image-plane base point cloud) ──
+    let cameraObjs = [];
+    let cameraBases = [];
+    const CAM_COLORS = [0xff4040, 0x40a0ff];
+
+    function clearCameras() {
+      for (const m of cameraObjs) { scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
+      for (const b of cameraBases) { if (b) { scene.remove(b); b.geometry.dispose(); b.material.dispose(); } }
+      cameraObjs = []; cameraBases = [];
+    }
+
+    function drawCameraFrusta(payload) {
+      clearCameras();
+      const cams = payload.cameras || [];
+      if (cams.length >= 2 && cams[0].vertices && cams[1].vertices) {
+        const a = cams[0].vertices[0], b = cams[1].vertices[0];
+        cameraMidpoint = [(a[0]+b[0])/2, (a[1]+b[1])/2, (a[2]+b[2])/2];
+      } else {
+        cameraMidpoint = null;
+      }
+      // forward = base centre − apex (optical axis); vertices = [apex, TL, TR, BR, BL]
+      const camForward = (v) => {
+        const apex = v[0];
+        const baseC = [ (v[1][0]+v[2][0]+v[3][0]+v[4][0])/4,
+                        (v[1][1]+v[2][1]+v[3][1]+v[4][1])/4,
+                        (v[1][2]+v[2][2]+v[3][2]+v[4][2])/4 ];
+        return norm3([baseC[0]-apex[0], baseC[1]-apex[1], baseC[2]-apex[2]]);
+      };
+
+      // Capture camera 1's pose so the default view mirrors its POV.
+      // up = (top edge − bottom edge), i.e. toward the top of the image.
+      if (cams.length >= 1 && cams[0].vertices && cams[0].vertices.length >= 5) {
+        const v = cams[0].vertices, apex = v[0];
+        const fwd = camForward(v);
+        const topMid = [ (v[1][0]+v[2][0])/2, (v[1][1]+v[2][1])/2, (v[1][2]+v[2][2])/2 ];
+        const botMid = [ (v[3][0]+v[4][0])/2, (v[3][1]+v[4][1])/2, (v[3][2]+v[4][2])/2 ];
+        const up = norm3([topMid[0]-botMid[0], topMid[1]-botMid[1], topMid[2]-botMid[2]]);
+        cam1View = { pos: apex, forward: fwd, up: up };
+        applyDefaultView();
+      } else {
+        cam1View = null;
+      }
+
+      // Cone axis = normalized average of both cameras' optical axes.
+      if (cams.length >= 2 && cams[0].vertices && cams[1].vertices &&
+          cams[0].vertices.length >= 5 && cams[1].vertices.length >= 5) {
+        const f1 = camForward(cams[0].vertices), f2 = camForward(cams[1].vertices);
+        coneAxis = norm3([f1[0]+f2[0], f1[1]+f2[1], f1[2]+f2[2]]);
+      } else {
+        coneAxis = null;
+      }
+      cams.forEach((cam, i) => {
+        const verts = cam.vertices, edges = cam.edges;
+        const wp = new Float32Array(edges.length * 6);
+        for (let e = 0; e < edges.length; e++) {
+          const [a, b] = edges[e];
+          wp[e*6+0]=verts[a][0]; wp[e*6+1]=verts[a][1]; wp[e*6+2]=verts[a][2];
+          wp[e*6+3]=verts[b][0]; wp[e*6+4]=verts[b][1]; wp[e*6+5]=verts[b][2];
+        }
+        const wgeo = new THREE.BufferGeometry();
+        wgeo.setAttribute('position', new THREE.BufferAttribute(wp, 3));
+        const seg = new THREE.LineSegments(wgeo, new THREE.LineBasicMaterial({ color: CAM_COLORS[i % CAM_COLORS.length] }));
+        scene.add(seg); cameraObjs.push(seg);
+
+        const bp = cam.base_points || [], bc = cam.base_colors || [];
+        if (bp.length > 0) {
+          const pos = new Float32Array(bp.length * 3), col = new Float32Array(bp.length * 3);
+          for (let k = 0; k < bp.length; k++) {
+            pos[k*3]=bp[k][0]; pos[k*3+1]=bp[k][1]; pos[k*3+2]=bp[k][2];
+            col[k*3]=bc[k][0]/255; col[k*3+1]=bc[k][1]/255; col[k*3+2]=bc[k][2]/255;
+          }
+          const bgeo = new THREE.BufferGeometry();
+          bgeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+          bgeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+          const pts = new THREE.Points(bgeo, new THREE.PointsMaterial({ size: 0.006, vertexColors: true, sizeAttenuation: true }));
+          scene.add(pts); cameraBases.push(pts);
+        } else {
+          cameraBases.push(null);
+        }
+      });
+    }
+
+    async function fetchCameras() {
+      const session = selectedSession(), pair = selectedPair();
+      if (!session || !pair) { clearCameras(); return; }
+      try {
+        const q = `session=${encodeURIComponent(session)}&kind=${pair.kind}&timestamp=${encodeURIComponent(pair.timestamp)}`;
+        const res = await fetch(`/session/cameras?${q}`);
+        if (res.ok) drawCameraFrusta(await res.json());
+        else clearCameras();
+      } catch (e) { clearCameras(); }
+    }
+
+    function resizeRenderer() {
+      const w = pcPane.clientWidth, h = pcPane.clientHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    resizeRenderer();
+    new ResizeObserver(resizeRenderer).observe(pcPane);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    function loadPLY(url) {
+      const loader = new PLYLoader();
+      loader.load(url, (geometry) => {
+        // Retain the full (unfiltered) data so the distance filter can rebuild.
+        const posAttr = geometry.getAttribute('position');
+        const colAttr = geometry.getAttribute('color');
+        fullPositions = new Float32Array(posAttr.array);
+        fullColors = colAttr ? new Float32Array(colAttr.array) : null;
+
+        geometry.computeBoundingBox();
+        const box = geometry.boundingBox;
+        sceneCenter = new THREE.Vector3(); box.getCenter(sceneCenter);
+        const size = new THREE.Vector3(); box.getSize(size);
+        sceneRadius = Math.max(size.length() / 2, 0.05);
+
+        applyDefaultView();
+        applyPointFilter();
+        pcOverlay.style.display = 'none';
+        document.getElementById('pc-overlay').textContent = '';
+      }, undefined, (err) => {
+        pcOverlay.style.display = 'block';
+        pcOverlay.textContent = 'Failed to load point cloud.';
+        console.error(err);
+      });
+    }
+
+    // Rebuild pointsMesh from fullPositions/fullColors, keeping only points
+    // within `maxDist` metres of the camera-baseline midpoint (0 = no limit).
+    function applyPointFilter() {
+      if (!fullPositions) return;
+      const maxDist = parseFloat(document.getElementById('dist-input').value) || 0;
+      const useDist = maxDist > 0 && cameraMidpoint;
+      const maxDist2 = maxDist * maxDist;
+
+      const coneDeg = parseFloat(document.getElementById('cone-input').value) || 0;
+      const useCone = coneDeg > 0 && coneDeg < 180 && coneAxis && cameraMidpoint;
+      // full aperture `coneDeg` → half-angle; keep if cos(angle) ≥ cos(half-angle)
+      const cosHalf = Math.cos((coneDeg / 2) * Math.PI / 180);
+
+      const n = fullPositions.length / 3;
+      const keepPos = [], keepCol = [];
+      for (let i = 0; i < n; i++) {
+        const x = fullPositions[i*3], y = fullPositions[i*3+1], z = fullPositions[i*3+2];
+        if (useDist) {
+          const dx = x - cameraMidpoint[0], dy = y - cameraMidpoint[1], dz = z - cameraMidpoint[2];
+          if (dx*dx + dy*dy + dz*dz > maxDist2) continue;
+        }
+        if (useCone) {
+          const dx = x - cameraMidpoint[0], dy = y - cameraMidpoint[1], dz = z - cameraMidpoint[2];
+          const len = Math.hypot(dx, dy, dz) || 1;
+          const cosA = (dx*coneAxis[0] + dy*coneAxis[1] + dz*coneAxis[2]) / len;
+          if (cosA < cosHalf) continue;
+        }
+        keepPos.push(x, y, z);
+        if (fullColors) keepCol.push(fullColors[i*3], fullColors[i*3+1], fullColors[i*3+2]);
+      }
+
+      if (pointsMesh) { scene.remove(pointsMesh); pointsMesh.geometry.dispose(); pointsMesh.material.dispose(); }
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(keepPos), 3));
+      const hasColor = fullColors && keepCol.length > 0;
+      if (hasColor) geom.setAttribute('color', new THREE.BufferAttribute(new Float32Array(keepCol), 3));
+      const mat = new THREE.PointsMaterial({ size: 0.004, sizeAttenuation: true,
+        vertexColors: hasColor, color: hasColor ? 0xffffff : 0x88aaff });
+      pointsMesh = new THREE.Points(geom, mat);
+      scene.add(pointsMesh);
+    }
+
+    // ── Session / pair selection ───────────────────────────────────────
+    const sessionSelect = document.getElementById('session-select');
+    const pairSelect = document.getElementById('pair-select');
+    const reconBtn = document.getElementById('recon-btn');
+    const statusEl = document.getElementById('status');
+    const img1 = document.getElementById('img1');
+    const img2 = document.getElementById('img2');
+    const infoEl = document.getElementById('info');
+
+    const KIND_LABEL = { normal: 'Normal', intrinsic: 'Intrinsic', extrinsic: 'Extrinsic' };
+
+    function setStatus(msg, cls = '') { statusEl.textContent = msg; statusEl.className = cls; }
+    const selectedSession = () => sessionSelect.value || null;
+    function selectedPair() {
+      const v = pairSelect.value;
+      if (!v) return null;
+      const [kind, timestamp] = v.split('|');
+      return { kind, timestamp };
+    }
+
+    async function loadSessions(preferred) {
+      const { sessions, active } = await (await fetch('/sessions')).json();
+      sessionSelect.innerHTML = '';
+      for (const s of sessions) {
+        const opt = document.createElement('option');
+        opt.value = s; opt.textContent = s.replace('session_', '');
+        sessionSelect.appendChild(opt);
+      }
+      const target = preferred || active || sessions[0];
+      if (target) sessionSelect.value = target;
+      await loadPairs();
+    }
+
+    async function loadPairs() {
+      const session = selectedSession();
+      pairSelect.innerHTML = '';
+      img1.src = ''; img2.src = '';
+      if (!session) { reconBtn.disabled = true; return; }
+      const { pairs } = await (await fetch(`/session/pairs?session=${encodeURIComponent(session)}`)).json();
+      let count = 0;
+      for (const kind of ['normal', 'intrinsic', 'extrinsic']) {
+        for (const p of (pairs[kind] || [])) {
+          const opt = document.createElement('option');
+          opt.value = `${kind}|${p.timestamp}`;
+          opt.textContent = `${KIND_LABEL[kind]} · ${p.timestamp}`;
+          opt.dataset.cam1 = p.cam1; opt.dataset.cam2 = p.cam2;
+          pairSelect.appendChild(opt);
+          count++;
+        }
+      }
+      reconBtn.disabled = count === 0;
+      if (count === 0) {
+        const opt = document.createElement('option');
+        opt.textContent = 'no pairs'; opt.disabled = true;
+        pairSelect.appendChild(opt);
+      }
+      showPairImages();
+      showExistingScene();
+    }
+
+    function showPairImages() {
+      const session = selectedSession();
+      const opt = pairSelect.selectedOptions[0];
+      if (!session || !opt || !opt.dataset.cam1) { img1.src = ''; img2.src = ''; return; }
+      const { kind } = selectedPair();
+      const base = `/shot/${encodeURIComponent(session)}/${kind}`;
+      img1.src = `${base}/${opt.dataset.cam1}`;
+      img2.src = `${base}/${opt.dataset.cam2}`;
+      fetchCameras();
+    }
+
+    // Load an already-reconstructed cloud for this session if one exists.
+    async function showExistingScene() {
+      const session = selectedSession();
+      if (!session) return;
+      const scene = `recon_${session}`;
+      try {
+        const { scenes } = await (await fetch('/scenes')).json();
+        if (scenes.includes(scene)) {
+          loadPLY(`/ply/${encodeURIComponent(scene)}?t=${Date.now()}`);
+          pcOverlay.style.display = 'none';
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    function renderInfo(r) {
+      const t = r.timing || {}, p = r.profile || {}, s = r.stats || {};
+      const ms = (x) => x === undefined ? '—' : `${(x * 1000).toFixed(0)}ms`;
+      infoEl.innerHTML = `
+        <span class="grp">pts <b>${s.points_kept ?? '—'}</b>/${s.points_triangulated ?? '—'} kept</span>
+        <span class="grp">matches <b>${s.num_matches ?? '—'}</b></span>
+        <span class="grp">total <b>${t.total !== undefined ? t.total.toFixed(2) + 's' : '—'}</b></span>
+        <span class="grp">infer ${ms(t.inference)}</span>
+        <span class="grp">match ${ms(t.matching)}</span>
+        <span class="grp">tri ${ms(t.triangulation)}</span>
+        <span class="grp">gpu <b>${p.gpu_name ?? '—'}</b> ${p.gpu_mem_allocated_mb ? p.gpu_mem_allocated_mb.toFixed(0) + 'MB' : ''}</span>`;
+    }
+
+    reconBtn.addEventListener('click', async () => {
+      const session = selectedSession();
+      const pair = selectedPair();
+      if (!session || !pair) return;
+      reconBtn.disabled = true;
+      setStatus('reconstructing…');
+      pcOverlay.style.display = 'block';
+      pcOverlay.textContent = 'Running MASt3R inference…';
+      try {
+        const subsample = document.getElementById('subsample-select').value;
+        const q = `session=${encodeURIComponent(session)}&kind=${pair.kind}&timestamp=${encodeURIComponent(pair.timestamp)}&subsample=${subsample}`;
+        const res = await fetch(`/session/reconstruct?${q}`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'reconstruction failed');
+        renderInfo(data);
+        loadPLY(`/ply/${encodeURIComponent(data.scene)}?t=${Date.now()}`);
+        setStatus(`done · ${data.stats?.points_kept ?? '?'} pts`, 'ok');
+      } catch (e) {
+        pcOverlay.textContent = 'Reconstruction failed.';
+        setStatus(String(e.message || e), 'err');
+      } finally {
+        reconBtn.disabled = false;
+      }
+    });
+
+    sessionSelect.addEventListener('change', loadPairs);
+    pairSelect.addEventListener('change', () => { showPairImages(); });
+    document.getElementById('dist-input').addEventListener('change', applyPointFilter);
+    document.getElementById('dist-input').addEventListener('input', applyPointFilter);
+    document.getElementById('cone-input').addEventListener('change', applyPointFilter);
+    document.getElementById('cone-input').addEventListener('input', applyPointFilter);
+
+    loadSessions();
+  </script>
+</body>
+</html>

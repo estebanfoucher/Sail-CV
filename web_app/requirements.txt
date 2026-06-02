@@ -5,3 +5,8 @@ opencv-python>=4.5.0
 Pillow>=8.0.0
 loguru>=0.6.0
 python-dotenv>=1.0.0
+
+# Inference server (MASt3R-only reconstruction service)
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.9

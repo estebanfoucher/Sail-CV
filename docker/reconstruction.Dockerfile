@@ -33,6 +33,9 @@ COPY web_app/ /app/web_app/
 # Install web app dependencies
 RUN uv pip install --system -r /app/web_app/requirements.txt
 
+# Inference server dependencies
+RUN uv pip install --system fastapi "uvicorn[standard]" python-multipart
+
 # Set proper ownership and permissions
 RUN chown -R app_user:app_user /app/src /app/output /app/web_app && \
     chmod -R 755 /app/output /app/web_app
@@ -43,7 +46,8 @@ ENV PYTHONPATH="/app/src/reconstruction:/app/src:/app/mast3r:/app/mast3r/dust3r:
 # Switch to non-root user
 USER app_user
 
-EXPOSE 7860
+EXPOSE 7862
 
-WORKDIR /app/web_app
-CMD ["tail", "-f", "/dev/null"]
+# Launch the MASt3R-only inference server
+WORKDIR /app/src/reconstruction
+CMD ["sh", "-c", "uvicorn inference_server:app --host 0.0.0.0 --port ${PORT:-7862}"]

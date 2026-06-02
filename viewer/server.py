@@ -18,6 +18,8 @@ STATIC_DIR = Path(__file__).parent / "static"
 PORT = int(os.getenv("PORT", 7863))
 DOCKER_IMAGE = os.getenv("DOCKER_IMAGE", "docker-sailcv-3d-reconstruction:latest")
 CALIBRATION_PATH = Path(os.getenv("CALIBRATION_PATH", OUTPUT_DIR / "calibration" / "calibration.json")).resolve()
+# MASt3R-only reconstruction inference server (separate CUDA Docker service).
+INFERENCE_URL = os.getenv("INFERENCE_URL", "http://localhost:7862")
 
 sys.path.insert(0, str(PROJECT_DIR / "src" / "reconstruction"))
 from cameras.cameras import create_cameras_from_stereo_calibration
@@ -95,9 +97,8 @@ def _base_pointcloud(cam) -> tuple[list, list]:
 
     js = np.arange(W)
     rows = np.arange(H)
-    is_flipped = (H - 1 - rows)
     u = (js / max(W - 1, 1))[None, :]              # (1, W)
-    v = (is_flipped / max(H - 1, 1))[:, None]       # (H, 1)
+    v = (rows / max(H - 1, 1))[:, None]             # (H, 1) row 0 (image top) -> v=0
     w0 = (1 - u) * (1 - v)
     w1 = u * (1 - v)
     w2 = u * v
@@ -107,6 +108,43 @@ def _base_pointcloud(cam) -> tuple[list, list]:
     pts = verts.reshape(-1, 3).astype(np.float32).tolist()
     cols = img.reshape(-1, 3).astype(np.uint8).tolist()
     return pts, cols
+
+
+def _flatten_calibration(calibration: dict) -> dict:
+    """Convert nested session calibration to the flat keys the Camera factory expects."""
+    if "camera_matrix1" in calibration:
+        return calibration
+    intr, extr = calibration["intrinsics"], calibration["extrinsics"]
+    return {
+        "camera_matrix1": intr["cam1"]["camera_matrix"],
+        "camera_matrix2": intr["cam2"]["camera_matrix"],
+        "rotation_matrix": extr["rotation_matrix"],
+        "translation_vector": extr["translation_vector"],
+        "image_size": calibration["image_size"],
+    }
+
+
+def build_frusta(calibration: dict, img1: np.ndarray | None, img2: np.ndarray | None) -> dict:
+    """Build frusta + per-camera base point clouds from a (flat) stereo calibration."""
+    dummy = np.zeros((1, 1, 3), dtype=np.uint8)
+    cam1, cam2 = create_cameras_from_stereo_calibration(
+        calibration,
+        img1 if img1 is not None else dummy,
+        img2 if img2 is not None else dummy,
+        scale_factor=0.001,
+    )
+    out = []
+    for cam, img in ((cam1, img1), (cam2, img2)):
+        verts, edges = cam.get_pyramid_vertices(focal_length=PYRAMID_HEIGHT_M)
+        base_pts, base_cols = _base_pointcloud(cam) if img is not None else ([], [])
+        out.append({
+            "name": cam.name,
+            "vertices": verts.tolist(),
+            "edges": edges,
+            "base_points": base_pts,
+            "base_colors": base_cols,
+        })
+    return {"cameras": out}
 
 
 def compute_camera_frusta() -> dict | None:
@@ -120,26 +158,7 @@ def compute_camera_frusta() -> dict | None:
     live_dir = OUTPUT_DIR / "live"
     img1 = _load_frame_rgb(live_dir / "frame1.jpg")
     img2 = _load_frame_rgb(live_dir / "frame2.jpg")
-    dummy = np.zeros((1, 1, 3), dtype=np.uint8)
-    cam1, cam2 = create_cameras_from_stereo_calibration(
-        calibration,
-        img1 if img1 is not None else dummy,
-        img2 if img2 is not None else dummy,
-        scale_factor=0.001,
-    )
-
-    out = []
-    for cam, img in ((cam1, img1), (cam2, img2)):
-        verts, edges = cam.get_pyramid_vertices(focal_length=PYRAMID_HEIGHT_M)
-        base_pts, base_cols = _base_pointcloud(cam) if img is not None else ([], [])
-        out.append({
-            "name": cam.name,
-            "vertices": verts.tolist(),
-            "edges": edges,
-            "base_points": base_pts,
-            "base_colors": base_cols,
-        })
-    return {"cameras": out}
+    return build_frusta(calibration, img1, img2)
 
 CAMERAS = {
     "1": os.getenv("CAM1_URL", "rtsp://192.168.1.34:554/stream1"),
@@ -460,6 +479,51 @@ class _ImageFolderReader:
         return [cv2.imread(str(self.paths[i])) for i in indices]
 
 
+def call_inference_server(img1_bytes: bytes, img2_bytes: bytes, calibration: dict,
+                          subsample: int = 8, timeout: int = 300) -> dict:
+    """POST a stereo pair + calibration to the reconstruction inference server.
+
+    Returns the parsed JSON {timing, profile, stats, ply_base64}. Uses stdlib
+    urllib so the Jetson host process needs no extra dependencies.
+    """
+    import io
+    import uuid
+    from urllib.request import Request, urlopen
+
+    boundary = f"----sailcv{uuid.uuid4().hex}"
+    crlf = b"\r\n"
+    body = io.BytesIO()
+
+    def _field(name, value):
+        body.write(f"--{boundary}".encode() + crlf)
+        body.write(f'Content-Disposition: form-data; name="{name}"'.encode() + crlf + crlf)
+        body.write(str(value).encode() + crlf)
+
+    def _file(name, filename, content):
+        body.write(f"--{boundary}".encode() + crlf)
+        body.write(
+            f'Content-Disposition: form-data; name="{name}"; filename="{filename}"'.encode()
+            + crlf
+        )
+        body.write(b"Content-Type: image/jpeg" + crlf + crlf)
+        body.write(content + crlf)
+
+    _file("image1", "cam1.jpg", img1_bytes)
+    _file("image2", "cam2.jpg", img2_bytes)
+    _field("calibration", json.dumps(calibration))
+    _field("subsample", subsample)
+    body.write(f"--{boundary}--".encode() + crlf)
+
+    req = Request(
+        f"{INFERENCE_URL}/reconstruct",
+        data=body.getvalue(),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    with urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
 def _compute_session_intrinsics(intrinsic_dir: Path, cam: str, pattern_size, square_size, on_progress=None):
     """Calibrate one camera from a session's intrinsic checkerboard pairs.
 
@@ -669,6 +733,9 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/screenshots.html":
             self.serve_file(STATIC_DIR / "screenshots.html", "text/html")
 
+        elif path in ("/3d-reconstruction", "/reconstruction.html"):
+            self.serve_file(STATIC_DIR / "reconstruction.html", "text/html")
+
         elif path == "/scenes":
             scenes = []
             if OUTPUT_DIR.exists():
@@ -824,6 +891,36 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(400, {"error": "Invalid session"})
                 return
             self.send_json(200, {"session": session, "pairs": list_all_pairs(session)})
+
+        elif path == "/session/cameras":
+            from urllib.parse import parse_qs, urlparse
+            qs = parse_qs(urlparse(self.path).query)
+            session = qs.get("session", [None])[0]
+            if session is None or not _safe_segment(session):
+                self.send_json(400, {"error": "Invalid session"})
+                return
+            calibration = load_session_calibration(session)
+            if calibration is None:
+                self.send_json(404, {"error": f"No calibration for session {session}"})
+                return
+            kind = qs.get("kind", ["normal"])[0]
+            if kind not in SHOT_KINDS:
+                self.send_json(400, {"error": f"Invalid kind '{kind}'"})
+                return
+            ts = qs.get("timestamp", [None])[0]
+            pairs = list_pairs(session, kind)
+            img1 = img2 = None
+            if pairs:
+                pair = next((p for p in pairs if p["timestamp"] == ts), pairs[-1]) if ts else pairs[-1]
+                kind_dir = SCREENSHOT_DIR / session / kind
+                img1 = _load_frame_rgb(kind_dir / pair["cam1"])
+                img2 = _load_frame_rgb(kind_dir / pair["cam2"])
+            try:
+                payload = build_frusta(_flatten_calibration(calibration), img1, img2)
+            except Exception as e:
+                self.send_json(500, {"error": f"frustum compute failed: {e}"})
+                return
+            self.send_json(200, payload)
 
         elif path == "/session/calibration":
             from urllib.parse import parse_qs, urlparse
@@ -1009,6 +1106,62 @@ class Handler(BaseHTTPRequestHandler):
                 session_calib_state.update(running=True, session=session, status="starting", error=None, progress=None)
             threading.Thread(target=run_session_calibration, args=(session,), daemon=True).start()
             self.send_json(200, {"started": True, "session": session})
+
+        elif path == "/session/reconstruct":
+            # Send a stereo pair + calibration to the inference server, store the PLY.
+            import base64
+            from urllib.error import URLError
+            from urllib.parse import parse_qs, urlparse
+            qs = parse_qs(urlparse(self.path).query)
+            session = qs.get("session", [None])[0]
+            if session is None or not _safe_segment(session):
+                self.send_json(400, {"error": "Invalid session"})
+                return
+            calibration = load_session_calibration(session)
+            if calibration is None:
+                self.send_json(404, {"error": f"No calibration for session {session}"})
+                return
+            # Pick the requested pair, else the latest 'normal' pair.
+            kind = qs.get("kind", ["normal"])[0]
+            if kind not in SHOT_KINDS:
+                self.send_json(400, {"error": f"Invalid kind '{kind}'"})
+                return
+            ts = qs.get("timestamp", [None])[0]
+            pairs = list_pairs(session, kind)
+            if not pairs:
+                self.send_json(404, {"error": f"No {kind} pairs in session {session}"})
+                return
+            pair = next((p for p in pairs if p["timestamp"] == ts), pairs[-1]) if ts else pairs[-1]
+            kind_dir = SCREENSHOT_DIR / session / kind
+            img1 = (kind_dir / pair["cam1"]).read_bytes()
+            img2 = (kind_dir / pair["cam2"]).read_bytes()
+            subsample = int(qs.get("subsample", ["8"])[0])
+            try:
+                result = call_inference_server(img1, img2, calibration, subsample=subsample)
+            except URLError as e:
+                self.send_json(502, {"error": f"Inference server unreachable at {INFERENCE_URL}: {e}"})
+                return
+            except Exception as e:
+                self.send_json(500, {"error": f"Inference failed: {e}"})
+                return
+            scene = f"recon_{session}"
+            scene_dir = OUTPUT_DIR / scene
+            scene_dir.mkdir(parents=True, exist_ok=True)
+            (scene_dir / "point_cloud.ply").write_bytes(
+                base64.b64decode(result["ply_base64"]))
+            response = {
+                "session": session,
+                "scene": scene,
+                "pair": pair["timestamp"],
+                "timing": result.get("timing"),
+                "profile": result.get("profile"),
+                "stats": result.get("stats"),
+            }
+            log(f"[reconstruct] {session} pair {pair['timestamp']}: "
+                f"{result.get('stats', {}).get('points_kept')} pts "
+                f"in {result.get('timing', {}).get('total')}s")
+            broadcast({"reconstruct": "done", **response})
+            self.send_json(200, response)
 
         elif path == "/screenshot":
             # take_stereo_screenshot: grab both cameras simultaneously into the active session

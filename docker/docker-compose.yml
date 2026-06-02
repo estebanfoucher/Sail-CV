@@ -12,6 +12,8 @@ services:
     depends_on:
       base:
         condition: service_completed_successfully
+    working_dir: /app/src/reconstruction
+    command: ["sh", "-c", "uvicorn inference_server:app --host 0.0.0.0 --port ${PORT:-7862}"]
     ports:
       - "${PORT:-7862}:${PORT:-7862}"
     environment:
@@ -33,15 +35,15 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 12G
         reservations:
-          memory: 2G
+          memory: 4G
           devices:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
               options:
-                memory: 2048
+                memory: 8192
 
   tracking:
     build:
