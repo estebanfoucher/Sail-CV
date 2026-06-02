@@ -1,0 +1,5 @@
+path: /Users/estebanfoucher/workspace/Sail-CV/Sail-CV/custom_ds_UD_one_class_splitted
+train: train/images
+val: val/images
+nc: 1
+names: ['telltale']

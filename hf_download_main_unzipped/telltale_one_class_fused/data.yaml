@@ -1,0 +1,9 @@
+# YOLO dataset configuration (Fused: telltale one-class (sailboat + home))
+train: /content/data/train/images
+val: /content/data/val/images
+
+# Number of classes
+nc: 1
+
+# Class names
+names: ['telltale']

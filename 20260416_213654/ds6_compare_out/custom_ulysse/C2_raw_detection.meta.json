@@ -1,0 +1,18 @@
+{
+  "video": "/content/sailcv_repo/assets/tracking/DS_6/C2.mp4",
+  "width": 1280,
+  "height": 720,
+  "fps": 29.9940635467448,
+  "frames_processed": 944,
+  "total_detections": 24608,
+  "conf": 0.25,
+  "iou": 0.5,
+  "device": "cuda",
+  "force_fp32": true,
+  "class_names": {
+    "0": "telltale"
+  },
+  "tracking": false,
+  "detector_class": "src.tracking.detector.Detector",
+  "elapsed_sec": 70.65
+}

@@ -1,7 +1,8 @@
-"""Preview strips and optional YOLO box overlays."""
+"""Preview tiles/strips and optional YOLO box overlays."""
 
 from __future__ import annotations
 
+import math
 from pathlib import Path  # noqa: TC003
 
 import cv2
@@ -85,6 +86,54 @@ def save_strip_png(path: Path, strip_rgb: np.ndarray) -> None:
     bgr = cv2.cvtColor(strip_rgb, cv2.COLOR_RGB2BGR)
     if not cv2.imwrite(str(path), bgr):
         raise OSError(f"Failed to write {path}")
+
+
+def tile_grid(
+    images: list[np.ndarray],
+    *,
+    cols: int | None = None,
+    gap: int = 6,
+    max_tile_side: int = 640,
+    bg: tuple[int, int, int] = (255, 255, 255),
+) -> np.ndarray:
+    """Lay RGB panels in a grid (cols x rows). Tiles are letterboxed to a uniform size.
+
+    Args:
+        images: list of HxWx3 RGB panels.
+        cols: number of columns. Default: ``ceil(sqrt(N))``.
+        gap: spacing in pixels between tiles.
+        max_tile_side: longest side of a single tile after resize.
+        bg: background color filling gaps and letterboxing (RGB).
+    """
+    if not images:
+        raise ValueError("images must be non-empty")
+
+    n = len(images)
+    if cols is None or cols <= 0:
+        cols = max(1, math.ceil(math.sqrt(n)))
+    rows = max(1, math.ceil(n / cols))
+
+    resized = [resize_max_side(im, max_tile_side) for im in images]
+    tile_w = max(im.shape[1] for im in resized)
+    tile_h = max(im.shape[0] for im in resized)
+
+    bg_arr = np.array(bg, dtype=np.uint8)
+    grid_h = tile_h * rows + gap * (rows - 1)
+    grid_w = tile_w * cols + gap * (cols - 1)
+    canvas = np.full((grid_h, grid_w, 3), bg_arr, dtype=np.uint8)
+
+    for idx, im in enumerate(resized):
+        r, c = divmod(idx, cols)
+        ih, iw = im.shape[:2]
+        ox = c * (tile_w + gap) + (tile_w - iw) // 2
+        oy = r * (tile_h + gap) + (tile_h - ih) // 2
+        canvas[oy : oy + ih, ox : ox + iw] = im
+    return canvas
+
+
+def save_tiles_png(path: Path, tiles_rgb: np.ndarray) -> None:
+    """Alias of :func:`save_strip_png` kept for naming clarity."""
+    save_strip_png(path, tiles_rgb)
 
 
 def write_preview_index_html(preview_dir: Path, rel_pngs: list[str]) -> None:

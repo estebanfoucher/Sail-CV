@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 import argparse
+import os
 import random
 import shutil
 import tempfile
 import zipfile
+from multiprocessing import Pool
 from pathlib import Path
 
+from tqdm import tqdm
+
 from .apply import augment_yolo_sample
-from .pipelines import build_augmentation_pipeline
+from .export_worker import export_flat_one_image
+from .pipelines import build_augmentation_pipeline, seed_augmentation_globals
 from .viz import (
     draw_yolo_boxes_rgb,
-    horizontal_strip,
-    save_strip_png,
+    save_tiles_png,
+    tile_grid,
     write_preview_index_html,
 )
 from .yolo_io import (
@@ -92,7 +97,16 @@ def main() -> None:
         "--no-index", action="store_true", help="Skip writing previews/index.html"
     )
     parser.add_argument(
-        "--max-side", type=int, default=1280, help="Max side when resizing strip panels"
+        "--max-side",
+        type=int,
+        default=640,
+        help="Max side (px) of a single tile after resize",
+    )
+    parser.add_argument(
+        "--tile-cols",
+        type=int,
+        default=0,
+        help="Columns in the tile grid. 0 = auto (ceil(sqrt(N)))",
     )
     parser.add_argument(
         "--preset", type=str, default="sail_default", help="Augmentation preset"
@@ -102,7 +116,28 @@ def main() -> None:
         action="store_true",
         help="Disable bbox-only motion blur after Albumentations",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help=(
+            "Parallel processes for full export (not preview). "
+            "Use 0 for all CPUs (os.cpu_count()). "
+            "Preview strips require --workers 1."
+        ),
+    )
     args = parser.parse_args()
+
+    workers = args.workers
+    if workers == 0:
+        workers = os.cpu_count() or 1
+    if workers < 1:
+        raise SystemExit("--workers must be >= 0 (0 = auto)")
+    if args.preview_only and workers > 1:
+        print(
+            "Note: --preview-only uses a single worker (strip assembly is sequential)."
+        )
+        workers = 1
 
     root = _prepare_data_root(zip_path=args.zip, data_dir=args.data_dir)
     images_dir = root / "images"
@@ -129,45 +164,88 @@ def main() -> None:
 
     rel_pngs: list[str] = []
 
-    for idx, img_path in enumerate(image_paths):
-        stem = img_path.stem
-        label_path = labels_dir / f"{stem}.txt"
-        image_rgb = load_image_rgb(img_path)
-        bboxes, class_labels = parse_yolo_label_file(label_path)
-
-        panels: list = []
-        orig = image_rgb
-        if args.draw_boxes and bboxes:
-            orig = draw_yolo_boxes_rgb(orig, bboxes, class_labels)
-        panels.append(orig)
-
-        for r in range(args.repeats):
-            sub_seed = None
-            if args.seed is not None:
-                sub_seed = args.seed + idx * 10_007 + r * 1_003
-            compose = build_augmentation_pipeline(seed=sub_seed, preset=args.preset)
-            rng = random.Random(sub_seed) if sub_seed is not None else random.Random()
-            aug, bb, cl = augment_yolo_sample(
-                image_rgb,
-                bboxes,
-                class_labels,
-                compose,
-                rng=rng,
-                bbox_motion_blur=not args.no_bbox_blur,
+    if not args.preview_only and workers > 1:
+        tasks = [
+            (
+                str(img_path),
+                str(labels_dir),
+                str(export_img),
+                str(export_lbl),
+                idx,
+                args.repeats,
+                args.seed,
+                args.no_bbox_blur,
+                args.preset,
             )
-            if args.draw_boxes and bb:
-                aug = draw_yolo_boxes_rgb(aug, bb, cl)
-            panels.append(aug)
+            for idx, img_path in enumerate(image_paths)
+        ]
+        print(f"Exporting with {workers} worker process(es) (preview strips skipped).")
+        with Pool(processes=workers) as pool:
+            for _ in tqdm(
+                pool.imap_unordered(export_flat_one_image, tasks, chunksize=2),
+                total=len(tasks),
+                desc="Export",
+            ):
+                pass
+    else:
+        _compose = None
+        if not args.preview_only:
+            _compose = build_augmentation_pipeline(seed=None, preset=args.preset)
+
+        for idx, img_path in enumerate(image_paths):
+            stem = img_path.stem
+            label_path = labels_dir / f"{stem}.txt"
+            image_rgb = load_image_rgb(img_path)
+            bboxes, class_labels = parse_yolo_label_file(label_path)
+
+            panels: list = []
+            orig = image_rgb
+            if args.draw_boxes and bboxes:
+                orig = draw_yolo_boxes_rgb(orig, bboxes, class_labels)
+            panels.append(orig)
 
             if not args.preview_only:
-                out_stem = f"{stem}_aug{r}"
-                save_image_rgb(export_img / f"{out_stem}.jpg", aug)
-                write_yolo_label_file(export_lbl / f"{out_stem}.txt", bb, cl)
+                save_image_rgb(export_img / f"{stem}.jpg", image_rgb)
+                write_yolo_label_file(export_lbl / f"{stem}.txt", bboxes, class_labels)
 
-        strip = horizontal_strip(panels, max_side=args.max_side)
-        strip_path = preview_dir / f"{stem}_strip.png"
-        save_strip_png(strip_path, strip)
-        rel_pngs.append(strip_path.name)
+            for r in range(args.repeats):
+                sub_seed = None
+                if args.seed is not None:
+                    sub_seed = args.seed + idx * 10_007 + r * 1_003
+                if not args.preview_only and _compose is not None:
+                    if sub_seed is not None:
+                        _compose.set_random_seed(sub_seed)
+                        seed_augmentation_globals(sub_seed)
+                    compose = _compose
+                else:
+                    compose = build_augmentation_pipeline(
+                        seed=sub_seed, preset=args.preset
+                    )
+                rng = (
+                    random.Random(sub_seed) if sub_seed is not None else random.Random()
+                )
+                aug, bb, cl = augment_yolo_sample(
+                    image_rgb,
+                    bboxes,
+                    class_labels,
+                    compose,
+                    rng=rng,
+                    bbox_motion_blur=not args.no_bbox_blur,
+                )
+                if args.draw_boxes and bb:
+                    aug = draw_yolo_boxes_rgb(aug, bb, cl)
+                panels.append(aug)
+
+                if not args.preview_only:
+                    out_stem = f"{stem}_aug{r}"
+                    save_image_rgb(export_img / f"{out_stem}.jpg", aug)
+                    write_yolo_label_file(export_lbl / f"{out_stem}.txt", bb, cl)
+
+            tile_cols = args.tile_cols if args.tile_cols > 0 else None
+            tiles = tile_grid(panels, cols=tile_cols, max_tile_side=args.max_side)
+            tiles_path = preview_dir / f"{stem}_tiles.png"
+            save_tiles_png(tiles_path, tiles)
+            rel_pngs.append(tiles_path.name)
 
     if not args.no_index:
         write_preview_index_html(preview_dir, sorted(rel_pngs))

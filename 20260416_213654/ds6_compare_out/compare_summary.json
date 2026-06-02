@@ -1,0 +1,137 @@
+{
+  "run_stamp": "20260416_213654",
+  "videos": {
+    "C1": {
+      "path": "/content/sailcv_repo/assets/tracking/DS_6/C1.mp4"
+    },
+    "C2": {
+      "path": "/content/sailcv_repo/assets/tracking/DS_6/C2.mp4"
+    },
+    "C3": {
+      "path": "/content/sailcv_repo/assets/tracking/DS_6/C3.mp4"
+    },
+    "C4": {
+      "path": "/content/sailcv_repo/assets/tracking/DS_6/C4.mp4"
+    },
+    "C5": {
+      "path": "/content/sailcv_repo/assets/tracking/DS_6/C5.mp4"
+    },
+    "C6": {
+      "path": "/content/sailcv_repo/assets/tracking/DS_6/C6.mp4"
+    },
+    "C7": {
+      "path": "/content/sailcv_repo/assets/tracking/DS_6/C7.mp4"
+    },
+    "C8": {
+      "path": "/content/sailcv_repo/assets/tracking/DS_6/C8.mp4"
+    }
+  },
+  "models": {
+    "custom_ulysse": {
+      "weight": "/content/weights/custom_ulysse/weights/custom_ulysse.pt",
+      "results": {
+        "C1": {
+          "total_detections": 14466,
+          "frames_processed": 945,
+          "elapsed_sec": 69.11,
+          "json": "custom_ulysse/C1_raw_detection.json"
+        },
+        "C2": {
+          "total_detections": 24608,
+          "frames_processed": 944,
+          "elapsed_sec": 70.65,
+          "json": "custom_ulysse/C2_raw_detection.json"
+        },
+        "C3": {
+          "total_detections": 17627,
+          "frames_processed": 939,
+          "elapsed_sec": 74.91,
+          "json": "custom_ulysse/C3_raw_detection.json"
+        },
+        "C4": {
+          "total_detections": 22633,
+          "frames_processed": 940,
+          "elapsed_sec": 79.98,
+          "json": "custom_ulysse/C4_raw_detection.json"
+        },
+        "C5": {
+          "total_detections": 16338,
+          "frames_processed": 956,
+          "elapsed_sec": 80.08,
+          "json": "custom_ulysse/C5_raw_detection.json"
+        },
+        "C6": {
+          "total_detections": 25031,
+          "frames_processed": 956,
+          "elapsed_sec": 81.75,
+          "json": "custom_ulysse/C6_raw_detection.json"
+        },
+        "C7": {
+          "total_detections": 16273,
+          "frames_processed": 941,
+          "elapsed_sec": 79.47,
+          "json": "custom_ulysse/C7_raw_detection.json"
+        },
+        "C8": {
+          "total_detections": 11843,
+          "frames_processed": 941,
+          "elapsed_sec": 77.76,
+          "json": "custom_ulysse/C8_raw_detection.json"
+        }
+      }
+    },
+    "after_finetune_fused_17ep_last": {
+      "weight": "/content/weights/after_extracted/finetune_rtdetr_fused/weights/last.pt",
+      "results": {
+        "C1": {
+          "total_detections": 11775,
+          "frames_processed": 945,
+          "elapsed_sec": 79.69,
+          "json": "after_finetune_fused_17ep_last/C1_raw_detection.json"
+        },
+        "C2": {
+          "total_detections": 19789,
+          "frames_processed": 944,
+          "elapsed_sec": 79.02,
+          "json": "after_finetune_fused_17ep_last/C2_raw_detection.json"
+        },
+        "C3": {
+          "total_detections": 15670,
+          "frames_processed": 939,
+          "elapsed_sec": 79.9,
+          "json": "after_finetune_fused_17ep_last/C3_raw_detection.json"
+        },
+        "C4": {
+          "total_detections": 21676,
+          "frames_processed": 940,
+          "elapsed_sec": 79.62,
+          "json": "after_finetune_fused_17ep_last/C4_raw_detection.json"
+        },
+        "C5": {
+          "total_detections": 15328,
+          "frames_processed": 956,
+          "elapsed_sec": 80.59,
+          "json": "after_finetune_fused_17ep_last/C5_raw_detection.json"
+        },
+        "C6": {
+          "total_detections": 21813,
+          "frames_processed": 956,
+          "elapsed_sec": 81.24,
+          "json": "after_finetune_fused_17ep_last/C6_raw_detection.json"
+        },
+        "C7": {
+          "total_detections": 14385,
+          "frames_processed": 941,
+          "elapsed_sec": 80.12,
+          "json": "after_finetune_fused_17ep_last/C7_raw_detection.json"
+        },
+        "C8": {
+          "total_detections": 11304,
+          "frames_processed": 941,
+          "elapsed_sec": 80.05,
+          "json": "after_finetune_fused_17ep_last/C8_raw_detection.json"
+        }
+      }
+    }
+  }
+}

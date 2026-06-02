@@ -288,6 +288,8 @@ uv run python scripts/augment_yolo.py --zip sailcv_annotations_yolo.zip \
 
 Open `output/aug_preview/previews/index.html` in a browser (or browse the PNG strips). Omit `--preview-only` to also write augmented `images/` + `labels/` under `--out-dir` (and copy `data.yaml` if present).
 
+**Multi-core export:** full export (no `--preview-only`) accepts `--workers N`. Use `--workers 0` to use all CPUs (`os.cpu_count()`). Parallel export skips PNG preview strips (use `--workers 1` if you need strips).
+
 ### Docker
 
 For containerized deployment on Jetson hardware:

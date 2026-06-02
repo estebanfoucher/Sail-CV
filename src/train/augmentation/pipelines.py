@@ -41,10 +41,13 @@ def build_augmentation_pipeline(
     Bbox-local motion blur is applied separately in apply.py.
     """
     _set_deterministic(seed)
-    if preset != "sail_default":
-        raise ValueError(f"Unknown preset: {preset!r} (only 'sail_default')")
+    if preset not in {"sail_default", "sail_main_small"}:
+        raise ValueError(
+            f"Unknown preset: {preset!r} (use 'sail_default' or 'sail_main_small')"
+        )
 
     maj = _albumentations_major()
+    is_main_small = preset == "sail_main_small"
 
     # Shadow ROI biased toward frame center so polygons often cross object ROIs.
     # Slightly reduced vs the earlier default to avoid overly harsh shadows.
@@ -53,7 +56,7 @@ def build_augmentation_pipeline(
             shadow_roi=(0.05, 0.08, 0.95, 0.92),
             num_shadows_limit=(1, 3),
             shadow_dimension=6,
-            p=0.45,
+            p=0.25 if is_main_small else 0.45,
         )
     else:
         shadow = A.RandomShadow(
@@ -61,7 +64,7 @@ def build_augmentation_pipeline(
             num_shadows_lower=1,
             num_shadows_upper=3,
             shadow_dimension=6,
-            p=0.45,
+            p=0.25 if is_main_small else 0.45,
         )
 
     bbox_params = A.BboxParams(
@@ -158,7 +161,84 @@ def build_augmentation_pipeline(
             p=0.15,
         )
 
-    transforms: list = [
+    if is_main_small:
+        # Small-object preset:
+        # - no global blur/defocus (keeps tiny objects readable)
+        # - no fog/snow/gravel/dropout/noise
+        # - avoid stacking heavy weather: pick at most one of {sun, shadow, rain}
+        if maj >= 2:
+            sun = A.RandomSunFlare(
+                flare_roi=(0.1, 0.1, 0.9, 0.6),
+                angle_range=(0.3, 0.7),
+                num_flare_circles_range=(2, 5),
+                src_radius=180,
+                src_color=(255, 255, 255),
+                p=0.30,
+            )
+            rain = A.RandomRain(
+                slant_range=(-8, 8),
+                drop_length=18,
+                drop_width=1,
+                drop_color=(200, 200, 200),
+                blur_value=3,
+                brightness_coefficient=0.75,
+                rain_type="default",
+                p=0.15,
+            )
+        else:
+            sun = A.RandomSunFlare(
+                flare_roi=(0.1, 0.1, 0.9, 0.6),
+                angle_lower=0.3,
+                angle_upper=0.7,
+                num_flare_circles_lower=2,
+                num_flare_circles_upper=5,
+                src_radius=180,
+                src_color=(255, 255, 255),
+                p=0.30,
+            )
+            rain = A.RandomRain(
+                slant_lower=-8,
+                slant_upper=8,
+                drop_length=18,
+                drop_width=1,
+                drop_color=(200, 200, 200),
+                blur_value=3,
+                brightness_coefficient=0.75,
+                rain_type="default",
+                p=0.15,
+            )
+
+        weather_one = A.OneOf([sun, shadow, rain], p=0.55)
+        transforms: list = [
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.12),
+            A.Rotate(limit=12, border_mode=cv2.BORDER_REFLECT_101, p=0.35),
+            A.Affine(
+                scale=(0.92, 1.08),
+                translate_percent=0.03,
+                rotate=0,
+                border_mode=cv2.BORDER_REFLECT_101,
+                p=0.25,
+            ),
+            A.RandomScale(scale_limit=0.06, p=0.25),
+            A.HueSaturationValue(
+                hue_shift_limit=8,
+                sat_shift_limit=14,
+                val_shift_limit=12,
+                p=0.35,
+            ),
+            A.RandomBrightnessContrast(
+                brightness_limit=0.12,
+                contrast_limit=0.12,
+                p=0.35,
+            ),
+            A.RGBShift(r_shift_limit=8, g_shift_limit=8, b_shift_limit=8, p=0.18),
+            A.CLAHE(clip_limit=2.0, tile_grid_size=(8, 8), p=0.12),
+            weather_one,
+        ]
+        return A.Compose(transforms, bbox_params=bbox_params, seed=seed)
+
+    transforms = [
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.12),
         A.Rotate(

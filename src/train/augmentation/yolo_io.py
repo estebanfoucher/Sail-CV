@@ -76,9 +76,40 @@ def list_yolo_image_paths(images_dir: Path) -> list[Path]:
 
 
 def yolo_dataset_root(data_dir: Path) -> Path:
-    """Return data_dir if it contains images/ and labels/, else raise."""
+    """
+    Resolve a YOLO *split* root: a directory that directly contains ``images/`` and ``labels/``.
+
+    If ``data_dir`` does not, looks for exactly one immediate subdirectory that does
+    (handles an extra wrapper folder inside ``train/`` after some zips).
+    """
+    data_dir = data_dir.resolve()
+    if not data_dir.is_dir():
+        raise FileNotFoundError(f"Not a directory: {data_dir}")
+
     if (data_dir / "images").is_dir() and (data_dir / "labels").is_dir():
         return data_dir
+
+    nested = [
+        p
+        for p in sorted(data_dir.iterdir())
+        if p.is_dir() and (p / "images").is_dir() and (p / "labels").is_dir()
+    ]
+    if len(nested) == 1:
+        return nested[0]
+    if len(nested) > 1:
+        names = [p.name for p in nested]
+        raise FileNotFoundError(
+            f"{data_dir} has no images/ + labels/ at its root; found multiple nested "
+            f"splits with images+labels: {names}. Pass one split explicitly, e.g. "
+            f".../train or .../val."
+        )
+
+    try:
+        listing = sorted(p.name for p in data_dir.iterdir())
+    except OSError:
+        listing = ["<unreadable>"]
     raise FileNotFoundError(
-        f"Expected {data_dir}/images and {data_dir}/labels (flat YOLO export)."
+        f"Expected {data_dir}/images and {data_dir}/labels (flat YOLO export per split), "
+        f"or a single subdirectory under {data_dir} that contains both. "
+        f"Top-level entries: {listing[:30]}{'...' if len(listing) > 30 else ''}"
     )
