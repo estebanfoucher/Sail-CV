@@ -108,6 +108,7 @@
     </label>
     <button id="recon-btn">Reconstruct</button>
     <button id="live-btn">Start live</button>
+    <button id="stop-live-btn" title="Force-stop the live loop (always available)">Stop live</button>
     <div class="sep"></div>
     <label style="font-size:11px;color:#888">max dist (m)
       <input type="number" id="dist-input" value="0" min="0" step="0.05"
@@ -250,11 +251,35 @@
     // so the default view is upright rather than flipped. Falls back to a
     // +Z-forward / -Y-up view (cam 1 is the calibration reference) if no
     // frustum pose is available yet.
+    const DEFAULT_VIEW_BACK_M = 1.0;  // metres behind camera 1, along its optical axis
+
     function applyDefaultView() {
       if (!sceneCenter) return;
       const c = sceneCenter, r = sceneRadius;
-      const fwd = cam1View ? cam1View.forward : [0, 0, 1];
-      const up  = cam1View ? cam1View.up      : [0, -1, 0];
+
+      if (cam1View) {
+        // Sit DEFAULT_VIEW_BACK_M behind camera 1, looking straight down its
+        // optical axis (same up vector), so the default POV mirrors camera 1.
+        const p = cam1View.pos, fwd = cam1View.forward, up = cam1View.up;
+        const back = DEFAULT_VIEW_BACK_M;
+        const pos = [p[0] - fwd[0]*back, p[1] - fwd[1]*back, p[2] - fwd[2]*back];
+        // Keep the orbit pivot on the axis, near the cloud (preserves exact
+        // forward orientation regardless of where the cloud centre sits).
+        let t = (c.x - p[0])*fwd[0] + (c.y - p[1])*fwd[1] + (c.z - p[2])*fwd[2];
+        if (!(t > 0)) t = Math.max(r * 2, 1);
+        const tgt = [p[0] + fwd[0]*t, p[1] + fwd[1]*t, p[2] + fwd[2]*t];
+        camera.up.set(up[0], up[1], up[2]);
+        camera.position.set(pos[0], pos[1], pos[2]);
+        camera.near = Math.max(r / 100, 0.01);
+        camera.far = (back + t + r) * 100;
+        camera.updateProjectionMatrix();
+        controls.target.set(tgt[0], tgt[1], tgt[2]);
+        controls.update();
+        return;
+      }
+
+      // Fallback (no camera pose yet): frame the whole cloud from +Z.
+      const fwd = [0, 0, 1], up = [0, -1, 0];
       const dist = r * 2.5;
       camera.up.set(up[0], up[1], up[2]);
       camera.position.set(c.x - fwd[0]*dist, c.y - fwd[1]*dist, c.z - fwd[2]*dist);
@@ -708,6 +733,7 @@
     }
 
     liveBtn.addEventListener('click', () => { liveOn ? stopLive() : startLive(); });
+    document.getElementById('stop-live-btn').addEventListener('click', () => stopLive());
 
     // SSE: reload the cloud whenever a new live frame is ready.
     const es = new EventSource('/events');
