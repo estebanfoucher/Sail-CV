@@ -333,6 +333,13 @@ CHECKERBOARD_SPECS_PATH = CALIB_BOARDS_DIR / "checkerboard_specs.yml"
 CHARUCO_SPECS_PATH = CALIB_BOARDS_DIR / "charuco_specs.yml"
 CALIBRATION_FILENAME = "calibration.json"
 
+# Known default camera intrinsics (committed). Used by the extrinsic-only
+# calibration path: when the cameras are already calibrated, a new setup only
+# needs the stereo extrinsics solved from Charuco pairs.
+DEFAULT_INTRINSICS_DIR = PROJECT_DIR / "assets" / "reconstruction" / "intrinsics"
+DEFAULT_INTRINSICS_CAM1 = DEFAULT_INTRINSICS_DIR / "intrinsics_1_1.json"
+DEFAULT_INTRINSICS_CAM2 = DEFAULT_INTRINSICS_DIR / "intrinsics_1_2.json"
+
 # Per-session calibration job state.
 session_calib_lock = threading.Lock()
 session_calib_state = {
@@ -850,6 +857,125 @@ def run_session_calibration(session: str):
             session_calib_state["running"] = False
 
 
+def _load_default_intrinsics():
+    """Load the committed per-camera default intrinsics (camera_matrix, dist_coeffs)."""
+    def _read(path: Path):
+        if not path.exists():
+            raise RuntimeError(f"default intrinsics not found: {path}")
+        with open(path) as fh:
+            d = json.load(fh)
+        K = np.array(d["camera_matrix"], dtype=np.float64)
+        dist = np.array(d["dist_coeffs"], dtype=np.float64)
+        return K, dist, d
+
+    return _read(DEFAULT_INTRINSICS_CAM1), _read(DEFAULT_INTRINSICS_CAM2)
+
+
+def run_session_extrinsic_calibration(session: str):
+    """Extrinsic-only calibration: known default intrinsics + Charuco stereo solve.
+
+    Skips per-camera intrinsic calibration entirely (the cameras are already
+    calibrated). Only the stereo extrinsics (R, T) are solved from the session's
+    Charuco extrinsic pairs, with cv2.CALIB_FIX_INTRINSIC holding K/dist fixed.
+    Writes the same nested calibration.json schema the rest of the viewer reads.
+    """
+    def _set(status, error=None):
+        with session_calib_lock:
+            session_calib_state["status"] = status
+            session_calib_state["error"] = error
+            if status in ("extrinsics", "starting"):
+                session_calib_state["progress"] = None
+        broadcast({"session_calib": status, "session": session, **({"error": error} if error else {})})
+        log(f"[session-extr] {session}: {status}" + (f" — {error}" if error else ""))
+
+    def _progress(phase, label, current, total, found, detected):
+        p = {"phase": phase, "label": label, "current": current, "total": total,
+             "found": found, "detected": detected}
+        with session_calib_lock:
+            session_calib_state["progress"] = p
+        broadcast({"session_calib": "progress", "session": session, "progress": p})
+
+    try:
+        extrinsic_dir = SCREENSHOT_DIR / session / "extrinsic"
+
+        (K1, d1, raw1), (K2, d2, raw2) = _load_default_intrinsics()
+
+        _set("extrinsics")
+        from mv_utils.extrinsics_calibration import CharucoDetector, calibrate_stereo_many
+
+        cam1_paths = sorted(extrinsic_dir.glob("shot_*_cam1.jpg"))
+        if not cam1_paths:
+            raise RuntimeError(f"no extrinsic shots in {extrinsic_dir}")
+
+        sample = cv2.imread(str(cam1_paths[0]))
+        if sample is None:
+            raise RuntimeError(f"could not read {cam1_paths[0]}")
+        image_size = (sample.shape[1], sample.shape[0])
+
+        # Sanity: intrinsics are only valid at the resolution they were calibrated at.
+        intr_w = raw1.get("image_size", [None, None])[0] if isinstance(raw1.get("image_size"), list) else None
+        if intr_w is not None and intr_w != image_size[0]:
+            log(f"[session-extr] WARNING: shot size {image_size} != intrinsics size {raw1.get('image_size')}")
+
+        detector = CharucoDetector(config_path=str(CHARUCO_SPECS_PATH))
+        obj_list, ip1_list, ip2_list = [], [], []
+        for idx, p1 in enumerate(cam1_paths):
+            p2 = p1.with_name(p1.name.replace("_cam1.jpg", "_cam2.jpg"))
+            found = False
+            if p2.exists():
+                p3d, q1, q2 = detector.get_correspondences(cv2.imread(str(p1)), cv2.imread(str(p2)))
+                if p3d is not None:
+                    obj_list.append(p3d)
+                    ip1_list.append(q1)
+                    ip2_list.append(q2)
+                    found = True
+            _progress("extrinsics", "charuco matching", idx + 1, len(cam1_paths), found, len(obj_list))
+        try:
+            detector.cleanup()
+        except Exception:
+            pass
+
+        if len(obj_list) < 1:
+            raise RuntimeError(f"no charuco correspondences from {len(cam1_paths)} extrinsic pairs")
+
+        res = calibrate_stereo_many(obj_list, ip1_list, ip2_list, K1, d1, K2, d2, image_size)
+        T = np.array(res["translation_vector"])
+        baseline = float(np.linalg.norm(T))
+
+        intr1 = {"camera_matrix": K1.tolist(), "dist_coeffs": d1.tolist(),
+                 "reprojection_error": raw1.get("reprojection_error"), "source": "default"}
+        intr2 = {"camera_matrix": K2.tolist(), "dist_coeffs": d2.tolist(),
+                 "reprojection_error": raw2.get("reprojection_error"), "source": "default"}
+
+        calibration = {
+            "created": datetime.now().isoformat(timespec="seconds"),
+            "session": session,
+            "image_size": [int(image_size[0]), int(image_size[1])],
+            "intrinsics_source": "default",
+            "intrinsics": {"cam1": intr1, "cam2": intr2},
+            "extrinsics": {
+                "rotation_matrix": res["rotation_matrix"],
+                "translation_vector": res["translation_vector"],
+                "baseline_m": baseline,
+                "reprojection_error": float(res["reprojection_error"]),
+                "pairs_used": len(obj_list),
+                "pairs_total": len(cam1_paths),
+            },
+        }
+        with open(session_calibration_path(session), "w") as fh:
+            json.dump(calibration, fh, indent=2)
+        log(f"[session-extr] {session}: done — baseline={baseline:.4f}m "
+            f"stereo_err={res['reprojection_error']:.4f} ({len(obj_list)}/{len(cam1_paths)} pairs)")
+        with session_calib_lock:
+            session_calib_state["status"] = "done"
+        broadcast({"session_calib": "done", "session": session, "calibration": calibration})
+    except Exception as e:
+        _set("error", str(e))
+    finally:
+        with session_calib_lock:
+            session_calib_state["running"] = False
+
+
 # --- Camera streaming ---
 
 def mjpeg_frames(cam_id: str):
@@ -1305,6 +1431,30 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 session_calib_state.update(running=True, session=session, status="starting", error=None, progress=None)
             threading.Thread(target=run_session_calibration, args=(session,), daemon=True).start()
+            self.send_json(200, {"started": True, "session": session})
+
+        elif path == "/session/calibrate-extrinsic":
+            # Extrinsic-only calibration using the committed default intrinsics.
+            from urllib.parse import parse_qs, urlparse
+            session = parse_qs(urlparse(self.path).query).get("session", [None])[0]
+            if session is None:
+                with screenshot_lock:
+                    session = active_session
+            if session is None or not _safe_segment(session):
+                self.send_json(400, {"error": "Invalid session"})
+                return
+            if not (SCREENSHOT_DIR / session).is_dir():
+                self.send_json(404, {"error": f"Session not found: {session}"})
+                return
+            if not (DEFAULT_INTRINSICS_CAM1.exists() and DEFAULT_INTRINSICS_CAM2.exists()):
+                self.send_json(400, {"error": "Default camera intrinsics not found on server"})
+                return
+            with session_calib_lock:
+                if session_calib_state["running"]:
+                    self.send_json(409, {"error": f"Calibration already running for {session_calib_state['session']}"})
+                    return
+                session_calib_state.update(running=True, session=session, status="starting", error=None, progress=None)
+            threading.Thread(target=run_session_extrinsic_calibration, args=(session,), daemon=True).start()
             self.send_json(200, {"started": True, "session": session})
 
         elif path == "/session/reconstruct":

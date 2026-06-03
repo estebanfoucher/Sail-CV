@@ -3,6 +3,6 @@ charuco:
   array_size:
   - 11
   - 8
-  checker_size: 0.03078
-  target_size: 0.023085
+  checker_size: 0.015
+  target_size: 0.01125
   dictionary: DICT_4X4_50

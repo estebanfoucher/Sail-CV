@@ -42,6 +42,7 @@
     .section-empty { color: #444; font-size: 11px; padding: 8px 0; }
     #shot-intrinsic-btn { border-color: #8e44ad; color: #9b59b6; }
     #shot-extrinsic-btn { border-color: #d35400; color: #e67e22; }
+    #extr-btn { border-color: #16a085; color: #1abc9c; }
     #calib-btn { border-color: #16a085; color: #1abc9c; }
 
     #calib-panel {
@@ -80,6 +81,7 @@
     <button id="shot-extrinsic-btn" data-kind="extrinsic">Extrinsic Calib</button>
     <div class="sep"></div>
     <button id="calib-btn">Run Calibration</button>
+    <button id="extr-btn" title="Solve stereo extrinsics from the Charuco extrinsic pairs using the known default camera intrinsics. No intrinsic shots needed.">Extrinsic Sync (known cams)</button>
     <span id="status"></span>
   </div>
   <div id="calib-panel" class="none">No calibration for this session.</div>
@@ -98,6 +100,7 @@
     const shotBtns = Array.from(document.querySelectorAll('[data-kind]'));
     const newBtn = document.getElementById('new-btn');
     const calibBtn = document.getElementById('calib-btn');
+    const extrBtn = document.getElementById('extr-btn');
     const calibPanel = document.getElementById('calib-panel');
 
     const fmt = (x, d = 4) => (x === null || x === undefined) ? '—' : Number(x).toFixed(d);
@@ -131,12 +134,19 @@
         return;
       }
       const i = c.intrinsics, e = c.extrinsics;
+      const fromDefault = c.intrinsics_source === 'default';
+      const views = (cam) => (cam.views_used != null && cam.views_total != null)
+        ? ` (${cam.views_used}/${cam.views_total})` : '';
       calibPanel.className = '';
+      const intrLabel = fromDefault
+        ? '<span class="label">Intrinsics</span> <span class="created">default (known cameras)</span>'
+        : '';
       calibPanel.innerHTML = `
         <span class="label">Calibration</span> <span class="created">${c.created || ''}</span>
+        ${intrLabel}
         <div class="row">
-          <span class="metric">cam1 intrinsic err: <b>${fmt(i.cam1.reprojection_error)} px</b> (${i.cam1.views_used}/${i.cam1.views_total})</span>
-          <span class="metric">cam2 intrinsic err: <b>${fmt(i.cam2.reprojection_error)} px</b> (${i.cam2.views_used}/${i.cam2.views_total})</span>
+          <span class="metric">cam1 intrinsic err: <b>${fmt(i.cam1.reprojection_error)} px</b>${views(i.cam1)}</span>
+          <span class="metric">cam2 intrinsic err: <b>${fmt(i.cam2.reprojection_error)} px</b>${views(i.cam2)}</span>
         </div>
         <div class="row">
           <span class="metric">baseline: <b>${fmt(e.baseline_m, 4)} m</b></span>
@@ -151,13 +161,16 @@
         calibPanel.className = 'none';
         calibPanel.textContent = 'No session selected.';
         calibBtn.disabled = true;
+        extrBtn.disabled = true;
         return;
       }
       calibBtn.disabled = false;
+      extrBtn.disabled = false;
       try {
         const data = await (await fetch(`/session/calibration?session=${encodeURIComponent(session)}`)).json();
         renderCalibration(data);
         calibBtn.disabled = !!data.running;
+        extrBtn.disabled = !!data.running;
       } catch (e) { /* ignore */ }
     }
 
@@ -281,6 +294,27 @@
       }
     });
 
+    extrBtn.addEventListener('click', async () => {
+      const session = selectedSession();
+      if (!session) return;
+      calibBtn.disabled = true;
+      extrBtn.disabled = true;
+      setStatus('starting extrinsic sync…');
+      calibPanel.className = '';
+      calibPanel.innerHTML = '<span class="label">Extrinsic sync</span> — starting (known intrinsics)…';
+      try {
+        const res = await fetch(`/session/calibrate-extrinsic?session=${encodeURIComponent(session)}`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'failed to start');
+        setStatus('solving extrinsics…', 'ok');
+      } catch (e) {
+        setStatus(String(e.message || e), 'err');
+        extrBtn.disabled = false;
+        calibBtn.disabled = false;
+        await loadCalibration();
+      }
+    });
+
     sessionSelect.addEventListener('change', async () => { await loadPairs(); await loadCalibration(); });
 
     // Live updates: refresh when a screenshot lands in the session we're viewing.
@@ -292,6 +326,7 @@
         if (data.session === selectedSession()) {
           if (data.session_calib === 'done' || data.session_calib === 'error') {
             calibBtn.disabled = false;
+            extrBtn.disabled = false;
             loadCalibration();
           } else if (data.session_calib === 'progress') {
             renderCalibration({ running: true, status: (data.progress && data.progress.phase), progress: data.progress });
