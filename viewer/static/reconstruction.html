@@ -836,6 +836,18 @@
       return q;
     }
 
+    // Push the current crop/rotate to a running live loop so the ROI updates
+    // without a stop/restart. Debounced to avoid flooding during a drag.
+    let _cropPushTimer = null;
+    function pushLiveCrop() {
+      if (!liveOn) return;
+      clearTimeout(_cropPushTimer);
+      _cropPushTimer = setTimeout(() => {
+        const q = cropQuery().replace(/^&/, '');
+        fetch(`/live-reconstruct/crop?${q}`, { method: 'POST' }).catch(() => {});
+      }, 150);
+    }
+
     // Drag the crop rectangle to move its center (per camera, raw-pixel space).
     function enableCropDrag(n) {
       const e = cropEls[n];
@@ -858,18 +870,19 @@
         e.cx.value = Math.round(Math.max(0, Math.min(nw, drag.cx + (ev.clientX - drag.x) * drag.scale)));
         e.cy.value = Math.round(Math.max(0, Math.min(nh, drag.cy + (ev.clientY - drag.y) * drag.scale)));
         updateCropOverlay(n);
+        pushLiveCrop();
       });
       const end = (ev) => { if (drag) { drag = null; try { box.releasePointerCapture(ev.pointerId); } catch (_) {} } };
       box.addEventListener('pointerup', end);
       box.addEventListener('pointercancel', end);
     }
 
-    cropEnable.addEventListener('change', updateAllCrops);
-    cropRot.addEventListener('change', updateAllCrops);
+    cropEnable.addEventListener('change', () => { updateAllCrops(); pushLiveCrop(); });
+    cropRot.addEventListener('change', () => { updateAllCrops(); pushLiveCrop(); });
     for (const n of [1, 2]) {
       cropEls[n].img.addEventListener('load', () => { cropDefaults(n); updateCropOverlay(n); });
       for (const f of ['cx', 'cy', 'w', 'h']) {
-        cropEls[n][f].addEventListener('input', () => updateCropOverlay(n));
+        cropEls[n][f].addEventListener('input', () => { updateCropOverlay(n); pushLiveCrop(); });
       }
       enableCropDrag(n);
     }

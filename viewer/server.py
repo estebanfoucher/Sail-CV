@@ -625,15 +625,24 @@ class CameraStream:
 # --- Live reconstruction (inference-server based, no Docker) ---
 live_recon_lock = threading.Lock()
 live_recon_state = {"running": False, "frame": 0, "session": None}
+# Crop / rotate parameters consumed live by the loop each iteration. Updating
+# these (via /live-reconstruct/crop) changes the next frame's ROI without a
+# stop/restart.
+live_recon_params = {"crop1": "", "crop2": "", "rotate": 0}
 live_recon_stop = threading.Event()
 
 
 def live_reconstruction_loop(session: str, calibration: dict, subsample: int,
                              crop1: str = "", crop2: str = "", rotate: int = 0):
     """Continuously grab live camera frames, reconstruct via the inference
-    server, and broadcast each new point cloud over SSE for the web viewer."""
+    server, and broadcast each new point cloud over SSE for the web viewer.
+
+    Crop/rotate are read from live_recon_params each iteration so the ROI can
+    be moved live (no restart). The crop1/crop2/rotate args seed those params."""
     import base64
     live_recon_stop.clear()
+    with live_recon_lock:
+        live_recon_params.update(crop1=crop1, crop2=crop2, rotate=rotate)
     frame = 0
     scene = f"live_recon_{session}"
     scene_dir = OUTPUT_DIR / scene
@@ -680,10 +689,14 @@ def live_reconstruction_loop(session: str, calibration: dict, subsample: int,
             (live_dir / "frame1.jpg").write_bytes(results["1"])
             (live_dir / "frame2.jpg").write_bytes(results["2"])
 
+            with live_recon_lock:
+                cur_crop1 = live_recon_params["crop1"]
+                cur_crop2 = live_recon_params["crop2"]
+                cur_rotate = live_recon_params["rotate"]
             infer_t0 = time.time()
             result = call_inference_server(results["1"], results["2"], calibration,
-                                           subsample=subsample, crop1=crop1, crop2=crop2,
-                                           rotate=rotate)
+                                           subsample=subsample, crop1=cur_crop1,
+                                           crop2=cur_crop2, rotate=cur_rotate)
             request_ms = round((time.time() - infer_t0) * 1000)
             (scene_dir / "point_cloud.ply").write_bytes(
                 base64.b64decode(result["ply_base64"]))
@@ -1557,6 +1570,23 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/live-reconstruct/stop":
             live_recon_stop.set()
             self.send_json(200, {"stopped": True})
+
+        elif path == "/live-reconstruct/crop":
+            from urllib.parse import parse_qs, urlparse
+            qs = parse_qs(urlparse(self.path).query)
+            crop1 = qs.get("crop1", [""])[0]
+            crop2 = qs.get("crop2", [""])[0]
+            try:
+                rotate = int(qs.get("rotate", ["0"])[0])
+            except ValueError:
+                rotate = 0
+            if rotate % 360 not in (0, 90, 180, 270):
+                rotate = 0
+            with live_recon_lock:
+                running = live_recon_state["running"]
+                live_recon_params.update(crop1=crop1, crop2=crop2, rotate=rotate)
+            self.send_json(200, {"updated": True, "running": running,
+                                 "crop1": crop1, "crop2": crop2, "rotate": rotate})
 
         elif path == "/screenshot":
             # take_stereo_screenshot: grab both cameras simultaneously into the active session
